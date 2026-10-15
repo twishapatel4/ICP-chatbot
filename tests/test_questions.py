@@ -141,4 +141,12 @@ async def test_fixed_slot_choices_override_model_options_and_allow_several():
     result = await generate_question(
         FakeLLM({"question": [out]}), CONFIG, SessionState(), "company_size"
     )
-    assert result.question.options[0] == "1-10" and result.question.multi
+    assert result.question.options[0] == "1-10"
+
+
+async def test_size_and_revenue_are_single_pick_but_regions_allow_several():
+    for slot, multi in (("company_size", False), ("revenue_range", False), ("geographies", True)):
+        out = QuestionOutput(question="Which?")
+        result = await generate_question(FakeLLM({"question": [out]}), CONFIG, SessionState(), slot)
+        assert result.question.multi is multi, slot
+        assert fallback_question(slot).multi is multi, slot

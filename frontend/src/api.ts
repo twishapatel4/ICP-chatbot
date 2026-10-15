@@ -1,4 +1,4 @@
-import type { FormField, IcpResponse, StartRequest, Turn } from "./types";
+import type { FormField, IcpEdit, IcpResponse, StartRequest, Turn } from "./types";
 
 const TENANT = import.meta.env.VITE_TENANT_ID ?? "demo";
 
@@ -38,3 +38,7 @@ export const submitFallback = (id: string, answers: Record<string, string[]>) =>
   call<Turn>("POST", `/sessions/${id}/fallback`, { answers });
 export const buildIcp = (id: string) => call<IcpResponse>("POST", `/sessions/${id}/icp`);
 export const approveIcp = (id: string) => call<IcpResponse>("POST", `/sessions/${id}/approve`);
+export const editIcp = (id: string, edit: IcpEdit) =>
+  call<IcpResponse>("PATCH", `/sessions/${id}/icp`, edit);
+export const sendVerdict = (id: string, correct: boolean, comment = "") =>
+  call<null>("POST", `/sessions/${id}/verdict`, { correct, comment });

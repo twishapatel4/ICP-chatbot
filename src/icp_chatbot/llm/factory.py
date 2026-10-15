@@ -4,6 +4,7 @@ import inspect
 
 from google import genai
 from google.genai import types
+from google.oauth2 import service_account
 
 from icp_chatbot.config import Settings
 from icp_chatbot.llm.adapter import GeminiLLM
@@ -30,11 +31,23 @@ def make_client(settings: Settings):
     # Current docs use `enterprise=True`; older SDK versions use `vertexai=True`.
     params = inspect.signature(genai.Client.__init__).parameters
     flag = "enterprise" if "enterprise" in params else "vertexai"
+    extra = {}
+    if settings.google_application_credentials:
+        # The .env file is read into Settings, not into the process environment, so the Google
+        # libraries would not see GOOGLE_APPLICATION_CREDENTIALS from it: load the file here.
+        try:
+            extra["credentials"] = service_account.Credentials.from_service_account_file(
+                settings.google_application_credentials,
+                scopes=["https://www.googleapis.com/auth/cloud-platform"],
+            )
+        except (OSError, ValueError) as exc:
+            raise LLMError("config", f"cannot read the service account file: {exc}") from exc
     return genai.Client(
         **{flag: True},
         project=settings.google_cloud_project,
         location=settings.google_cloud_location,
         http_options=http_options,
+        **extra,
     )
 
 

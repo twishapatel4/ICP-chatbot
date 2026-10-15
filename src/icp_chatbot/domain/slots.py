@@ -52,6 +52,7 @@ class SlotDef:
     importance: float = 0.5
     topic: str | None = None
     choices: tuple[str, ...] = ()
+    single_choice: bool = False  # one answer only: the user picks one option, not several
     blocks_completion: bool | None = None  # default: tier A blocks, others do not
     skip_if: tuple[
         tuple[str, str], ...
@@ -110,6 +111,7 @@ SLOT_LIST: tuple[SlotDef, ...] = (
         "A",
         0.9,
         choices=SIZE_BANDS,
+        single_choice=True,
     ),
     _s(
         "revenue_range",
@@ -119,6 +121,7 @@ SLOT_LIST: tuple[SlotDef, ...] = (
         "A",
         0.6,
         choices=REVENUE_BANDS,
+        single_choice=True,
     ),
     _s(
         "geographies",

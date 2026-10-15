@@ -212,3 +212,15 @@ def test_missing_credentials_are_configuration_errors():
         factory.make_client(settings(llm_backend="developer"))
     with pytest.raises(LLMError):
         factory.make_client(settings(llm_backend="vertex"))
+
+
+def test_vertex_with_a_missing_service_account_file_is_a_config_error(tmp_path):
+    settings = Settings(
+        _env_file=None,
+        llm_backend="vertex",
+        google_cloud_project="p",
+        google_application_credentials=str(tmp_path / "missing.json"),
+    )
+    with pytest.raises(LLMError) as err:
+        factory.make_client(settings)
+    assert err.value.kind == "config"

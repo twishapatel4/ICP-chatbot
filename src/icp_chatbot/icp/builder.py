@@ -6,6 +6,7 @@ built from the state as it is.
 """
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import date
 
@@ -27,6 +28,9 @@ from icp_chatbot.versions import ConfigVersionData
 
 EVIDENCE_LIMIT = 200
 MAX_VALUES = 10
+
+
+log = logging.getLogger(__name__)
 
 
 class FieldDraft(BaseModel):
@@ -106,7 +110,8 @@ async def build_icp(
             labels=labels,
         )
         synthesis, usage, cost = result.parsed, result.usage, result.cost_usd
-    except LLMError:
+    except LLMError as exc:
+        log.warning("final ICP step failed, showing values as recorded: %s", exc)
         fallback = True
         open_questions.append("The final clean-up step failed; values are shown as recorded.")
 

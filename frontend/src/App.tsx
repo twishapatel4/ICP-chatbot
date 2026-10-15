@@ -4,7 +4,7 @@ import Composer from "./components/Composer";
 import FallbackForm from "./components/FallbackForm";
 import IcpView from "./components/IcpView";
 import SignupCard from "./components/SignupCard";
-import type { FormField, IcpResponse, StartRequest, Turn } from "./types";
+import type { FormField, IcpEdit, IcpResponse, StartRequest, Turn } from "./types";
 
 type Stage = "home" | "signup" | "interview" | "fallback" | "building" | "done";
 interface Message {
@@ -154,11 +154,29 @@ export default function App() {
       await makeIcp(sessionId);
     });
 
+  // Review actions return an error message for the card to show, or null on success.
+  async function review(job: (id: string) => Promise<void>): Promise<string | null> {
+    if (!sessionId) return "No active chat.";
+    setBusy(true);
+    try {
+      await job(sessionId);
+      return null;
+    } catch (e) {
+      return explain(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const editIcp = (edit: IcpEdit) => review(async (id) => setIcp(await api.editIcp(id, edit)));
   const approve = () =>
-    guarded(async () => {
-      if (!sessionId) return;
-      setIcp(await api.approveIcp(sessionId));
+    review(async (id) => {
+      setIcp(await api.approveIcp(id));
       setApproved(true);
+    });
+  const verdict = (correct: boolean, comment: string) =>
+    review(async (id) => {
+      await api.sendVerdict(id, correct, comment);
     });
 
   if (stage === "home") {
@@ -224,7 +242,15 @@ export default function App() {
         )}
 
         {icp && (
-          <IcpView icp={icp} approved={approved} busy={busy} onApprove={approve} onNewChat={newChat} />
+          <IcpView
+            icp={icp}
+            approved={approved}
+            busy={busy}
+            onEdit={editIcp}
+            onApprove={approve}
+            onVerdict={verdict}
+            onNewChat={newChat}
+          />
         )}
         <div ref={endRef} />
       </div>

@@ -54,9 +54,22 @@ export interface Criterion {
   requirement: "required" | "preferred";
 }
 
+export interface Disqualifier {
+  field: string;
+  operator: "in" | "not_in" | "lt" | "gt" | "eq";
+  values: string[];
+}
+
+// Mirrors icp/review.py.
+export type IcpEdit =
+  | { kind: "field"; slot: string; values: string[] }
+  | { kind: "weights"; weights: Record<string, number> }
+  | { kind: "requirement"; criterion: string; requirement: "required" | "preferred" }
+  | { kind: "disqualifiers"; disqualifiers: Disqualifier[] };
+
 export interface IcpDocument {
   sections: Record<string, Record<string, FieldEntry>>;
-  scoring_model: { criteria: Criterion[] };
+  scoring_model: { criteria: Criterion[]; disqualifiers: Disqualifier[] };
   summary: string;
   completeness: { tier_a: number; tier_b: number };
   open_questions: string[];

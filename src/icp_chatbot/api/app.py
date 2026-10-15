@@ -22,6 +22,7 @@ from icp_chatbot.api.schemas import (
     SessionView,
     StartRequest,
     TurnResponse,
+    VerdictRequest,
 )
 from icp_chatbot.config import Settings, get_settings
 from icp_chatbot.domain.signup import SignupInfo
@@ -291,5 +292,24 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
         return await _save_company_version(ct, tenant_id, session_id, document, specs)
+
+    @app.post("/sessions/{session_id}/verdict", status_code=204)
+    async def verdict(
+        session_id: str,
+        body: VerdictRequest,
+        tenant_id: str = Depends(tenant),
+        ct: Container = Depends(c),
+    ):
+        """The company's judgement of the ICP as a whole: correct, or what is wrong with it."""
+        latest = await ct.repo.latest_icp(tenant_id, session_id)
+        if latest is None:
+            raise NotFound("icp")
+        await ct.repo.add_feedback(
+            tenant_id,
+            session_id,
+            type="icp_verdict",
+            old=latest.version,
+            new={"correct": body.correct, "comment": body.comment.strip()},
+        )
 
     return app

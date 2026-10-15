@@ -352,3 +352,29 @@ async def test_suggested_options_are_multi_select_and_survive_a_reload(world):
     assert turn["options"] and turn["multi"] is True
     view = (await w.call("GET", f"/sessions/{sid}")).json()["question"]
     assert view["options"] == turn["options"] and view["multi"] is True
+
+
+async def test_verdict_is_recorded_for_the_current_icp(world):
+    w = await world()
+    sid = await run_to_completion(w)
+    w.llm.queue("final_icp", ICPSynthesis())
+    await w.call("POST", f"/sessions/{sid}/icp")
+    ok = await w.call(
+        "POST", f"/sessions/{sid}/verdict", json={"correct": False, "comment": " wrong size "}
+    )
+    assert ok.status_code == 204
+    event = (await w.repo.list_feedback("tenant-1", sid))[-1]
+    assert event.type == "icp_verdict" and event.old_value == 1
+    assert event.new_value == {"correct": False, "comment": "wrong size"}
+    other = await w.call(
+        "POST", f"/sessions/{sid}/verdict", tenant="tenant-2", json={"correct": True}
+    )
+    assert other.status_code == 404
+
+
+async def test_verdict_needs_an_icp(world):
+    w = await world()
+    sid = (await w.start())["session_id"]
+    assert (
+        await w.call("POST", f"/sessions/{sid}/verdict", json={"correct": True})
+    ).status_code == 404

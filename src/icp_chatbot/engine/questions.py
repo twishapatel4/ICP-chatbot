@@ -104,7 +104,13 @@ def fallback_question(slot_key: str, asked_before: int = 0) -> Question:
         )
     else:
         text = f"Next, could you tell me about this: {slot.label.lower()}? {slot.description}."
-    return Question(text, kind="fallback", slot=slot_key, options=slot.choices)
+    return Question(
+        text,
+        kind="fallback",
+        slot=slot_key,
+        options=slot.choices,
+        multi=not slot.single_choice,
+    )
 
 
 FOLLOW_UP_HINT = (
@@ -167,8 +173,10 @@ async def generate_question(
         options = slot.choices
     else:
         options = clean_options(result.parsed.options)
-    # a slot holds a list of values, so the user may always pick several
-    question = Question(text, kind="slot", slot=slot_key, options=options, multi=True)
+    # most slots hold a list of values, so several picks are fine; size and revenue are one band
+    question = Question(
+        text, kind="slot", slot=slot_key, options=options, multi=not slot.single_choice
+    )
     return QuestionResult(question, result.usage, result.cost_usd, cfg.model)
 
 
