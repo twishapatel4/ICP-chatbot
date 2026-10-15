@@ -1,0 +1,60 @@
+import { useEffect, useRef, useState } from "react";
+
+const MAX_CHARS = 2000;
+
+interface Props {
+  disabled: boolean;
+  onSend: (text: string) => void;
+}
+
+export default function Composer({ disabled, onSend }: Props) {
+  const [text, setText] = useState("");
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!disabled) ref.current?.focus();
+  }, [disabled]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [text]);
+
+  function send() {
+    const t = text.trim();
+    if (!t || disabled) return;
+    setText("");
+    onSend(t);
+  }
+
+  return (
+    <form
+      className="composer"
+      onSubmit={(e) => {
+        e.preventDefault();
+        send();
+      }}
+    >
+      <textarea
+        ref={ref}
+        rows={1}
+        maxLength={MAX_CHARS}
+        placeholder="Type your answer"
+        disabled={disabled}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            send();
+          }
+        }}
+      />
+      <button className="primary" type="submit" disabled={disabled || !text.trim()}>
+        Send
+      </button>
+    </form>
+  );
+}

@@ -1,0 +1,64 @@
+:root {
+  --bg: #f6f7f9; --panel: #fff; --text: #1c2024; --muted: #6b7280; --line: #e3e6ea;
+  --accent: #3b5bdb; --accent-text: #fff; --bot: #eef1f6; --user: #3b5bdb; --user-text: #fff;
+  --warn: #b45309; --ok: #15803d;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101215; --panel: #181b20; --text: #e8eaed; --muted: #9aa1ab; --line: #2a2f36;
+    --accent: #6c8cff; --accent-text: #0b1020; --bot: #22262d; --user: #6c8cff;
+    --user-text: #0b1020; --warn: #f59e0b; --ok: #4ade80;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.app { max-width: 760px; margin: 0 auto; padding: 0 16px; min-height: 100vh;
+  display: flex; flex-direction: column; }
+.app.home { align-items: center; justify-content: center; text-align: center; gap: 14px; }
+.app.home h1 { margin: 0; font-size: 26px; }
+.app.home p { color: var(--muted); max-width: 440px; margin: 0; }
+header { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; }
+header h1 { font-size: 17px; margin: 0; }
+button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--text); padding: 8px 14px; }
+button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+button.big { font-size: 16px; padding: 12px 30px; }
+button:disabled { opacity: .5; cursor: default; }
+.log { flex: 1; display: flex; flex-direction: column; gap: 10px; padding-bottom: 16px; }
+.msg { max-width: 85%; padding: 10px 14px; border-radius: 14px; white-space: pre-wrap;
+  overflow-wrap: anywhere; }
+.msg.bot { background: var(--bot); align-self: flex-start; border-bottom-left-radius: 4px; }
+.msg.me { background: var(--user); color: var(--user-text); align-self: flex-end;
+  border-bottom-right-radius: 4px; }
+.msg.note { align-self: center; color: var(--muted); font-size: 13px; padding: 0; }
+.msg.error { align-self: center; color: var(--warn); font-size: 14px; padding: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  padding: 14px 16px; align-self: stretch; }
+.card h3 { margin: 0 0 8px; font-size: 16px; }
+.card h4 { margin: 16px 0 6px; font-size: 12px; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--muted); }
+.card label { display: block; font-size: 13px; color: var(--muted); margin: 8px 0 0; }
+.card input[type=text] { display: block; width: 100%; margin-top: 3px; font: inherit;
+  padding: 9px 11px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--text); }
+.field.missing label { color: var(--warn); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { border-radius: 999px; padding: 5px 12px; font-size: 14px; }
+.chips button.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.composer { position: sticky; bottom: 0; background: var(--bg); padding: 10px 0 16px;
+  display: flex; gap: 8px; align-items: flex-end; }
+.composer textarea { flex: 1; resize: none; min-height: 44px; font: inherit; padding: 10px 12px;
+  border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+.actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0;
+  border-bottom: 1px solid var(--line); }
+.row:last-of-type { border-bottom: 0; }
+.row .k { color: var(--muted); flex: 0 0 38%; text-transform: capitalize; }
+.row .v { flex: 1; text-align: right; overflow-wrap: anywhere; }
+.tag { font-size: 11px; color: var(--muted); margin-left: 6px; }
+.meter { margin: 4px 0; }
+.bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin-top: 3px; }
+.bar i { display: block; height: 100%; background: var(--accent); }
+@media (max-width: 520px) { .row { flex-direction: column; gap: 0; } .row .v { text-align: left; } }

@@ -50,3 +50,7 @@ Write evaluation results outside `eval_cases/`: every `.json` file in that folde
 
 Tests use in-memory SQLite and a scripted fake model, so they need no database server and no
 credentials, and never call a real model.
+
+## Frontend
+
+React chat screen in `frontend/` (see `frontend/README.md`): `cd frontend && npm install && npm run dev`, with the API running on port 8000.
