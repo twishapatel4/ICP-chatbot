@@ -1,5 +1,6 @@
 """Per-session working memory (spec section 5.1)."""
 
+import re
 from enum import StrEnum
 from typing import Literal
 
@@ -17,6 +18,29 @@ class SlotSource(StrEnum):
     INFERRED = "inferred"  # inferred from the website or other context
     DEFAULT = "default"
     DERIVED = "derived"
+
+
+# Slots where "none" is a real answer ("no exclusions"), not a missing one.
+NONE_IS_AN_ANSWER = frozenset({"disqualifiers"})
+
+_NON_ANSWER = re.compile(
+    r"^(no|nope|nah|none|nothing|nil|n/?a|na|not sure|unsure|idk|i ?don'?t know|dont know|"
+    r"don'?t know|unknown|skip|pass|no idea|not applicable|can we (just )?(onboard|skip|move on))"
+    r"[\s.!?]*$",
+    re.IGNORECASE,
+)
+
+
+def is_non_answer(text: str) -> bool:
+    """True for replies like "no", "none" or "not sure": they say nothing about the slot."""
+    return bool(_NON_ANSWER.match(text.strip()))
+
+
+def real_values(slot: str, values: list[str]) -> list[str]:
+    """The values that actually carry information for this slot."""
+    if slot in NONE_IS_AN_ANSWER:
+        return list(values)
+    return [v for v in values if not is_non_answer(v)]
 
 
 def normalize_values(values: list[str]) -> list[str]:

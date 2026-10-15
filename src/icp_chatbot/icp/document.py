@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from icp_chatbot.domain.slots import SECTION_ORDER, SLOT_LIST, SLOTS, Tier
-from icp_chatbot.domain.state import SlotSource
+from icp_chatbot.domain.state import SlotSource, real_values
 from icp_chatbot.icp.scoring import ScoringModel
 
 KNOWN_CONFIDENCE = 0.7
@@ -69,7 +69,11 @@ def compute_completeness(entries: dict[str, FieldEntry]) -> Completeness:
         if not slots:
             return 1.0
         known = sum(
-            1 for s in slots if s.key in entries and entries[s.key].confidence >= KNOWN_CONFIDENCE
+            1
+            for s in slots
+            if s.key in entries
+            and entries[s.key].confidence >= KNOWN_CONFIDENCE
+            and real_values(s.key, entries[s.key].values)
         )
         return round(known / len(slots), 4)
 

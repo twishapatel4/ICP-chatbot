@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from icp_chatbot.config import Settings
 from icp_chatbot.domain.state import SessionState, SlotSource, SlotValue
 from icp_chatbot.engine.extraction import (
@@ -121,3 +123,27 @@ async def test_extract_calls_the_extraction_step_with_labels():
     call = llm.calls_for("extraction")[0]
     assert call.cfg.model == "gemini-3.1-flash-lite" and call.labels == {"turn": "1"}
     assert "- industries:" in call.system
+
+
+@pytest.mark.parametrize("reply", ["no", "None", "not sure", "n/a", "I don't know."])
+def test_a_non_answer_is_not_recorded_for_a_normal_slot(reply):
+    state = SessionState()
+    apply_extraction(state, result(up("buyer_roles", [reply], 0.9, reply)), 3)
+    assert "buyer_roles" not in state.slots
+
+
+def test_a_quoted_non_answer_blocks_a_value_the_model_made_up():
+    state = SessionState()
+    apply_extraction(state, result(up("buyer_roles", ["Managers"], 0.9, "no")), 3)
+    assert state.slots == {}
+
+
+def test_no_exclusions_is_a_real_answer_for_disqualifiers():
+    state = SessionState()
+    apply_extraction(state, result(up("disqualifiers", ["none"], 0.9, "no")), 3)
+    assert state.slots["disqualifiers"].values == ["none"]
+
+
+def test_the_extraction_prompt_ties_confidence_to_answering_the_question():
+    prompt = default_config(Settings(_env_file=None)).system_prompt("extraction")
+    assert "not an answer" in prompt and "disqualifiers" in prompt

@@ -8,10 +8,13 @@ from pydantic import BaseModel, Field
 from icp_chatbot.domain.slots import SLOTS
 from icp_chatbot.domain.state import (
     CONFIRMED_CONFIDENCE,
+    NONE_IS_AN_ANSWER,
     SessionState,
     SlotSource,
     SlotValue,
+    is_non_answer,
     normalize_values,
+    real_values,
 )
 from icp_chatbot.llm.types import LLM, LLMResult
 from icp_chatbot.versions import ConfigVersionData
@@ -90,7 +93,9 @@ def apply_extraction(state: SessionState, result: ExtractionResult, turn_no: int
         if update.slot not in SLOTS:
             outcome.ignored.append(update.slot)
             continue
-        values = normalize_values(update.values)
+        values = real_values(update.slot, normalize_values(update.values))
+        if update.slot not in NONE_IS_AN_ANSWER and is_non_answer(update.evidence):
+            continue  # the quoted answer was "no" or "none": nothing was said about this slot
         if not values:
             continue
         existing = state.slots.get(update.slot)

@@ -64,3 +64,18 @@ def test_document_helpers_and_json_round_trip():
     assert document.slot_values() == {"industries": ["Fintech"], "pain_points": ["slow"]}
     assert set(document.entries()) == {"industries", "pain_points"}
     assert ICPDocument.model_validate_json(document.model_dump_json()) == document
+
+
+def test_completeness_ignores_fields_whose_values_are_not_real_answers():
+    from icp_chatbot.domain.slots import SLOT_LIST, Tier
+
+    key = next(
+        s.key for s in SLOT_LIST if s.tier == Tier.A and s.blocks and s.key != "disqualifiers"
+    )
+    empty = compute_completeness(
+        {key: FieldEntry(values=["none"], confidence=0.9, source=SlotSource.STATED)}
+    )
+    real = compute_completeness(
+        {key: FieldEntry(values=["Fintech"], confidence=0.9, source=SlotSource.STATED)}
+    )
+    assert real.tier_a > empty.tier_a

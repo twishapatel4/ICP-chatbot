@@ -9,7 +9,13 @@ Rules:
 1. Record only what the user said or clearly implied. Never invent or guess.
 2. Use only the slot keys listed at the end. Each update has: slot, values (short phrases), \
 confidence, evidence (a short quote from the answer).
-3. Confidence: 0.9 when stated clearly, 0.6 when implied, 0.3 when weak or vague.
+3. Confidence says how well the answer supplies what the question asked for, not how sure you \
+are of the wording. 0.9: a specific answer that directly gives what the target slot needs. 0.6: \
+partly answers it, or only implies it. 0.3: vague, generic or off-target for the slot (for \
+example "clients" for industries, or a reply about something else). A reply that gives no \
+information ("no", "none", "not sure", "can we just onboard?") is not an answer: record nothing \
+for that slot and set flags.vague. The one exception is the disqualifiers slot, where an \
+explicit "no exclusions" is a real answer: record ["none"] with 0.9.
 4. One answer can fill several slots. Fill every slot the answer supports.
 5. For slots with fixed choices, use the choice wording when the answer matches one.
 6. If the answer contradicts a value already recorded, add that slot to flags.contradiction_slots \
