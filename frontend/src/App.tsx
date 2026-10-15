@@ -208,7 +208,12 @@ export default function App() {
                 {o}
               </button>
             ))}
-            {multi && <span className="hint">Select all that apply, or type your own below.</span>}
+            {multi && picked.length > 0 && (
+              <button className="primary confirm" disabled={busy} onClick={() => send("")}>
+                {"\u2713"} Confirm {picked.length} selected
+              </button>
+            )}
+            {multi && <span className="hint">Select all that apply, then tick Confirm. You can also type your own below.</span>}
           </div>
         )}
 
