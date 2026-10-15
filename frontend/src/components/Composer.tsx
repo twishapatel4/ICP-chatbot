@@ -4,10 +4,11 @@ const MAX_CHARS = 2000;
 
 interface Props {
   disabled: boolean;
+  hasPicks?: boolean; // chips are selected, so an empty text box can still send
   onSend: (text: string) => void;
 }
 
-export default function Composer({ disabled, onSend }: Props) {
+export default function Composer({ disabled, hasPicks = false, onSend }: Props) {
   const [text, setText] = useState("");
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -24,7 +25,7 @@ export default function Composer({ disabled, onSend }: Props) {
 
   function send() {
     const t = text.trim();
-    if (!t || disabled) return;
+    if ((!t && !hasPicks) || disabled) return;
     setText("");
     onSend(t);
   }
@@ -41,7 +42,7 @@ export default function Composer({ disabled, onSend }: Props) {
         ref={ref}
         rows={1}
         maxLength={MAX_CHARS}
-        placeholder="Type your answer"
+        placeholder={hasPicks ? "Add anything else (optional)" : "Type your answer"}
         disabled={disabled}
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -52,7 +53,7 @@ export default function Composer({ disabled, onSend }: Props) {
           }
         }}
       />
-      <button className="primary" type="submit" disabled={disabled || !text.trim()}>
+      <button className="primary" type="submit" disabled={disabled || (!text.trim() && !hasPicks)}>
         Send
       </button>
     </form>

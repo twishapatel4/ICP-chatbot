@@ -334,3 +334,21 @@ async def test_the_app_creates_its_tables_on_startup_when_asked_to():
     )
     async with app.router.lifespan_context(app):
         await app.state.container.repo.ensure_tenant("t1")  # fails if the tables were not created
+
+
+async def test_suggested_options_are_multi_select_and_survive_a_reload(world):
+    w = await world()
+    sid = (await w.start())["session_id"]
+    w.llm.queue("extraction", ext(up("product", ["Payroll"])))
+    w.llm.queue("question", q("Which of your customers worked best?"))
+    await w.call("POST", f"/sessions/{sid}/answers", json={"text": "We sell payroll"})
+    w.llm.queue("extraction", ext(up("company_size", ["11-50"])))
+    w.llm.queue(
+        "question", QuestionOutput(question="Which sectors?", options=["Fintech", "Retail"])
+    )
+    turn = (await w.call("POST", f"/sessions/{sid}/answers", json={"text": "Small firms"})).json()[
+        "question"
+    ]
+    assert turn["options"] and turn["multi"] is True
+    view = (await w.call("GET", f"/sessions/{sid}")).json()["question"]
+    assert view["options"] == turn["options"] and view["multi"] is True

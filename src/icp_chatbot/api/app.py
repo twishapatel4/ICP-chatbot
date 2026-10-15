@@ -151,7 +151,13 @@ def create_app(
         pending = None
         if record.status == "active" and state.pending_question:
             pending = QuestionOut.of(
-                Question(state.pending_question, state.pending_kind, state.pending_slot)
+                Question(
+                    state.pending_question,
+                    state.pending_kind,
+                    state.pending_slot,
+                    tuple(state.pending_options),
+                    state.pending_multi,
+                )
             )
         return SessionView(
             session_id=session_id,

@@ -46,6 +46,7 @@ button:disabled { opacity: .5; cursor: default; }
 .field.missing label { color: var(--warn); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chips button { border-radius: 999px; padding: 5px 12px; font-size: 14px; }
+.chips .hint { flex-basis: 100%; font-size: 12px; color: var(--muted); }
 .chips button.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 .composer { position: sticky; bottom: 0; background: var(--bg); padding: 10px 0 16px;
   display: flex; gap: 8px; align-items: flex-end; }

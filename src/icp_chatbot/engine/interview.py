@@ -167,6 +167,7 @@ class InterviewEngine:
         state.pending_question = opener.question.text
         state.pending_kind = "opener"
         state.pending_slot = None
+        state.pending_options, state.pending_multi = [], True
         await self._repo.save_state(
             tenant_id, session_id, state, expected_version=1, usage=spend.usage, cost_usd=spend.cost
         )
@@ -221,14 +222,24 @@ class InterviewEngine:
         if extraction is None and state.failures >= MAX_CONSECUTIVE_FAILURES:
             status, stop_reason = "fallback", "model_unavailable"
         elif extraction is None:
-            question = Question(RETRY_PREFIX + question_text, kind=question_kind, slot=target)
+            question = Question(
+                RETRY_PREFIX + question_text,
+                kind=question_kind,
+                slot=target,
+                options=tuple(state.pending_options),
+                multi=state.pending_multi,
+            )
         elif flags.off_topic:
             state.offtopic_count += 1
             if state.offtopic_count >= MAX_OFFTOPIC:
                 status, stop_reason = "fallback", "off_topic"
             else:
                 question = Question(
-                    REDIRECT_PREFIX + question_text, kind=question_kind, slot=target
+                    REDIRECT_PREFIX + question_text,
+                    kind=question_kind,
+                    slot=target,
+                    options=tuple(state.pending_options),
+                    multi=state.pending_multi,
                 )
         elif flags.wants_to_finish:
             status, stop_reason = "completed", "user_finished"
@@ -242,6 +253,7 @@ class InterviewEngine:
             state.finished = status == "completed"
             state.stop_reason = stop_reason
             state.pending_question, state.pending_kind, state.pending_slot = "", "", None
+            state.pending_options = []
         await self._repo.save_state(
             tenant_id,
             session_id,
@@ -305,6 +317,8 @@ class InterviewEngine:
         state.pending_question = question.text
         state.pending_kind = question.kind
         state.pending_slot = question.slot
+        state.pending_options = list(question.options)
+        state.pending_multi = question.multi
         if question.slot:
             state.asked_slots[question.slot] = state.asked_slots.get(question.slot, 0) + 1
 
@@ -317,6 +331,7 @@ class InterviewEngine:
         state = record.state
         state.finished, state.stop_reason = True, "user_finished"
         state.pending_question, state.pending_kind, state.pending_slot = "", "", None
+        state.pending_options = []
         await self._repo.save_state(
             tenant_id, session_id, state, expected_version=record.row_version, status="completed"
         )

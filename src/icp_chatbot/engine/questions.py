@@ -39,8 +39,14 @@ SALES_OPENER = (
 MAX_QUESTION_CHARS = 400
 
 
+MAX_OPTIONS = 8
+MAX_OPTION_CHARS = 60
+FILLER_OPTIONS = frozenset({"other", "others", "something else", "none", "n/a", "all of the above"})
+
+
 class QuestionOutput(BaseModel):
     question: str
+    options: list[str] = []  # short suggested answers, only when the answer is a pick from a list
 
 
 @dataclass(frozen=True)
@@ -49,6 +55,20 @@ class Question:
     kind: str  # opener, best_customer, slot, fallback
     slot: str | None = None
     options: tuple[str, ...] = ()
+    multi: bool = True  # the user may pick several options
+
+
+def clean_options(raw: list[str]) -> tuple[str, ...]:
+    """Suggested answers from the model: trimmed, deduplicated, short, at most MAX_OPTIONS.
+    The user can always type their own answer, so "Other" style filler is dropped. One option
+    alone is not a choice, so fewer than two means none."""
+    unique: dict[str, str] = {}
+    for item in raw:
+        item = " ".join(item.split())
+        if item and len(item) <= MAX_OPTION_CHARS and item.casefold() not in FILLER_OPTIONS:
+            unique.setdefault(item.casefold(), item)
+    options = tuple(unique.values())[:MAX_OPTIONS]
+    return options if len(options) >= 2 else ()
 
 
 @dataclass(frozen=True)
@@ -143,7 +163,12 @@ async def generate_question(
             cfg.model,
             True,
         )
-    question = Question(text, kind="slot", slot=slot_key, options=slot.choices)
+    if slot.choices:  # fixed wording of the choices wins over the model's suggestions
+        options = slot.choices
+    else:
+        options = clean_options(result.parsed.options)
+    # a slot holds a list of values, so the user may always pick several
+    question = Question(text, kind="slot", slot=slot_key, options=options, multi=True)
     return QuestionResult(question, result.usage, result.cost_usd, cfg.model)
 
 

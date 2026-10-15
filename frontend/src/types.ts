@@ -15,6 +15,7 @@ export interface Question {
   kind: string;
   slot: string | null;
   options: string[];
+  multi: boolean;
 }
 
 export interface Turn {

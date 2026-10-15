@@ -31,13 +31,14 @@ class QuestionOut(BaseModel):
     kind: str
     slot: str | None = None
     options: list[str] = Field(default_factory=list)
+    multi: bool = True  # the user may pick several options
 
     @classmethod
     def of(cls, q: Question | None) -> "QuestionOut | None":
         return (
             None
             if q is None
-            else cls(text=q.text, kind=q.kind, slot=q.slot, options=list(q.options))
+            else cls(text=q.text, kind=q.kind, slot=q.slot, options=list(q.options), multi=q.multi)
         )
 
 

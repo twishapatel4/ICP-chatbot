@@ -90,6 +90,8 @@ class SessionState(BaseModel):
     pending_slot: str | None = None  # slot the last question targeted
     pending_question: str = ""
     pending_kind: str = ""  # opener, best_customer, slot, fallback
+    pending_options: list[str] = Field(default_factory=list)  # suggested answers, if any
+    pending_multi: bool = True  # more than one option may be picked
     segment: dict[str, str] = Field(default_factory=dict)
     failures: int = 0  # consecutive failed model steps
     offtopic_count: int = 0

@@ -11,6 +11,7 @@ from icp_chatbot.engine.questions import (
     SALES_OPENER,
     QuestionOutput,
     best_customer_question,
+    clean_options,
     fallback_question,
     generate_opener,
     generate_question,
@@ -116,3 +117,28 @@ async def test_opener_model_failure_falls_back_to_a_variant():
     llm = FakeLLM({"opener": [LLMError("timeout", "slow")]})
     result = await generate_opener(llm, CONFIG, SignupInfo("Acme", role="Founder"), {})
     assert result.question.text == FOUNDER_OPENER and result.used_fallback
+
+
+def test_clean_options_trims_dedupes_and_needs_two():
+    assert clean_options([" Fintech ", "fintech", "Health  care", "", "x" * 61]) == (
+        "Fintech",
+        "Health care",
+    )
+    assert clean_options(["Only one"]) == ()
+    assert len(clean_options([f"opt {i}" for i in range(20)])) == 8
+
+
+async def test_model_options_reach_the_question_and_allow_several():
+    out = QuestionOutput(question="Which sectors?", options=["Fintech", "Healthcare", "Other"])
+    result = await generate_question(
+        FakeLLM({"question": [out]}), CONFIG, SessionState(), "pain_points"
+    )
+    assert result.question.options == ("Fintech", "Healthcare") and result.question.multi
+
+
+async def test_fixed_slot_choices_override_model_options_and_allow_several():
+    out = QuestionOutput(question="How big?", options=["Tiny", "Huge"])
+    result = await generate_question(
+        FakeLLM({"question": [out]}), CONFIG, SessionState(), "company_size"
+    )
+    assert result.question.options[0] == "1-10" and result.question.multi

@@ -31,6 +31,8 @@ export default function App() {
   const [stage, setStage] = useState<Stage>("home");
   const [messages, setMessages] = useState<Message[]>([]);
   const [options, setOptions] = useState<string[]>([]);
+  const [multi, setMulti] = useState(true);
+  const [picked, setPicked] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [form, setForm] = useState<FormField[]>([]);
@@ -51,6 +53,7 @@ export default function App() {
   function newChat() {
     setMessages([]);
     setOptions([]);
+    setPicked([]);
     setSessionId(null);
     setForm([]);
     setMissing([]);
@@ -90,6 +93,8 @@ export default function App() {
     if (turn.question) {
       push("bot", turn.question.text);
       setOptions(turn.status === "active" ? turn.question.options : []);
+      setMulti(turn.question.multi);
+      setPicked([]);
     }
     if (turn.status === "completed") {
       if (!turn.question) push("bot", "Thanks, that is everything I need.");
@@ -115,11 +120,19 @@ export default function App() {
       await handleTurn(await api.startSession(body));
     });
 
-  const send = (text: string) => {
-    if (!sessionId) return;
+  // Picked chips and typed text go out as one answer.
+  const send = (typed: string) => {
+    const text = [...picked, typed].filter(Boolean).join(", ");
+    if (!sessionId || !text) return;
     setOptions([]);
+    setPicked([]);
     push("me", text);
     return guarded(async () => handleTurn(await api.sendAnswer(sessionId, text)));
+  };
+
+  const choose = (o: string) => {
+    if (!multi) return send(o);
+    setPicked((p) => (p.includes(o) ? p.filter((x) => x !== o) : [...p, o]));
   };
 
   const submitForm = (answers: Record<string, string[]>) =>
@@ -182,12 +195,20 @@ export default function App() {
         {stage === "signup" && <SignupCard disabled={busy} onStart={start} />}
 
         {options.length > 0 && (
-          <div className="chips">
+          <div className="chips" role="group" aria-label={multi ? "Select all that apply" : "Pick one"}>
             {options.map((o) => (
-              <button key={o} disabled={busy} onClick={() => send(o)}>
+              <button
+                key={o}
+                className={picked.includes(o) ? "on" : ""}
+                aria-pressed={multi ? picked.includes(o) : undefined}
+                disabled={busy}
+                onClick={() => choose(o)}
+              >
+                {multi && picked.includes(o) ? "\u2713 " : ""}
                 {o}
               </button>
             ))}
+            {multi && <span className="hint">Select all that apply, or type your own below.</span>}
           </div>
         )}
 
@@ -203,7 +224,7 @@ export default function App() {
         <div ref={endRef} />
       </div>
 
-      {stage === "interview" && <Composer disabled={busy} onSend={send} />}
+      {stage === "interview" && <Composer disabled={busy} hasPicks={picked.length > 0} onSend={send} />}
     </main>
   );
 }
