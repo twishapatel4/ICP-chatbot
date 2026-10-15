@@ -83,6 +83,8 @@ def plan_next(state: SessionState, caps: Caps) -> Plan:
         if asked >= MAX_ASKS_PER_SLOT:
             continue
         score = weight * slot.importance * (1.0 - confidence)
+        if asked and slot.key == state.pending_slot:
+            score *= 0.4  # just asked and not answered: other topics go first, then come back
         if score > best_score:
             best, best_score = slot, score
     if best is None:

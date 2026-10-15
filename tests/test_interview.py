@@ -15,7 +15,7 @@ from icp_chatbot.engine.interview import (
     InvalidTransition,
     SessionClosed,
 )
-from icp_chatbot.engine.questions import BEST_CUSTOMER_QUESTION, QuestionOutput
+from icp_chatbot.engine.questions import QuestionOutput
 from icp_chatbot.enrichment.service import EnrichmentOutcome
 from icp_chatbot.llm.fake import FakeLLM
 from icp_chatbot.llm.types import LLMError, Usage
@@ -151,10 +151,12 @@ async def test_the_answer_to_the_opener_is_followed_by_the_best_customer_questio
     llm.queue("opener", q("Opener?"))
     first = await started(world)
     llm.queue("extraction", ext(up("product", ["Payroll"]), summary="B2B payroll"))
+    llm.queue("question", q("Payroll for startups, nice. Who has been your best customer?"))
     result = await engine.answer(T, first.session_id, "We sell payroll to startups")
-    assert (
-        result.question.text == BEST_CUSTOMER_QUESTION and result.question.kind == "best_customer"
+    assert result.question.text.startswith("Payroll for startups") and (
+        result.question.kind == "best_customer"
     )
+    assert "best customers" in llm.calls_for("question")[0].user
     assert result.questions_asked == 2
     state = (await repo.get_session(T, first.session_id)).state
     assert state.slots["product"].values == ["Payroll"] and state.summary == "B2B payroll"
@@ -408,3 +410,38 @@ async def test_finish_completes_an_active_session_once(world):
     assert (result.status, result.stop_reason) == ("completed", "user_finished")
     with pytest.raises(SessionClosed):
         await engine.finish(T, sid)
+
+
+async def test_an_unanswered_opener_gets_one_follow_up_before_moving_on(world):
+    engine, repo, llm, _ = world
+    llm.queue("opener", q("Opener?"))
+    first = await started(world)
+    llm.queue("extraction", ext(flags=Flags(vague=True)))
+    llm.queue("question", q("No problem. What do you sell, for example software or services?"))
+    second = await engine.answer(T, first.session_id, "no")
+    assert second.question.kind == "opener" and "No problem" in second.question.text
+    assert "did not answer" in llm.calls_for("question")[0].user
+    llm.queue("extraction", ext(flags=Flags(vague=True)))
+    llm.queue("question", q("Who are your best customers?"))
+    third = await engine.answer(T, first.session_id, "no")
+    assert third.question.kind == "best_customer"  # only one follow-up per question
+
+
+async def test_a_reply_that_fills_nothing_is_followed_up_not_skipped(world):
+    engine, repo, llm, _ = world
+    sid = await preset(repo, pending(SessionState(questions_asked=3, best_customer_asked=True)))
+    llm.queue("extraction", ext())
+    llm.queue("question", q("Could you say a bit more?"))
+    result = await engine.answer(T, sid, "hmm")
+    assert result.question.text == "Could you say a bit more?"
+
+
+async def test_a_slot_asked_again_is_written_as_a_follow_up_with_a_different_fallback(world):
+    engine, repo, llm, _ = world
+    state = pending(SessionState(questions_asked=3, best_customer_asked=True))
+    state.asked_slots = {slot.key: 1 for slot in SLOT_LIST}
+    sid = await preset(repo, state)
+    llm.queue("extraction", ext(flags=Flags(vague=True)))
+    llm.queue("question", LLMError("api", "down"))
+    result = await engine.answer(T, sid, "no")
+    assert result.question.text.startswith("No problem, let me put it another way")

@@ -18,7 +18,8 @@ from icp_chatbot.engine.planner import Ask, Caps, plan_next
 from icp_chatbot.engine.questions import (
     Question,
     QuestionResult,
-    best_customer_question,
+    generate_best_customer,
+    generate_followup,
     generate_opener,
     generate_question,
 )
@@ -209,8 +210,9 @@ class InterviewEngine:
         except LLMError as exc:
             state.failures += 1
             log.warning("extraction failed for session %s: %s", session_id, exc)
+        applied: list[str] = []
         if extraction:
-            apply_extraction(state, extraction, turn_no)
+            applied = apply_extraction(state, extraction, turn_no).applied
         flags = extraction.flags if extraction else Flags()
         state.answers_received = turn_no
         state.push_turn(question_text, text)
@@ -231,8 +233,9 @@ class InterviewEngine:
         elif flags.wants_to_finish:
             status, stop_reason = "completed", "user_finished"
         else:
+            unanswered = flags.vague or not applied
             status, stop_reason, question = await self._next(
-                state, config, flags.vague, labels, spend
+                state, config, unanswered, labels, spend
             )
 
         if status != "active":
@@ -267,11 +270,23 @@ class InterviewEngine:
 
     async def _next(self, state, config, previous_vague, labels, spend):
         """Choose and write the next question. Returns (status, stop_reason, question)."""
+        kind, asked = state.pending_kind, state.pending_question
+        if kind in ("opener", "best_customer") and previous_vague and not state.followups.get(kind):
+            state.followups[kind] = 1  # one follow-up, then move on
+            result = await generate_followup(self._llm, config, state, asked, kind, labels=labels)
+            spend.add(result.usage, result.cost_usd)
+            if result.model:
+                spend.models["question"] = result.model
+            self._record_question(state, result.question)
+            return "active", None, result.question
         if state.pending_kind == "opener" and not state.best_customer_asked:
             state.best_customer_asked = True
-            question = best_customer_question()
-            self._record_question(state, question)
-            return "active", None, question
+            result = await generate_best_customer(self._llm, config, state, labels=labels)
+            spend.add(result.usage, result.cost_usd)
+            if result.model:
+                spend.models["question"] = result.model
+            self._record_question(state, result.question)
+            return "active", None, result.question
         plan = plan_next(state, self._caps)
         if not isinstance(plan, Ask):
             return "completed", plan.reason, None

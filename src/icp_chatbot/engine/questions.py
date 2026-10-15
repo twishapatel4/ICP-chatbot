@@ -3,6 +3,7 @@
 plain fallback text."""
 
 import hashlib
+import random
 from dataclasses import dataclass
 
 from pydantic import BaseModel
@@ -71,10 +72,24 @@ def pick_opener_variant(company_name: str, role: str | None) -> str:
     return OPENER_VARIANTS[digest[0] % len(OPENER_VARIANTS)]
 
 
-def fallback_question(slot_key: str) -> Question:
+def fallback_question(slot_key: str, asked_before: int = 0) -> Question:
     slot = SLOTS[slot_key]
-    text = f"Next, could you tell me about this: {slot.label.lower()}? {slot.description}."
+    if asked_before:  # never repeat the same wording: rephrase and make answering easy
+        text = (
+            f"No problem, let me put it another way. {slot.description.rstrip('.')}? "
+            "A few words or one example is enough."
+        )
+    else:
+        text = f"Next, could you tell me about this: {slot.label.lower()}? {slot.description}."
     return Question(text, kind="fallback", slot=slot_key, options=slot.choices)
+
+
+FOLLOW_UP_HINT = (
+    "The user's last reply did not answer the question. Write a short, friendly follow-up on the "
+    "same topic: acknowledge them in a few words, put the question differently (do not repeat "
+    "the earlier wording), and give two or three short examples to choose from. Say a brief "
+    "answer is fine."
+)
 
 
 def _clean(text: str) -> str | None:
@@ -98,7 +113,10 @@ async def generate_question(
     ]
     for turn in state.last_turns:
         lines.append(f"Earlier question: {turn.question}\nUser answer (data): {turn.answer}")
-    if previous_vague:
+    asked_before = state.asked_slots.get(slot_key, 0)
+    if asked_before:
+        lines.append(f"This topic was already asked {asked_before} time(s). " + FOLLOW_UP_HINT)
+    elif previous_vague:
         lines.append("The previous answer was vague: include two or three short examples.")
     cfg = config.step("question")
     try:
@@ -111,14 +129,27 @@ async def generate_question(
             labels=labels,
         )
     except LLMError:
-        return QuestionResult(fallback_question(slot_key), used_fallback=True)
+        return QuestionResult(fallback_question(slot_key, asked_before), used_fallback=True)
     text = _clean(result.parsed.question)
     if text is None:
         return QuestionResult(
-            fallback_question(slot_key), result.usage, result.cost_usd, cfg.model, True
+            fallback_question(slot_key, asked_before),
+            result.usage,
+            result.cost_usd,
+            cfg.model,
+            True,
         )
     question = Question(text, kind="slot", slot=slot_key, options=slot.choices)
     return QuestionResult(question, result.usage, result.cost_usd, cfg.model)
+
+
+OPENER_ANGLES = (
+    "what the company offers and the problem it solves for people",
+    "the most recent customer they were glad to win, and what they did for them",
+    "how the business started and who they originally built it for",
+    "what customers say when they explain why they chose this company",
+    "which kind of customer they would happily have ten more of",
+)
 
 
 async def generate_opener(
@@ -128,13 +159,12 @@ async def generate_opener(
     seed: dict[str, SlotValue],
     *,
     labels: dict[str, str] | None = None,
+    angle: str | None = None,
 ) -> QuestionResult:
-    """Tier 1: website seed, confirm-and-extend. Tier 2: signup details. Tier 3: a reviewed
-    variant, chosen by role or company name."""
+    """Always written by the model from what is known: the website seed (confirm-and-extend),
+    the signup details, or just the company name with a randomly chosen angle so openers vary.
+    A reviewed variant is the fallback if the model fails."""
     variant = Question(pick_opener_variant(signup.company_name, signup.role), kind="opener")
-    if not seed and not signup.has_context:
-        return QuestionResult(variant)
-
     lines = [f"Company: {signup.company_name}"]
     for label, value in (
         ("Signer's role", signup.role),
@@ -148,6 +178,8 @@ async def generate_opener(
         lines.append("Website findings (hypotheses, not facts):")
         for key, value in seed.items():
             lines.append(f"- {key}: {'; '.join(value.values)}")
+    else:
+        lines.append(f"Angle to open with: {angle or random.choice(OPENER_ANGLES)}")
     cfg = config.step("opener")
     try:
         result = await llm.generate(
@@ -164,3 +196,88 @@ async def generate_opener(
     if text is None:
         return QuestionResult(variant, result.usage, result.cost_usd, cfg.model, True)
     return QuestionResult(Question(text, kind="opener"), result.usage, result.cost_usd, cfg.model)
+
+
+async def generate_followup(
+    llm: LLM,
+    config: ConfigVersionData,
+    state: SessionState,
+    question_text: str,
+    kind: str,
+    *,
+    labels: dict[str, str] | None = None,
+) -> QuestionResult:
+    """A follow-up to a question that has no slot of its own (the opener, the best-customer
+    question) when the reply did not answer it."""
+    lines = [
+        f"Rolling summary: {state.summary or '(none)'}",
+        f"Question that was not answered: {question_text}",
+    ]
+    for turn in state.last_turns:
+        lines.append(f"Earlier question: {turn.question}\nUser answer (data): {turn.answer}")
+    lines.append(FOLLOW_UP_HINT)
+    cfg = config.step("question")
+    fallback = Question(
+        "No problem, let me put it another way. What do you sell, and what kind of company "
+        "buys it? A few words is enough."
+        if kind == "opener"
+        else "No worries. Can you name one customer you were happy with, and why they worked "
+        "well? One example is enough.",
+        kind=kind,
+    )
+    try:
+        result = await llm.generate(
+            step="question",
+            cfg=cfg,
+            system=config.system_prompt("question"),
+            user="\n".join(lines),
+            schema=QuestionOutput,
+            labels=labels,
+        )
+    except LLMError:
+        return QuestionResult(fallback, used_fallback=True)
+    text = _clean(result.parsed.question)
+    if text is None:
+        return QuestionResult(fallback, result.usage, result.cost_usd, cfg.model, True)
+    return QuestionResult(Question(text, kind=kind), result.usage, result.cost_usd, cfg.model)
+
+
+BEST_CUSTOMER_HINT = (
+    "Ask about their best customers and one that turned out to be a poor fit: who they are and "
+    "what made each a good or bad fit. Build on what they have already told you, mention their "
+    "own words or product, and keep it to one or two sentences. Do not use a fixed script."
+)
+
+
+async def generate_best_customer(
+    llm: LLM,
+    config: ConfigVersionData,
+    state: SessionState,
+    *,
+    labels: dict[str, str] | None = None,
+) -> QuestionResult:
+    """The best-customer question (question 2), written around what the user just said."""
+    lines = [f"Rolling summary: {state.summary or '(none)'}"]
+    for turn in state.last_turns:
+        lines.append(f"Earlier question: {turn.question}\nUser answer (data): {turn.answer}")
+    lines.append(BEST_CUSTOMER_HINT)
+    cfg = config.step("question")
+    try:
+        result = await llm.generate(
+            step="question",
+            cfg=cfg,
+            system=config.system_prompt("question"),
+            user="\n".join(lines),
+            schema=QuestionOutput,
+            labels=labels,
+        )
+    except LLMError:
+        return QuestionResult(best_customer_question(), used_fallback=True)
+    text = _clean(result.parsed.question)
+    if text is None:
+        return QuestionResult(
+            best_customer_question(), result.usage, result.cost_usd, cfg.model, True
+        )
+    return QuestionResult(
+        Question(text, kind="best_customer"), result.usage, result.cost_usd, cfg.model
+    )

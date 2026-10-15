@@ -6,6 +6,7 @@ from icp_chatbot.domain.state import SessionState, SlotSource, SlotValue, TurnPa
 from icp_chatbot.engine.questions import (
     BEST_CUSTOMER_QUESTION,
     FOUNDER_OPENER,
+    OPENER_ANGLES,
     OPENER_VARIANTS,
     SALES_OPENER,
     QuestionOutput,
@@ -96,10 +97,19 @@ async def test_opener_uses_the_seed_as_hypotheses():
     assert "Signer's role: CTO" in user
 
 
-async def test_opener_with_nothing_known_uses_a_variant_without_a_model_call():
-    llm = FakeLLM()
-    result = await generate_opener(llm, CONFIG, SignupInfo("Acme"), {})
-    assert result.question.text in OPENER_VARIANTS and llm.calls == []
+async def test_opener_with_nothing_known_is_still_written_by_the_model_with_an_angle():
+    llm = FakeLLM({"opener": [QuestionOutput(question="Hi! How did Acme get started?")]})
+    result = await generate_opener(
+        llm, CONFIG, SignupInfo("Acme"), {}, angle="how the business started"
+    )
+    assert result.question.text == "Hi! How did Acme get started?" and not result.used_fallback
+    assert "Angle to open with: how the business started" in llm.calls_for("opener")[0].user
+
+
+async def test_opener_angle_is_chosen_at_random_when_not_given():
+    llm = FakeLLM({"opener": [QuestionOutput(question="Hi!")]})
+    await generate_opener(llm, CONFIG, SignupInfo("Acme"), {})
+    assert any(a in llm.calls_for("opener")[0].user for a in OPENER_ANGLES)
 
 
 async def test_opener_model_failure_falls_back_to_a_variant():

@@ -81,6 +81,7 @@ class SessionState(BaseModel):
     summary: str = ""
     last_turns: list[TurnPair] = Field(default_factory=list)  # at most the last two
     asked_slots: dict[str, int] = Field(default_factory=dict)  # slot key -> times asked
+    followups: dict[str, int] = Field(default_factory=dict)  # question kind -> follow-ups asked
     contradictions: list[str] = Field(default_factory=list)
     best_customer_asked: bool = False
     questions_asked: int = 0

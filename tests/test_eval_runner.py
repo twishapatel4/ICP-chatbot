@@ -26,12 +26,13 @@ def write_case(tmp_path, name="mini"):
 def scripted_llm(f1_good=True):
     industries = ["Banks"] if f1_good else ["Retail"]
     return FakeLLM({
+        "opener": [QuestionOutput(question="Hi!")],
         "extraction": [
             ExtractionResult(updates=[SlotUpdate(slot="product", values=["Payroll"], confidence=0.9)]),
             ExtractionResult(updates=[SlotUpdate(slot="industries", values=industries, confidence=0.9),
                                       SlotUpdate(slot="geographies", values=["Europe"], confidence=0.9)]),
         ],
-        "question": [QuestionOutput(question="Pains?")],
+        "question": [QuestionOutput(question="Best customers?"), QuestionOutput(question="Pains?")],
         "final_icp": [ICPSynthesis()],
     })  # fmt: skip
 

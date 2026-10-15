@@ -115,3 +115,8 @@ def test_exhausted_when_nothing_is_left_to_ask():
     for slot in SLOT_LIST:
         state.asked_slots[slot.key] = 3
     assert plan_next(state, CAPS) == Stop("exhausted")
+
+
+def test_a_slot_just_asked_and_not_answered_waits_behind_other_topics():
+    state = SessionState(asked_slots={"pain_points": 1}, pending_slot="pain_points")
+    assert plan_next(state, CAPS) != Ask("pain_points")

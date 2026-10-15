@@ -4,7 +4,7 @@ import pytest
 from icp_chatbot.api.app import create_app
 from icp_chatbot.config import Settings
 from icp_chatbot.engine.extraction import ExtractionResult, Flags, SlotUpdate
-from icp_chatbot.engine.questions import BEST_CUSTOMER_QUESTION, QuestionOutput
+from icp_chatbot.engine.questions import QuestionOutput
 from icp_chatbot.enrichment.fetcher import FetchBlocked
 from icp_chatbot.icp.builder import ICPSynthesis
 from icp_chatbot.llm.fake import FakeLLM
@@ -74,10 +74,11 @@ async def run_to_completion(w):
     started = await w.start()
     sid = started["session_id"]
     w.llm.queue("extraction", ext(up("product", ["Payroll software"]), summary="B2B payroll"))
+    w.llm.queue("question", q("Payroll for banks, nice. Who are your happiest customers so far?"))
     best = await w.call(
         "POST", f"/sessions/{sid}/answers", json={"text": "We sell payroll software"}
     )
-    assert best.json()["question"]["text"] == BEST_CUSTOMER_QUESTION
+    assert best.json()["question"]["kind"] == "best_customer"
     w.llm.queue("extraction", ext(
         up("industries", ["Fintech"]), up("company_size", ["50-500"]), up("geographies", ["Europe"]),
         up("pain_points", ["manual payroll"]),
@@ -231,6 +232,7 @@ async def test_the_daily_session_cap_returns_429_and_does_not_stop_running_sessi
     refused = await w.call("POST", "/sessions", json={"company_name": "B", "role": "CTO"})
     assert refused.status_code == 429 and "tenant_sessions" in refused.json()["detail"]
     w.llm.queue("extraction", ext())
+    w.llm.queue("question", q("Could you say a little more?"))
     ok = await w.call("POST", f"/sessions/{started['session_id']}/answers", json={"text": "hello"})
     assert ok.status_code == 200
 
@@ -301,6 +303,7 @@ async def test_a_returning_user_gets_the_pending_question_back(world):
     started = await w.start()
     sid = started["session_id"]
     w.llm.queue("extraction", ext())
+    w.llm.queue("question", q("Could you say a little more?"))
     answered = (await w.call("POST", f"/sessions/{sid}/answers", json={"text": "hello"})).json()
     resumed = (await w.call("GET", f"/sessions/{sid}")).json()
     assert resumed["status"] == "active"
@@ -313,6 +316,7 @@ async def test_unicode_answers_are_stored_and_sent_to_the_model_unchanged(world)
     sid = (await w.start())["session_id"]
     text = "我们卖薪资软件 💼 — для банков, ¿entiendes?"
     w.llm.queue("extraction", ext(up("product", ["薪资软件"])))
+    w.llm.queue("question", q("Which customers have worked out best?"))
     response = await w.call("POST", f"/sessions/{sid}/answers", json={"text": text})
     assert response.status_code == 200
     [turn] = await w.repo.list_turns("tenant-1", sid)

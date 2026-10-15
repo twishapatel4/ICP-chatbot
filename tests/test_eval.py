@@ -107,8 +107,8 @@ async def test_replay_runs_a_case_end_to_end_and_reports_metrics():
         expected={"industries": ["banks"], "geographies": ["Europe"]},
     )
     llm = FakeLLM({
-        "extraction": [ext(up("product", ["Payroll"])), ext(up("industries", ["Banks"]), up("geographies", ["Europe"])), ext(up("buyer_roles", ["CFO"]))],
-        "question": [QuestionOutput(question="What problems do they have?"), QuestionOutput(question="Anything else?")],
+        "opener": [QuestionOutput(question="Hi!")], "extraction": [ext(up("product", ["Payroll"])), ext(up("industries", ["Banks"]), up("geographies", ["Europe"])), ext(up("buyer_roles", ["CFO"]))],
+        "question": [QuestionOutput(question="Who are your best customers?"), QuestionOutput(question="What problems do they have?"), QuestionOutput(question="Anything else?")],
         "final_icp": [ICPSynthesis()],
     })  # fmt: skip
     result = await replay_case(c, llm, SETTINGS)
@@ -129,8 +129,8 @@ async def test_replay_with_a_detail_phase_asks_the_extra_questions():
         expected={"compliance": ["GDPR"]},
     )
     llm = FakeLLM({
-        "extraction": [ext(), ext(), ext(up("compliance", ["GDPR"]))],
-        "question": [QuestionOutput(question="q1?"), QuestionOutput(question="detail q?"), QuestionOutput(question="more?")],
+        "opener": [QuestionOutput(question="Hi!")], "extraction": [ext(), ext(), ext(up("compliance", ["GDPR"]))],
+        "question": [QuestionOutput(question="best?"), QuestionOutput(question="q1?"), QuestionOutput(question="detail q?"), QuestionOutput(question="more?")],
         "final_icp": [ICPSynthesis()],
     })  # fmt: skip
     result = await replay_case(c, llm, SETTINGS)

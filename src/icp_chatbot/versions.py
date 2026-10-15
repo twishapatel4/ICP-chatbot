@@ -47,6 +47,16 @@ class ConfigVersionData(BaseModel):
         )
 
 
+_LEVEL_BUDGET = {"minimal": 0, "low": 512, "medium": 2048, "high": 8192}
+
+
+def _thinking(model: str, level: str) -> dict:
+    """Gemini 3 models take a thinking level, Gemini 2.5 models a token budget."""
+    if model.startswith("gemini-2.5"):
+        return {"thinking_budget": _LEVEL_BUDGET[level]}
+    return {"thinking_level": level}
+
+
 def default_config(settings: Settings, version: int = 1) -> ConfigVersionData:
     # Thinking levels follow spec section 5.4: minimal for extraction, low for questions,
     # moderate for the final ICP. Level support for gemini-3.1-flash-lite is unconfirmed;
@@ -59,31 +69,31 @@ def default_config(settings: Settings, version: int = 1) -> ConfigVersionData:
                 model=settings.model_extraction,
                 temperature=0.0,
                 max_output_tokens=2048,
-                thinking_level="minimal",
+                **_thinking(settings.model_extraction, "minimal"),
             ),
             "seed": StepSettings(
                 model=settings.model_extraction,
                 temperature=0.0,
                 max_output_tokens=2048,
-                thinking_level="minimal",
+                **_thinking(settings.model_extraction, "minimal"),
             ),
             "opener": StepSettings(
                 model=settings.model_question,
                 temperature=0.7,
                 max_output_tokens=512,
-                thinking_level="low",
+                **_thinking(settings.model_question, "low"),
             ),
             "question": StepSettings(
                 model=settings.model_question,
                 temperature=0.5,
                 max_output_tokens=512,
-                thinking_level="low",
+                **_thinking(settings.model_question, "low"),
             ),
             "final_icp": StepSettings(
                 model=settings.model_final_icp,
                 temperature=0.1,
                 max_output_tokens=8192,
-                thinking_budget=2048,
+                **_thinking(settings.model_final_icp, "medium"),
             ),
         },
     )
