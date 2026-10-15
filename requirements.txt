@@ -1,0 +1,24 @@
+# Runtime dependencies for the ICP chatbot backend.
+# Direct dependencies only, pinned to the versions installed and tested on 2026-10-15.
+# Transitive dependencies are resolved by pip.
+# Install: python -m pip install -r requirements.txt
+
+# Web API
+fastapi==0.143.1
+uvicorn[standard]==0.54.0
+
+# Settings and data validation
+pydantic==2.14.1
+pydantic-settings==2.16.0
+
+# Database (Postgres): ORM, migrations, driver
+SQLAlchemy[asyncio]==2.1.4
+alembic==1.20.0
+psycopg[binary]==3.3.6
+
+# Gemini models: one SDK for the Developer API (prototype) and Vertex AI (production)
+google-genai==2.31.0
+
+# Website fetching for enrichment (section 5.3 of the spec) and HTML text extraction
+httpx==0.28.1
+beautifulsoup4==4.15.0

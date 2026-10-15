@@ -1,0 +1,10 @@
+# Development and test dependencies.
+# Install: python -m pip install -r requirements-dev.txt
+-r requirements.txt
+
+pytest==9.1.1
+pytest-asyncio==1.4.0
+pytest-cov==7.1.0
+aiosqlite==0.22.1   # async SQLite driver: database tests run without a Postgres server
+respx==0.23.1   # mocks httpx calls, used for the website fetcher tests
+ruff==0.17.0    # linter and formatter
