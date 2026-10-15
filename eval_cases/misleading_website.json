@@ -1,0 +1,35 @@
+{
+  "name": "misleading_website",
+  "tags": [
+    "misleading_website"
+  ],
+  "signup": {
+    "company_name": "Apex",
+    "website": "apex.example",
+    "role": "CTO"
+  },
+  "website_text": "Apex Aerospace builds reusable rockets for satellite launch.",
+  "answers": [
+    "That page is an old brand. We actually sell payroll software for small businesses.",
+    "Companies with 10 to 50 employees in India.",
+    "Manual salary calculation and tax filing mistakes.",
+    "Business owners and accountants."
+  ],
+  "expected": {
+    "product": [
+      "payroll"
+    ],
+    "geographies": [
+      "India"
+    ]
+  },
+  "forbidden": {
+    "product": [
+      "rockets"
+    ],
+    "industries": [
+      "aerospace"
+    ]
+  },
+  "notes": "A wrong inference from the website must be corrected by the user's answer."
+}

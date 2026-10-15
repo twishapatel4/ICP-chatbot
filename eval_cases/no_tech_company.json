@@ -1,0 +1,30 @@
+{
+  "name": "no_tech_company",
+  "tags": [
+    "no_tech"
+  ],
+  "signup": {
+    "company_name": "Pipe Pros",
+    "email": "ops@pipepros.example"
+  },
+  "website_text": "Pipe Pros: residential and commercial plumbing services in Texas.",
+  "answers": [
+    "Plumbing services.",
+    "Homeowners and small apartment buildings in Texas.",
+    "Burst pipes and leaks they cannot fix themselves.",
+    "Property managers.",
+    "We avoid industrial sites."
+  ],
+  "expected": {
+    "geographies": [
+      "Texas"
+    ],
+    "pain_points": [
+      "leaks"
+    ],
+    "disqualifiers": [
+      "industrial"
+    ]
+  },
+  "notes": "No technology angle: the technology criterion must drop out of the scoring model."
+}

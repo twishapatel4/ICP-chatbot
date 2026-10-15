@@ -1,0 +1,32 @@
+{
+  "name": "offtopic_then_ontopic",
+  "tags": [
+    "off_topic"
+  ],
+  "signup": {
+    "company_name": "RouteWise",
+    "role": "Operations Lead"
+  },
+  "answers": [
+    "What's the weather like in Paris today?",
+    "We sell fleet tracking to logistics companies.",
+    "Mostly Europe.",
+    "Fuel theft and late deliveries.",
+    "Operations directors."
+  ],
+  "expected": {
+    "industries": [
+      "logistics"
+    ],
+    "geographies": [
+      "Europe"
+    ],
+    "pain_points": [
+      "fuel theft"
+    ],
+    "buyer_roles": [
+      "operations"
+    ]
+  },
+  "notes": "One off-topic answer is redirected; the interview then continues normally."
+}

@@ -1,0 +1,23 @@
+{
+  "name": "non_english",
+  "tags": [
+    "non_english"
+  ],
+  "signup": {
+    "company_name": "NominaPlus",
+    "role": "Fundador"
+  },
+  "answers": [
+    "Vendemos software de nómina a bancos en España y México.",
+    "Empresas de entre 200 y 1.000 empleados.",
+    "Los errores manuales en la nómina y el cumplimiento normativo.",
+    "El director financiero decide la compra."
+  ],
+  "expected": {
+    "geographies": [
+      "Spain",
+      "Mexico"
+    ]
+  },
+  "notes": "Values may come back in English or Spanish; review failures by hand."
+}

@@ -1,0 +1,34 @@
+{
+  "name": "verbose_one_reply",
+  "tags": [
+    "verbose",
+    "one_long_reply"
+  ],
+  "signup": {
+    "company_name": "FleetSense",
+    "email": "ceo@fleetsense.example"
+  },
+  "website_text": "FleetSense provides GPS fleet tracking.",
+  "answers": [
+    "We build GPS fleet tracking software. Our customers are logistics and delivery companies in the United States, mostly with between 100 and 1,000 trucks. The big pain is fuel costs and drivers taking unauthorized detours, plus compliance paperwork that fleet managers still do by hand. The fleet manager is the day-to-day buyer and the VP of operations signs the contract. A typical deal is about 60,000 dollars a year and takes three months. We do not sell to taxi companies.",
+    "That covers it."
+  ],
+  "expected": {
+    "industries": [
+      "logistics"
+    ],
+    "geographies": [
+      "United States"
+    ],
+    "pain_points": [
+      "fuel costs"
+    ],
+    "buyer_roles": [
+      "fleet manager"
+    ],
+    "disqualifiers": [
+      "taxi"
+    ]
+  },
+  "notes": "One long answer should fill many slots, so the interview ends early."
+}

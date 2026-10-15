@@ -1,0 +1,31 @@
+{
+  "name": "detail_mode_user",
+  "tags": [
+    "detail_mode",
+    "clear_website"
+  ],
+  "signup": {
+    "company_name": "ShieldCo",
+    "website": "shieldco.example",
+    "role": "Founder"
+  },
+  "website_text": "ShieldCo sells endpoint security for regulated companies.",
+  "answers": [
+    "Yes, endpoint security for regulated companies.",
+    "Our best customers are hospitals and regional banks in the US with 500 to 5,000 staff. A poor fit was a 15-person agency.",
+    "Ransomware and failed audits.",
+    "CISOs and IT directors.",
+    "We avoid government agencies.",
+    "A good customer cuts incidents in half within a year."
+  ],
+  "detail_answers": [
+    "Mostly healthcare and finance, so HIPAA and SOC 2 compliance is required.",
+    "They usually switch from legacy antivirus tools, which is slow and costly."
+  ],
+  "expected": {
+    "compliance": [
+      "HIPAA"
+    ]
+  },
+  "notes": "The user opts into detail mode; tier D slots should be filled."
+}

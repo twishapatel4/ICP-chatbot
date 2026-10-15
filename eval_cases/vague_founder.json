@@ -1,0 +1,31 @@
+{
+  "name": "vague_founder",
+  "tags": [
+    "vague",
+    "short_answers"
+  ],
+  "signup": {
+    "company_name": "Nimbus",
+    "role": "Founder"
+  },
+  "answers": [
+    "stuff for businesses",
+    "all kinds really",
+    "it depends",
+    "not sure honestly",
+    "bigger ones I guess"
+  ],
+  "expected": {},
+  "forbidden": {
+    "industries": [
+      "fintech",
+      "healthcare",
+      "retail"
+    ],
+    "geographies": [
+      "Europe",
+      "North America"
+    ]
+  },
+  "notes": "The bot must not invent specifics from vague answers."
+}

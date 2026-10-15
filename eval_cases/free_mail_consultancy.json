@@ -1,0 +1,33 @@
+{
+  "name": "free_mail_consultancy",
+  "tags": [
+    "no_website",
+    "free_mail"
+  ],
+  "signup": {
+    "company_name": "Greenleaf Consulting",
+    "email": "sam@outlook.com"
+  },
+  "answers": [
+    "We consult on sustainability reporting.",
+    "Manufacturers with 200 to 2,000 employees in Europe.",
+    "New EU reporting rules they do not understand.",
+    "Heads of sustainability and CFOs.",
+    "No fossil fuel companies."
+  ],
+  "expected": {
+    "geographies": [
+      "Europe"
+    ],
+    "pain_points": [
+      "reporting rules"
+    ],
+    "buyer_roles": [
+      "CFO"
+    ],
+    "disqualifiers": [
+      "fossil fuel"
+    ]
+  },
+  "notes": "No website and a free-mail address: the opener cannot be personalized from the web."
+}

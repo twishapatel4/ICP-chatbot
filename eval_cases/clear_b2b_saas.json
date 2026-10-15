@@ -1,0 +1,40 @@
+{
+  "name": "clear_b2b_saas",
+  "tags": [
+    "clear_website",
+    "poor_fit_example"
+  ],
+  "signup": {
+    "company_name": "PayFlow",
+    "website": "payflow.example",
+    "role": "Founder"
+  },
+  "website_text": "PayFlow: cloud payroll software for banks and financial institutions. Automate payroll, compliance and reporting.",
+  "answers": [
+    "Yes, we sell payroll software to banks and fintech companies.",
+    "Our best customers are mid-sized European banks with 500 to 1,000 staff. A poor fit was a tiny credit union with 20 people; they could not afford it.",
+    "The biggest problem for them is manual payroll that takes days and causes compliance errors.",
+    "The CFO signs off, with the Head of HR involved.",
+    "We never sell to government bodies.",
+    "They want payroll done in one day with no audit findings."
+  ],
+  "expected": {
+    "industries": [
+      "banks"
+    ],
+    "geographies": [
+      "Europe"
+    ],
+    "pain_points": [
+      "manual payroll"
+    ],
+    "buyer_roles": [
+      "CFO",
+      "Head of HR"
+    ],
+    "disqualifiers": [
+      "government"
+    ]
+  },
+  "notes": "Baseline case: everything is stated clearly. The poor-fit example should become an exclusion."
+}

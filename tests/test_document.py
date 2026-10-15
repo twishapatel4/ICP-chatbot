@@ -1,0 +1,66 @@
+from icp_chatbot.domain.state import SlotSource
+from icp_chatbot.icp.document import (
+    FieldEntry,
+    ICPDocument,
+    compute_completeness,
+    group_by_section,
+    render_summary,
+)
+from icp_chatbot.icp.scoring import default_scoring_model
+
+
+def entry(values, confidence=0.9, source=SlotSource.STATED):
+    return FieldEntry(values=values, confidence=confidence, source=source)
+
+
+def test_entries_are_grouped_by_section_in_registry_order_and_empty_ones_dropped():
+    entries = {
+        "pain_points": entry(["slow"]), "industries": entry(["Fintech"]),
+        "product": entry(["Payroll"]), "geographies": entry([]),
+    }  # fmt: skip
+    grouped = group_by_section(entries)
+    assert list(grouped) == ["seller_context", "target_firmographics", "problems_and_needs"]
+    assert list(grouped["target_firmographics"]) == ["industries"]  # empty geographies dropped
+
+
+def test_completeness_counts_known_slots_and_skips_inapplicable_ones():
+    nothing = compute_completeness({})
+    assert nothing.tier_a == 0.0 and nothing.tier_b == 0.0
+    tier_a = [
+        "industries", "company_size", "revenue_range", "geographies", "pain_points",
+        "desired_outcomes", "buyer_roles", "buyer_departments", "disqualifiers",
+    ]  # fmt: skip
+    entries = {k: entry(["x"]) for k in tier_a}
+    assert compute_completeness(entries).tier_a == 1.0
+    entries["industries"] = entry(["x"], confidence=0.5)  # below the 0.7 bar
+    assert compute_completeness(entries).tier_a == round(8 / 9, 4)
+    b2c = {k: entry(["x"]) for k in tier_a if not k.startswith("buyer_")}
+    b2c["business_model"] = entry(["B2C"])
+    assert compute_completeness(b2c).tier_a == 1.0  # buyer slots do not apply to B2C
+
+
+def test_summary_is_built_only_from_the_fields_and_marks_inferences():
+    entries = {
+        "industries": entry(["Fintech"]),
+        "geographies": entry(["Europe"], source=SlotSource.INFERRED, confidence=0.5),
+        "pain_points": entry(["manual payroll", "errors"]),
+        "buyer_roles": entry(["CFO"]),
+    }
+    summary = render_summary(entries)
+    assert "Target industries: Fintech" in summary
+    assert "geographies: Europe (inferred)" in summary
+    assert "Pain points: manual payroll, errors." in summary and "Buyers: CFO." in summary
+    assert "budget" not in summary.lower()  # nothing is invented for missing fields
+    assert render_summary({}) == ""
+
+
+def test_document_helpers_and_json_round_trip():
+    entries = {"industries": entry(["Fintech"]), "pain_points": entry(["slow"])}
+    document = ICPDocument(
+        sections=group_by_section(entries),
+        scoring_model=default_scoring_model({"industries": ["Fintech"]}),
+        completeness=compute_completeness(entries),
+    )
+    assert document.slot_values() == {"industries": ["Fintech"], "pain_points": ["slow"]}
+    assert set(document.entries()) == {"industries", "pain_points"}
+    assert ICPDocument.model_validate_json(document.model_dump_json()) == document

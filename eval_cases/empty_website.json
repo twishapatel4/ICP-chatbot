@@ -1,0 +1,27 @@
+{
+  "name": "empty_website",
+  "tags": [
+    "empty_website"
+  ],
+  "signup": {
+    "company_name": "Quill",
+    "website": "quill.example",
+    "role": "Marketing Lead"
+  },
+  "website_text": "",
+  "answers": [
+    "We make writing assistants for marketing teams.",
+    "Mid-sized B2B software companies in the US.",
+    "Slow content production.",
+    "Content directors."
+  ],
+  "expected": {
+    "geographies": [
+      "US"
+    ],
+    "pain_points": [
+      "content production"
+    ]
+  },
+  "notes": "A website with no usable text gives no seed; the opener falls back."
+}

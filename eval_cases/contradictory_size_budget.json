@@ -1,0 +1,34 @@
+{
+  "name": "contradictory_size_budget",
+  "tags": [
+    "contradictory"
+  ],
+  "signup": {
+    "company_name": "Orbit CRM",
+    "role": "Sales Director"
+  },
+  "answers": [
+    "We sell CRM software to startups with about 10 employees.",
+    "Actually our target is large enterprises with 5,000 employees and budgets over 500k dollars.",
+    "Mainly the US.",
+    "VP of Sales.",
+    "No retail businesses."
+  ],
+  "expected": {
+    "company_size": [
+      "5,000"
+    ],
+    "geographies": [
+      "US"
+    ],
+    "buyer_roles": [
+      "VP of Sales"
+    ]
+  },
+  "forbidden": {
+    "company_size": [
+      "10 employees"
+    ]
+  },
+  "notes": "The later statement must win over the earlier one."
+}
