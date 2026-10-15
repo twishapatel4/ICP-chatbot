@@ -3,6 +3,7 @@
 plain fallback text."""
 
 import hashlib
+import logging
 import random
 from dataclasses import dataclass
 
@@ -13,6 +14,8 @@ from icp_chatbot.domain.slots import SLOTS
 from icp_chatbot.domain.state import SessionState, SlotValue
 from icp_chatbot.llm.types import LLM, LLMError, Usage
 from icp_chatbot.versions import ConfigVersionData
+
+log = logging.getLogger(__name__)
 
 BEST_CUSTOMER_QUESTION = (
     "Think of two or three of your best customers, and one that turned out to be a poor fit. "
@@ -128,7 +131,8 @@ async def generate_question(
             schema=QuestionOutput,
             labels=labels,
         )
-    except LLMError:
+    except LLMError as exc:
+        log.warning("question writer failed, using the fixed text: %s", exc)
         return QuestionResult(fallback_question(slot_key, asked_before), used_fallback=True)
     text = _clean(result.parsed.question)
     if text is None:
@@ -190,7 +194,8 @@ async def generate_opener(
             schema=QuestionOutput,
             labels=labels,
         )
-    except LLMError:
+    except LLMError as exc:
+        log.warning("question writer failed, using the fixed text: %s", exc)
         return QuestionResult(variant, used_fallback=True)
     text = _clean(result.parsed.question)
     if text is None:
@@ -234,7 +239,8 @@ async def generate_followup(
             schema=QuestionOutput,
             labels=labels,
         )
-    except LLMError:
+    except LLMError as exc:
+        log.warning("question writer failed, using the fixed text: %s", exc)
         return QuestionResult(fallback, used_fallback=True)
     text = _clean(result.parsed.question)
     if text is None:
@@ -271,7 +277,8 @@ async def generate_best_customer(
             schema=QuestionOutput,
             labels=labels,
         )
-    except LLMError:
+    except LLMError as exc:
+        log.warning("question writer failed, using the fixed text: %s", exc)
         return QuestionResult(best_customer_question(), used_fallback=True)
     text = _clean(result.parsed.question)
     if text is None:
