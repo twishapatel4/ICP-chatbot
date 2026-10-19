@@ -8,6 +8,7 @@ from icp_chatbot.domain.slots import SLOT_LIST, Tier
 from icp_chatbot.domain.state import SessionState, SlotSource, SlotValue
 from icp_chatbot.engine.extraction import ExtractionResult, Flags, SlotUpdate
 from icp_chatbot.engine.interview import (
+    DECLINE_PREFIX,
     REDIRECT_PREFIX,
     RETRY_PREFIX,
     InterviewEngine,
@@ -297,6 +298,25 @@ async def test_off_topic_is_redirected_once_then_the_form_is_offered(world):
     assert (second.status, second.stop_reason) == ("fallback", "off_topic")
 
 
+async def test_a_bare_no_is_re_asked_once_politely_then_we_move_on(world):
+    engine, repo, llm, _ = world
+    sid = await preset(
+        repo,
+        pending(
+            SessionState(questions_asked=3, best_customer_asked=True),
+            "Who buys?",
+            "slot",
+            "buyer_roles",
+        ),
+    )
+    llm.queue("extraction", ext(), ext())
+    llm.queue("question", q("Next?"))
+    first = await engine.answer(T, sid, "no")
+    assert first.status == "active" and first.question.text == DECLINE_PREFIX + "Who buys?"
+    second = await engine.answer(T, sid, "no")
+    assert second.question.text != DECLINE_PREFIX + "Who buys?"  # asked once more, then moved on
+
+
 @pytest.mark.parametrize("text", ["", "   ", "x" * 2001])
 async def test_empty_and_overlong_answers_are_rejected_before_any_model_call(world, text):
     engine, repo, llm, _ = world
@@ -418,12 +438,12 @@ async def test_an_unanswered_opener_gets_one_follow_up_before_moving_on(world):
     first = await started(world)
     llm.queue("extraction", ext(flags=Flags(vague=True)))
     llm.queue("question", q("No problem. What do you sell, for example software or services?"))
-    second = await engine.answer(T, first.session_id, "no")
+    second = await engine.answer(T, first.session_id, "hard to say")
     assert second.question.kind == "opener" and "No problem" in second.question.text
     assert "did not answer" in llm.calls_for("question")[0].user
     llm.queue("extraction", ext(flags=Flags(vague=True)))
     llm.queue("question", q("Who are your best customers?"))
-    third = await engine.answer(T, first.session_id, "no")
+    third = await engine.answer(T, first.session_id, "hard to say")
     assert third.question.kind == "best_customer"  # only one follow-up per question
 
 
@@ -443,5 +463,16 @@ async def test_a_slot_asked_again_is_written_as_a_follow_up_with_a_different_fal
     sid = await preset(repo, state)
     llm.queue("extraction", ext(flags=Flags(vague=True)))
     llm.queue("question", LLMError("api", "down"))
-    result = await engine.answer(T, sid, "no")
+    result = await engine.answer(T, sid, "hard to say")
     assert result.question.text.startswith("No problem, let me put it another way")
+
+
+async def test_a_pain_point_volunteered_in_the_best_customer_answer_is_not_yet_known(world):
+    engine, repo, llm, _ = world
+    state = pending(SessionState(questions_asked=2, best_customer_asked=True), kind="best_customer")
+    sid = await preset(repo, state)
+    llm.queue("extraction", ext(up("pain_points", ["price sensitivity"], 0.9)))
+    llm.queue("question", q("And who signs off?"))
+    await engine.answer(T, sid, "the tiny shop kept haggling on price")
+    recorded = (await repo.get_session(T, sid)).state.slots["pain_points"]
+    assert recorded.confidence < 0.7

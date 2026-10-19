@@ -95,6 +95,9 @@ class SessionState(BaseModel):
     segment: dict[str, str] = Field(default_factory=dict)
     failures: int = 0  # consecutive failed model steps
     offtopic_count: int = 0
+    declines: dict[str, int] = Field(
+        default_factory=dict
+    )  # slot or kind -> times a bare "no" was re-asked
     finished: bool = False
     stop_reason: str | None = None
 

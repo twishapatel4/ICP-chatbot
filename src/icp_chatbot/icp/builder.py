@@ -19,6 +19,7 @@ from icp_chatbot.icp.document import (
     ICPDocument,
     compute_completeness,
     group_by_section,
+    missing_slots,
     render_summary,
     sync_field_requirements,
 )
@@ -141,6 +142,7 @@ async def build_icp(
                 )
         open_questions.extend(q for q in synthesis.open_questions if q.strip())
 
+    open_questions.extend(missing_slots(entries))
     slot_values = {key: e.values for key, e in entries.items() if e.values}
     document = ICPDocument(
         sections=group_by_section(entries),

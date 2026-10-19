@@ -125,3 +125,32 @@ async def test_an_empty_state_still_produces_a_valid_document():
     assert doc.sections == {} and doc.summary == ""
     assert not any(c.applicable for c in doc.scoring_model.criteria)
     assert validate_model(doc.scoring_model) == []
+
+
+async def test_still_unclear_lists_the_core_fields_that_are_missing():
+    state = SessionState()
+    state.slots["industries"] = slot(["fintech"])
+    result = await build_icp(FakeLLM({"final_icp": [ICPSynthesis()]}), CONFIG, state, today=TODAY)
+    notes = result.document.open_questions
+    assert 0 < len(notes) <= 5 and all(n.startswith("Not yet known:") for n in notes)
+    assert not any("industries" in n.lower() for n in notes)  # known fields are not listed
+
+
+async def test_a_low_confidence_or_non_answer_field_is_listed_as_unknown():
+    state = SessionState()
+    state.slots["pain_points"] = slot(["price sensitivity"], 0.6)
+    state.slots["buyer_roles"] = slot(["none"])
+    result = await build_icp(FakeLLM({"final_icp": [ICPSynthesis()]}), CONFIG, state, today=TODAY)
+    text = " ".join(result.document.open_questions).lower()
+    assert "pain points" in text and "buyer roles" in text
+
+
+async def test_a_fully_known_core_has_no_missing_notes():
+    from icp_chatbot.domain.slots import SLOT_LIST, Tier
+
+    state = SessionState()
+    for s in SLOT_LIST:
+        if s.tier in (Tier.A, Tier.B):
+            state.slots[s.key] = slot(["x"])
+    result = await build_icp(FakeLLM({"final_icp": [ICPSynthesis()]}), CONFIG, state, today=TODAY)
+    assert result.document.open_questions == []

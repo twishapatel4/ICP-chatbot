@@ -18,8 +18,8 @@ from icp_chatbot.versions import ConfigVersionData
 log = logging.getLogger(__name__)
 
 BEST_CUSTOMER_QUESTION = (
-    "Think of two or three of your best customers, and one that turned out to be a poor fit. "
-    "Who are they, and what made each a good or bad fit?"
+    "Think of one customer you are really happy with. Who are they, and why do they work "
+    "so well for you?"
 )
 
 OPENER_VARIANTS = (
@@ -114,10 +114,9 @@ def fallback_question(slot_key: str, asked_before: int = 0) -> Question:
 
 
 FOLLOW_UP_HINT = (
-    "The user's last reply did not answer the question. Write a short, friendly follow-up on the "
-    "same topic: acknowledge them in a few words, put the question differently (do not repeat "
-    "the earlier wording), and give two or three short examples to choose from. Say a brief "
-    "answer is fine."
+    "The user's last reply did not answer the question. Write a follow-up of at most 20 words: "
+    'start with "No problem.", then ask the same thing in simpler words, one question only, '
+    "and put two or three short examples in options. Do not repeat the earlier wording."
 )
 
 
@@ -278,13 +277,13 @@ async def generate_followup(
     text = _clean(result.parsed.question)
     if text is None:
         return QuestionResult(fallback, result.usage, result.cost_usd, cfg.model, True)
-    return QuestionResult(Question(text, kind=kind), result.usage, result.cost_usd, cfg.model)
+    question = Question(text, kind=kind, options=clean_options(result.parsed.options))
+    return QuestionResult(question, result.usage, result.cost_usd, cfg.model)
 
 
 BEST_CUSTOMER_HINT = (
-    "Ask about their best customers and one that turned out to be a poor fit: who they are and "
-    "what made each a good or bad fit. Build on what they have already told you, mention their "
-    "own words or product, and keep it to one or two sentences. Do not use a fixed script."
+    "Ask about their best customers by naming one customer they are really happy with: who they are and why they work well. "
+    "Use their own words or product, at most 25 words, plain everyday words, one question only."
 )
 
 

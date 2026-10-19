@@ -63,19 +63,32 @@ def _applicable(slot, entries: dict[str, FieldEntry]) -> bool:
     return True
 
 
+def _is_known(slot, entries: dict[str, FieldEntry]) -> bool:
+    entry = entries.get(slot.key)
+    return bool(
+        entry and entry.confidence >= KNOWN_CONFIDENCE and real_values(slot.key, entry.values)
+    )
+
+
+def missing_slots(entries: dict[str, FieldEntry], limit: int = 5) -> list[str]:
+    """Plain-language notes for the tier A and B fields that are still unknown (not recorded,
+    only a non-answer, or below the known confidence), most important first. Worked out from the
+    data, so the list does not depend on what the model remembers to mention."""
+    gaps = [
+        s
+        for s in SLOT_LIST
+        if s.tier in (Tier.A, Tier.B) and _applicable(s, entries) and not _is_known(s, entries)
+    ]
+    gaps.sort(key=lambda s: (s.tier != Tier.A, -s.importance))
+    return [f"Not yet known: {s.label.lower()}. {s.description.rstrip('.')}." for s in gaps[:limit]]
+
+
 def compute_completeness(entries: dict[str, FieldEntry]) -> Completeness:
     def share(slots) -> float:
         slots = [s for s in slots if _applicable(s, entries)]
         if not slots:
             return 1.0
-        known = sum(
-            1
-            for s in slots
-            if s.key in entries
-            and entries[s.key].confidence >= KNOWN_CONFIDENCE
-            and real_values(s.key, entries[s.key].values)
-        )
-        return round(known / len(slots), 4)
+        return round(sum(1 for s in slots if _is_known(s, entries)) / len(slots), 4)
 
     tier_a = [s for s in SLOT_LIST if s.tier == Tier.A and s.blocks]
     tier_b = [s for s in SLOT_LIST if s.tier == Tier.B]

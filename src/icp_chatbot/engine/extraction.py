@@ -19,6 +19,11 @@ from icp_chatbot.domain.state import (
 from icp_chatbot.llm.types import LLM, LLMResult
 from icp_chatbot.versions import ConfigVersionData
 
+# Slots a model tends to fill from an offhand remark (a complaint about a bad customer reads like
+# a pain point). Unless the question was about the slot, such a value is not trusted as known.
+INFERENCE_PRONE_SLOTS = frozenset({"pain_points", "desired_outcomes"})
+OFF_TARGET_CAP = 0.6
+
 EVIDENCE_LIMIT = 200
 SUMMARY_LIMIT = 600
 
@@ -84,7 +89,9 @@ async def extract(
     )
 
 
-def apply_extraction(state: SessionState, result: ExtractionResult, turn_no: int) -> ApplyOutcome:
+def apply_extraction(
+    state: SessionState, result: ExtractionResult, turn_no: int, target: str | None = None
+) -> ApplyOutcome:
     """Merge the model's updates into the state, enforcing the rules the model cannot be trusted
     with: only known slots, a stated value replaces an inferred one, and an inferred value the
     user agrees with becomes confirmed."""
@@ -100,6 +107,10 @@ def apply_extraction(state: SessionState, result: ExtractionResult, turn_no: int
             continue
         existing = state.slots.get(update.slot)
         evidence = update.evidence[:EVIDENCE_LIMIT]
+        if update.slot in INFERENCE_PRONE_SLOTS and update.slot != target:
+            update = update.model_copy(
+                update={"confidence": min(update.confidence, OFF_TARGET_CAP)}
+            )
 
         if existing and existing.source == SlotSource.INFERRED:
             same = {v.lower() for v in existing.values} == {v.lower() for v in values}

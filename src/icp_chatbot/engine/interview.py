@@ -12,7 +12,13 @@ from sqlalchemy.exc import IntegrityError
 
 from icp_chatbot.config import Settings
 from icp_chatbot.domain.signup import SignupInfo
-from icp_chatbot.domain.state import SessionState, SlotSource, SlotValue
+from icp_chatbot.domain.state import (
+    NONE_IS_AN_ANSWER,
+    SessionState,
+    SlotSource,
+    SlotValue,
+    is_non_answer,
+)
 from icp_chatbot.engine.extraction import ExtractionResult, Flags, apply_extraction, extract
 from icp_chatbot.engine.planner import Ask, Caps, plan_next
 from icp_chatbot.engine.questions import (
@@ -34,6 +40,11 @@ MAX_CONSECUTIVE_FAILURES = 2
 MAX_OFFTOPIC = 2
 REDIRECT_PREFIX = "Let's get back to describing your ideal customer. "
 RETRY_PREFIX = "Sorry, I didn't catch that. "
+DECLINE_PREFIX = (
+    "No worries, and thanks for being open with me. This one really does help us: it's how we "
+    "shape your profile and find better-fit customers for you, nothing more. Could you give it "
+    "a try? A few words is enough. "
+)
 
 
 class SessionClosed(Exception):
@@ -73,6 +84,18 @@ class TurnResult:
     fallback_form: bool
     mode: str
     questions_asked: int
+
+
+def _declined(
+    state: SessionState, target: str | None, kind: str, text: str, applied: list[str]
+) -> bool:
+    """A bare "no" or "not sure" to a question that needs a real answer, not yet re-asked."""
+    return (
+        is_non_answer(text)
+        and not applied
+        and target not in NONE_IS_AN_ANSWER
+        and not state.declines.get(target or kind)
+    )
 
 
 @dataclass
@@ -213,7 +236,7 @@ class InterviewEngine:
             log.warning("extraction failed for session %s: %s", session_id, exc)
         applied: list[str] = []
         if extraction:
-            applied = apply_extraction(state, extraction, turn_no).applied
+            applied = apply_extraction(state, extraction, turn_no, target).applied
         flags = extraction.flags if extraction else Flags()
         state.answers_received = turn_no
         state.push_turn(question_text, text)
@@ -243,6 +266,15 @@ class InterviewEngine:
                 )
         elif flags.wants_to_finish:
             status, stop_reason = "completed", "user_finished"
+        elif _declined(state, target, question_kind, text, applied):
+            state.declines[target or question_kind] = 1  # ask once more, then move on
+            question = Question(
+                DECLINE_PREFIX + question_text,
+                kind=question_kind,
+                slot=target,
+                options=tuple(state.pending_options),
+                multi=state.pending_multi,
+            )
         else:
             unanswered = flags.vague or not applied
             status, stop_reason, question = await self._next(
