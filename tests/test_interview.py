@@ -476,3 +476,59 @@ async def test_a_pain_point_volunteered_in_the_best_customer_answer_is_not_yet_k
     await engine.answer(T, sid, "the tiny shop kept haggling on price")
     recorded = (await repo.get_session(T, sid)).state.slots["pain_points"]
     assert recorded.confidence < 0.7
+
+
+async def test_a_question_from_the_user_is_answered_and_the_waiting_question_is_asked_again(world):
+    engine, repo, llm, _ = world
+    sid = await preset(
+        repo,
+        pending(
+            SessionState(questions_asked=3, best_customer_asked=True),
+            "Who buys?",
+            "slot",
+            "buyer_roles",
+        ),
+    )
+    llm.queue(
+        "extraction",
+        ext(flags=Flags(asks_bot="do you know GDPR?")),
+        ext(flags=Flags(asks_bot="what is an ICP?")),
+    )
+    llm.queue(
+        "question",
+        QuestionOutput(question="Who usually buys it?", reply="Yes, it is the EU privacy law."),
+    )
+    result = await engine.answer(T, sid, "do you know GDPR?")
+    assert result.status == "active"
+    assert result.question.text == "Yes, it is the EU privacy law. Who usually buys it?"
+    assert result.question.slot == "buyer_roles"
+    assert result.questions_asked == 3  # the reply did not use up a question
+    record = await repo.get_session(T, sid)
+    assert record.state.pending_question == "Who buys?" and record.state.user_questions == 1
+    assert "do you know GDPR?" in llm.calls_for("question")[0].user
+
+    llm.queue("question", LLMError("timeout", "slow"))  # the model fails: fixed, polite text
+    again = await engine.answer(T, sid, "what is an ICP?")
+    assert again.status == "active" and again.question.text.endswith("Who buys?")
+
+
+async def test_an_answer_that_also_asks_a_question_gets_the_reply_in_front_of_the_next_question(
+    world,
+):
+    engine, repo, llm, _ = world
+    sid = await preset(
+        repo,
+        pending(
+            SessionState(questions_asked=3, best_customer_asked=True),
+            "Who buys?",
+            "slot",
+            "industries",
+        ),
+    )
+    llm.queue(
+        "extraction",
+        ext(up("industries", ["Banks"]), flags=Flags(asks_bot="do banks buy this a lot?")),
+    )
+    llm.queue("question", QuestionOutput(question="Which regions?", reply="Often, yes."))
+    result = await engine.answer(T, sid, "Banks. Do banks buy this a lot?")
+    assert result.question.text == "Often, yes. Which regions?"

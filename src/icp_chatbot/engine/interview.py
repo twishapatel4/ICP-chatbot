@@ -28,6 +28,7 @@ from icp_chatbot.engine.questions import (
     generate_followup,
     generate_opener,
     generate_question,
+    generate_reply,
 )
 from icp_chatbot.enrichment.service import EnrichmentOutcome
 from icp_chatbot.llm.types import LLM, LLMError, Usage
@@ -38,6 +39,7 @@ log = logging.getLogger(__name__)
 
 MAX_CONSECUTIVE_FAILURES = 2
 MAX_OFFTOPIC = 2
+MAX_USER_QUESTIONS = 6  # past this, questions are treated like any other off-track reply
 REDIRECT_PREFIX = "Let's get back to describing your ideal customer. "
 RETRY_PREFIX = "Sorry, I didn't catch that. "
 DECLINE_PREFIX = (
@@ -96,6 +98,11 @@ def _declined(
         and target not in NONE_IS_AN_ANSWER
         and not state.declines.get(target or kind)
     )
+
+
+def _pure_question(flags: Flags, applied: list[str], state: SessionState) -> bool:
+    """The user asked us something and gave no answer: reply, then ask again."""
+    return bool(flags.asks_bot) and not applied and state.user_questions < MAX_USER_QUESTIONS
 
 
 @dataclass
@@ -252,7 +259,27 @@ class InterviewEngine:
                 options=tuple(state.pending_options),
                 multi=state.pending_multi,
             )
-        elif flags.off_topic:
+        elif _pure_question(flags, applied, state):
+            state.user_questions += 1
+            result = await generate_reply(
+                self._llm,
+                config,
+                state,
+                Question(
+                    question_text,
+                    kind=question_kind,
+                    slot=target,
+                    options=tuple(state.pending_options),
+                    multi=state.pending_multi,
+                ),
+                flags.asks_bot,
+                labels=labels,
+            )
+            spend.add(result.usage, result.cost_usd)
+            if result.model:
+                spend.models["question"] = result.model
+            question = result.question  # the waiting question stays pending, nothing is consumed
+        elif flags.off_topic and not flags.asks_bot:
             state.offtopic_count += 1
             if state.offtopic_count >= MAX_OFFTOPIC:
                 status, stop_reason = "fallback", "off_topic"
@@ -277,8 +304,10 @@ class InterviewEngine:
             )
         else:
             unanswered = flags.vague or not applied
+            if flags.asks_bot:
+                state.user_questions += 1
             status, stop_reason, question = await self._next(
-                state, config, unanswered, labels, spend
+                state, config, unanswered, labels, spend, flags.asks_bot
             )
 
         if status != "active":
@@ -312,12 +341,14 @@ class InterviewEngine:
         )
         return self._result(session_id, state, status, question, stop_reason)
 
-    async def _next(self, state, config, previous_vague, labels, spend):
+    async def _next(self, state, config, previous_vague, labels, spend, asked=""):
         """Choose and write the next question. Returns (status, stop_reason, question)."""
-        kind, asked = state.pending_kind, state.pending_question
+        kind, question, user_asked = state.pending_kind, state.pending_question, asked
         if kind in ("opener", "best_customer") and previous_vague and not state.followups.get(kind):
             state.followups[kind] = 1  # one follow-up, then move on
-            result = await generate_followup(self._llm, config, state, asked, kind, labels=labels)
+            result = await generate_followup(
+                self._llm, config, state, question, kind, asked=user_asked, labels=labels
+            )
             spend.add(result.usage, result.cost_usd)
             if result.model:
                 spend.models["question"] = result.model
@@ -325,7 +356,9 @@ class InterviewEngine:
             return "active", None, result.question
         if state.pending_kind == "opener" and not state.best_customer_asked:
             state.best_customer_asked = True
-            result = await generate_best_customer(self._llm, config, state, labels=labels)
+            result = await generate_best_customer(
+                self._llm, config, state, asked=user_asked, labels=labels
+            )
             spend.add(result.usage, result.cost_usd)
             if result.model:
                 spend.models["question"] = result.model
@@ -335,7 +368,13 @@ class InterviewEngine:
         if not isinstance(plan, Ask):
             return "completed", plan.reason, None
         result: QuestionResult = await generate_question(
-            self._llm, config, state, plan.slot, previous_vague=previous_vague, labels=labels
+            self._llm,
+            config,
+            state,
+            plan.slot,
+            previous_vague=previous_vague,
+            asked=user_asked,
+            labels=labels,
         )
         spend.add(result.usage, result.cost_usd)
         if result.model:

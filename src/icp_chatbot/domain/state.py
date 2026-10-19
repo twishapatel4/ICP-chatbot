@@ -110,6 +110,7 @@ class SessionState(BaseModel):
     segment: dict[str, str] = Field(default_factory=dict)
     failures: int = 0  # consecutive failed model steps
     offtopic_count: int = 0
+    user_questions: int = 0  # questions the user put to the bot, answered along the way
     declines: dict[str, int] = Field(
         default_factory=dict
     )  # slot or kind -> times a bare "no" was re-asked

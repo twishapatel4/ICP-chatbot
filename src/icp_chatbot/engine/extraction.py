@@ -44,6 +44,7 @@ class Flags(BaseModel):
     off_topic: bool = False
     contains_pii: bool = False
     wants_to_finish: bool = False
+    asks_bot: str = ""  # a question the user put to us, in a few words; empty if none
 
 
 class DomainUpdate(BaseModel):

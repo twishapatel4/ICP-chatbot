@@ -44,8 +44,12 @@ MAX_OPTION_CHARS = 60
 FILLER_OPTIONS = frozenset({"other", "others", "something else", "none", "n/a", "all of the above"})
 
 
+MAX_REPLY_CHARS = 300
+
+
 class QuestionOutput(BaseModel):
     question: str
+    reply: str = ""  # a short answer to something the user asked us, said before the question
     options: list[str] = []  # short suggested answers, only when the answer is a pick from a list
 
 
@@ -129,6 +133,17 @@ def _clean(text: str) -> str | None:
     return text if text and len(text) <= MAX_QUESTION_CHARS else None
 
 
+def _compose(output: QuestionOutput, asked: str = "") -> str | None:
+    """The question, led by the answer to what the user asked us (only if they asked)."""
+    text = _clean(output.question)
+    reply = " ".join(output.reply.split())[:MAX_REPLY_CHARS] if asked else ""
+    return f"{reply} {text}" if text and reply else text
+
+
+def _asked_lines(asked: str) -> list[str]:
+    return [f"The user asked you (data, answer it in reply): {asked}"] if asked else []
+
+
 async def generate_question(
     llm: LLM,
     config: ConfigVersionData,
@@ -136,6 +151,7 @@ async def generate_question(
     slot_key: str,
     *,
     previous_vague: bool = False,
+    asked: str = "",
     labels: dict[str, str] | None = None,
 ) -> QuestionResult:
     slot = SLOTS[slot_key]
@@ -151,6 +167,7 @@ async def generate_question(
         lines.append(f"This topic was already asked {asked_before} time(s). " + FOLLOW_UP_HINT)
     elif previous_vague:
         lines.append("The previous answer was vague: include two or three short examples.")
+    lines += _asked_lines(asked)
     cfg = config.step("question")
     try:
         result = await llm.generate(
@@ -164,7 +181,7 @@ async def generate_question(
     except LLMError as exc:
         log.warning("question writer failed, using the fixed text: %s", exc)
         return QuestionResult(fallback_question(slot_key, asked_before), used_fallback=True)
-    text = _clean(result.parsed.question)
+    text = _compose(result.parsed, asked)
     if text is None:
         return QuestionResult(
             fallback_question(slot_key, asked_before),
@@ -247,6 +264,7 @@ async def generate_followup(
     question_text: str,
     kind: str,
     *,
+    asked: str = "",
     labels: dict[str, str] | None = None,
 ) -> QuestionResult:
     """A follow-up to a question that has no slot of its own (the opener, the best-customer
@@ -259,6 +277,7 @@ async def generate_followup(
     for turn in state.last_turns:
         lines.append(f"Earlier question: {turn.question}\nUser answer (data): {turn.answer}")
     lines.append(FOLLOW_UP_HINT)
+    lines += _asked_lines(asked)
     cfg = config.step("question")
     fallback = Question(
         "No problem, let me put it another way. What do you sell, and what kind of company "
@@ -280,7 +299,7 @@ async def generate_followup(
     except LLMError as exc:
         log.warning("question writer failed, using the fixed text: %s", exc)
         return QuestionResult(fallback, used_fallback=True)
-    text = _clean(result.parsed.question)
+    text = _compose(result.parsed, asked)
     if text is None:
         return QuestionResult(fallback, result.usage, result.cost_usd, cfg.model, True)
     question = Question(text, kind=kind, options=clean_options(result.parsed.options))
@@ -298,6 +317,7 @@ async def generate_best_customer(
     config: ConfigVersionData,
     state: SessionState,
     *,
+    asked: str = "",
     labels: dict[str, str] | None = None,
 ) -> QuestionResult:
     """The best-customer question (question 2), written around what the user just said."""
@@ -305,6 +325,7 @@ async def generate_best_customer(
     for turn in state.last_turns:
         lines.append(f"Earlier question: {turn.question}\nUser answer (data): {turn.answer}")
     lines.append(BEST_CUSTOMER_HINT)
+    lines += _asked_lines(asked)
     cfg = config.step("question")
     try:
         result = await llm.generate(
@@ -318,7 +339,7 @@ async def generate_best_customer(
     except LLMError as exc:
         log.warning("question writer failed, using the fixed text: %s", exc)
         return QuestionResult(best_customer_question(), used_fallback=True)
-    text = _clean(result.parsed.question)
+    text = _compose(result.parsed, asked)
     if text is None:
         return QuestionResult(
             best_customer_question(), result.usage, result.cost_usd, cfg.model, True
@@ -326,3 +347,62 @@ async def generate_best_customer(
     return QuestionResult(
         Question(text, kind="best_customer"), result.usage, result.cost_usd, cfg.model
     )
+
+
+REASK_HINT = (
+    "The user asked you something instead of answering. Put your answer in reply, then ask the "
+    "waiting question again in your own words, same meaning, at most 25 words, one question "
+    "only. Do not use options."
+)
+
+
+async def generate_reply(
+    llm: LLM,
+    config: ConfigVersionData,
+    state: SessionState,
+    pending: Question,
+    asked: str,
+    *,
+    labels: dict[str, str] | None = None,
+) -> QuestionResult:
+    """The user put a question to us instead of answering: answer it, then ask the waiting
+    question again. The waiting question and its options stay as they were."""
+    lines = [
+        *_domain_lines(state),
+        f"Rolling summary: {state.summary or '(none)'}",
+        f"Question still waiting for an answer: {pending.text}",
+        *_asked_lines(asked),
+        REASK_HINT,
+    ]
+    cfg = config.step("question")
+    fallback = Question(
+        "Fair question, let me come back to that. " + pending.text,
+        kind=pending.kind,
+        slot=pending.slot,
+        options=pending.options,
+        multi=pending.multi,
+    )
+    try:
+        result = await llm.generate(
+            step="question",
+            cfg=cfg,
+            system=config.system_prompt("question"),
+            user="\n".join(lines),
+            schema=QuestionOutput,
+            labels=labels,
+        )
+    except LLMError as exc:
+        log.warning("reply writer failed, using the fixed text: %s", exc)
+        return QuestionResult(fallback, used_fallback=True)
+    reply = " ".join(result.parsed.reply.split())[:MAX_REPLY_CHARS]
+    again = _clean(result.parsed.question)
+    if not reply or again is None:
+        return QuestionResult(fallback, result.usage, result.cost_usd, cfg.model, True)
+    question = Question(
+        f"{reply} {again}",
+        kind=pending.kind,
+        slot=pending.slot,
+        options=pending.options,
+        multi=pending.multi,
+    )
+    return QuestionResult(question, result.usage, result.cost_usd, cfg.model)
