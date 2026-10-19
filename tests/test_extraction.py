@@ -173,3 +173,39 @@ def test_other_slots_filled_by_a_broad_answer_keep_their_confidence():
 def test_the_extraction_prompt_keeps_bad_customer_remarks_out_of_pain_points():
     prompt = default_config(Settings(_env_file=None)).system_prompt("extraction")
     assert "poor-fit customer" in prompt and "never a pain point" in prompt
+
+
+def test_industry_context_is_learned_and_kept_until_the_industry_changes():
+    from icp_chatbot.engine.extraction import DomainUpdate
+
+    state = SessionState()
+    first = result()
+    first.domain = DomainUpdate(industry="Payroll software", brief="Buyers: HR and finance leads")
+    apply_extraction(state, first, 1)
+    assert state.domain.industry == "Payroll software"
+
+    same = result()
+    same.domain = DomainUpdate(industry="payroll software", brief="")
+    apply_extraction(state, same, 2)
+    assert state.domain.brief == "Buyers: HR and finance leads"  # kept, not blanked
+
+    apply_extraction(state, result(), 3)  # no domain in the reply: nothing changes
+    assert state.domain.industry == "Payroll software"
+
+    changed = result()
+    changed.domain = DomainUpdate(industry="Commercial HVAC", brief="Buyers: facility managers")
+    apply_extraction(state, changed, 4)
+    assert state.domain.industry == "Commercial HVAC"
+
+    blank = result()
+    blank.domain = DomainUpdate(industry="  ", brief="ignored")
+    apply_extraction(state, blank, 5)
+    assert state.domain.industry == "Commercial HVAC"
+
+
+def test_extraction_message_includes_the_industry_context():
+    from icp_chatbot.domain.state import DomainContext
+
+    state = SessionState(domain=DomainContext(industry="Payroll software", brief="HR buyers"))
+    message = build_user_message(state, "Who buys?", "buyer_roles", "HR heads")
+    assert "Payroll software" in message and "HR buyers" in message

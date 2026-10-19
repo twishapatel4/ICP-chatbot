@@ -74,8 +74,23 @@ class TurnPair(BaseModel):
     answer: str
 
 
+class DomainContext(BaseModel):
+    """The industry the user's company works in, and what is typical for it. Learned from the
+    first answers, then used to shape every later question and the final ICP."""
+
+    industry: str
+    brief: str = ""  # buyer roles, pains, tools, triggers and vocabulary typical for the industry
+
+    def prompt_lines(self) -> str:
+        lines = f"Industry of this company: {self.industry}"
+        if self.brief:
+            lines += f"\nWhat is typical in this industry (background, not facts about them): {self.brief}"
+        return lines
+
+
 class SessionState(BaseModel):
     mode: Literal["quick", "detail"] = "quick"
+    domain: DomainContext | None = None
     slots: dict[str, SlotValue] = Field(default_factory=dict)
     seed: dict[str, SlotValue] = Field(default_factory=dict)  # raw enrichment output, kept apart
     summary: str = ""

@@ -120,6 +120,10 @@ FOLLOW_UP_HINT = (
 )
 
 
+def _domain_lines(state: SessionState) -> list[str]:
+    return [state.domain.prompt_lines()] if state.domain else []
+
+
 def _clean(text: str) -> str | None:
     text = text.strip()
     return text if text and len(text) <= MAX_QUESTION_CHARS else None
@@ -136,6 +140,7 @@ async def generate_question(
 ) -> QuestionResult:
     slot = SLOTS[slot_key]
     lines = [
+        *_domain_lines(state),
         f"Target slot: {slot.label} ({slot.description})",
         f"Rolling summary: {state.summary or '(none)'}",
     ]
@@ -247,6 +252,7 @@ async def generate_followup(
     """A follow-up to a question that has no slot of its own (the opener, the best-customer
     question) when the reply did not answer it."""
     lines = [
+        *_domain_lines(state),
         f"Rolling summary: {state.summary or '(none)'}",
         f"Question that was not answered: {question_text}",
     ]
@@ -295,7 +301,7 @@ async def generate_best_customer(
     labels: dict[str, str] | None = None,
 ) -> QuestionResult:
     """The best-customer question (question 2), written around what the user just said."""
-    lines = [f"Rolling summary: {state.summary or '(none)'}"]
+    lines = [*_domain_lines(state), f"Rolling summary: {state.summary or '(none)'}"]
     for turn in state.last_turns:
         lines.append(f"Earlier question: {turn.question}\nUser answer (data): {turn.answer}")
     lines.append(BEST_CUSTOMER_HINT)

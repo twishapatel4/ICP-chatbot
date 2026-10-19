@@ -150,3 +150,14 @@ async def test_size_and_revenue_are_single_pick_but_regions_allow_several():
         result = await generate_question(FakeLLM({"question": [out]}), CONFIG, SessionState(), slot)
         assert result.question.multi is multi, slot
         assert fallback_question(slot).multi is multi, slot
+
+
+@pytest.mark.asyncio
+async def test_question_writer_gets_the_industry_context():
+    from icp_chatbot.domain.state import DomainContext
+
+    llm = FakeLLM({"question": [q("Which payroll cycles hurt most?")]})
+    state = SessionState(domain=DomainContext(industry="Payroll software", brief="HR buyers"))
+    await generate_question(llm, CONFIG, state, "pain_points")
+    user = llm.calls_for("question")[0].user
+    assert "Payroll software" in user and "HR buyers" in user

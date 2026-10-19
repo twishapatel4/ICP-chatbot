@@ -9,6 +9,7 @@ from icp_chatbot.domain.slots import SLOTS
 from icp_chatbot.domain.state import (
     CONFIRMED_CONFIDENCE,
     NONE_IS_AN_ANSWER,
+    DomainContext,
     SessionState,
     SlotSource,
     SlotValue,
@@ -26,6 +27,8 @@ OFF_TARGET_CAP = 0.6
 
 EVIDENCE_LIMIT = 200
 SUMMARY_LIMIT = 600
+INDUSTRY_LIMIT = 80
+BRIEF_LIMIT = 700
 
 
 class SlotUpdate(BaseModel):
@@ -43,8 +46,14 @@ class Flags(BaseModel):
     wants_to_finish: bool = False
 
 
+class DomainUpdate(BaseModel):
+    industry: str = ""
+    brief: str = ""
+
+
 class ExtractionResult(BaseModel):
     updates: list[SlotUpdate] = Field(default_factory=list)
+    domain: DomainUpdate | None = None
     flags: Flags = Field(default_factory=Flags)
     summary: str = ""
 
@@ -61,8 +70,9 @@ def build_user_message(state: SessionState, question: str, target: str | None, a
         key: {"values": v.values, "confidence": v.confidence, "source": v.source.value}
         for key, v in state.slots.items()
     }
+    domain = f"{state.domain.prompt_lines()}\n" if state.domain else ""
     return (
-        f"Recorded so far (JSON): {json.dumps(known, ensure_ascii=False)}\n"
+        f"{domain}Recorded so far (JSON): {json.dumps(known, ensure_ascii=False)}\n"
         f"Rolling summary: {state.summary or '(none)'}\n"
         f"Question asked: {question}\n"
         f"Target slot: {target or '(none)'}\n"
@@ -142,6 +152,24 @@ def apply_extraction(
     for slot in result.flags.contradiction_slots:
         if slot in SLOTS and slot not in state.contradictions:
             state.contradictions.append(slot)
+    _apply_domain(state, result.domain)
     if result.summary.strip():
         state.summary = result.summary.strip()[:SUMMARY_LIMIT]
     return outcome
+
+
+def _apply_domain(state: SessionState, update: DomainUpdate | None) -> None:
+    """Keep the industry context. A new industry replaces the old one; a brief without an
+    industry is ignored; a missing brief keeps the one we have for the same industry."""
+    if update is None:
+        return
+    industry = " ".join(update.industry.split())[:INDUSTRY_LIMIT]
+    if not industry:
+        return
+    brief = " ".join(update.brief.split())[:BRIEF_LIMIT]
+    current = state.domain
+    if current and current.industry.casefold() == industry.casefold():
+        if brief:
+            state.domain = DomainContext(industry=current.industry, brief=brief)
+        return
+    state.domain = DomainContext(industry=industry, brief=brief)
