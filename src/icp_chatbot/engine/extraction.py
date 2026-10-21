@@ -29,6 +29,7 @@ EVIDENCE_LIMIT = 200
 SUMMARY_LIMIT = 600
 INDUSTRY_LIMIT = 80
 BRIEF_LIMIT = 700
+STAYS_ON_CHANGE = frozenset({"online_presence"})  # facts about the user, not the old market
 
 
 class SlotUpdate(BaseModel):
@@ -50,6 +51,7 @@ class Flags(BaseModel):
 class DomainUpdate(BaseModel):
     industry: str = ""
     brief: str = ""
+    changed_market: bool = False  # the user says the earlier industry was wrong or has changed
 
 
 class ExtractionResult(BaseModel):
@@ -153,13 +155,13 @@ def apply_extraction(
     for slot in result.flags.contradiction_slots:
         if slot in SLOTS and slot not in state.contradictions:
             state.contradictions.append(slot)
-    _apply_domain(state, result.domain)
+    _apply_domain(state, result.domain, outcome.applied)
     if result.summary.strip():
         state.summary = result.summary.strip()[:SUMMARY_LIMIT]
     return outcome
 
 
-def _apply_domain(state: SessionState, update: DomainUpdate | None) -> None:
+def _apply_domain(state: SessionState, update: DomainUpdate | None, kept_slots: list[str]) -> None:
     """Keep the industry context. A new industry replaces the old one; a brief without an
     industry is ignored; a missing brief keeps the one we have for the same industry."""
     if update is None:
@@ -169,6 +171,11 @@ def _apply_domain(state: SessionState, update: DomainUpdate | None) -> None:
         return
     brief = " ".join(update.brief.split())[:BRIEF_LIMIT]
     current = state.domain
+    if update.changed_market and current and current.industry.casefold() != industry.casefold():
+        # what was said about the old market no longer holds, except what was just said
+        for key in [k for k in state.slots if k not in kept_slots and k not in STAYS_ON_CHANGE]:
+            del state.slots[key]
+            state.contradictions = [c for c in state.contradictions if c != key]
     if current and current.industry.casefold() == industry.casefold():
         if brief:
             state.domain = DomainContext(industry=current.industry, brief=brief)

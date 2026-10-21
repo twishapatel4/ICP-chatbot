@@ -209,3 +209,22 @@ def test_extraction_message_includes_the_industry_context():
     state = SessionState(domain=DomainContext(industry="Payroll software", brief="HR buyers"))
     message = build_user_message(state, "Who buys?", "buyer_roles", "HR heads")
     assert "Payroll software" in message and "HR buyers" in message
+
+
+def test_a_changed_market_drops_what_was_said_about_the_old_one():
+    from icp_chatbot.engine.extraction import DomainUpdate
+
+    state = SessionState()
+    first = result(up("buyer_roles", ["Facility managers"]), up("online_presence", ["acme.com"]))
+    first.domain = DomainUpdate(industry="Commercial HVAC", brief="b")
+    apply_extraction(state, first, 1)
+    second = result(up("industries", ["Law firms"]))
+    second.domain = DomainUpdate(industry="Legal software", changed_market=True)
+    apply_extraction(state, second, 2)
+    assert set(state.slots) == {"industries", "online_presence"}
+    assert state.domain.industry == "Legal software"
+
+    third = result(up("buyer_roles", ["Partners"]))  # a plain refinement keeps earlier answers
+    third.domain = DomainUpdate(industry="Legal tech")
+    apply_extraction(state, third, 3)
+    assert "industries" in state.slots

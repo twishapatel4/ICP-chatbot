@@ -128,6 +128,13 @@ def _domain_lines(state: SessionState) -> list[str]:
     return [state.domain.prompt_lines()] if state.domain else []
 
 
+FOLLOW_UP_HINT_AFTER_QUESTION = (
+    "The user's last reply did not answer the question, but it asked you something. Ask the "
+    "same thing in simpler words, one question only, at most 20 words, and put two or three "
+    'short examples in options. Do not say "No problem." and do not repeat the earlier wording.'
+)
+
+
 def _clean(text: str) -> str | None:
     text = text.strip()
     return text if text and len(text) <= MAX_QUESTION_CHARS else None
@@ -276,7 +283,7 @@ async def generate_followup(
     ]
     for turn in state.last_turns:
         lines.append(f"Earlier question: {turn.question}\nUser answer (data): {turn.answer}")
-    lines.append(FOLLOW_UP_HINT)
+    lines.append(FOLLOW_UP_HINT_AFTER_QUESTION if asked else FOLLOW_UP_HINT)
     lines += _asked_lines(asked)
     cfg = config.step("question")
     fallback = Question(
@@ -352,7 +359,7 @@ async def generate_best_customer(
 REASK_HINT = (
     "The user asked you something instead of answering. Put your answer in reply, then ask the "
     "waiting question again in your own words, same meaning, at most 25 words, one question "
-    "only. Do not use options."
+    'only. Do not use options. Do not say "No problem."'
 )
 
 
