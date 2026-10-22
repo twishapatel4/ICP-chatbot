@@ -80,13 +80,13 @@ def default_config(settings: Settings, version: int = 1) -> ConfigVersionData:
             "opener": StepSettings(
                 model=settings.model_question,
                 temperature=0.7,
-                max_output_tokens=512,
+                max_output_tokens=2048,  # thinking shares this budget; 512 cut the JSON short
                 **_thinking(settings.model_question, "low"),
             ),
             "question": StepSettings(
                 model=settings.model_question,
                 temperature=0.5,
-                max_output_tokens=512,
+                max_output_tokens=2048,
                 **_thinking(settings.model_question, "low"),
             ),
             "final_icp": StepSettings(

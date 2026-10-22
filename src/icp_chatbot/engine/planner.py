@@ -67,6 +67,22 @@ def tier_a_complete(state: SessionState) -> bool:
     return all(state.confidence(s.key) >= COMPLETION_CONFIDENCE for s in blocking_slots_for(state))
 
 
+def _askable(state: SessionState, key: str) -> bool:
+    asked = state.asked_slots.get(key, 0)
+    if key in state.skipped or asked >= MAX_ASKS_PER_SLOT:
+        return False
+    return not asked or state.confidence(key) < REVISIT_BELOW
+
+
+def waits_on_unknown(state: SessionState, slot: SlotDef) -> bool:
+    """A slot that may not apply (company size, if the customers turn out to be people) waits
+    until what decides that is clearly known, not guessed, as long as it can still be asked."""
+    return any(
+        state.confidence(key) < COMPLETION_CONFIDENCE and _askable(state, key)
+        for key, _ in slot.skip_if
+    )
+
+
 def plan_next(state: SessionState, caps: Caps) -> Plan:
     if state.mode == "quick":
         if state.questions_asked >= caps.quick_cap:
@@ -87,6 +103,8 @@ def plan_next(state: SessionState, caps: Caps) -> Plan:
     for slot in state.slot_defs():
         weight = weights.get(slot.tier)
         if not weight or not state.is_applicable(slot) or slot.key in state.skipped:
+            continue
+        if waits_on_unknown(state, slot):
             continue
         contradicted = slot.key in state.contradictions
         confidence = state.confidence(slot.key)

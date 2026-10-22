@@ -9,7 +9,6 @@ import logging
 import time
 from dataclasses import dataclass, field
 from typing import Protocol
-from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field
 
@@ -22,6 +21,7 @@ from icp_chatbot.domain.state import (
     normalize_values,
 )
 from icp_chatbot.enrichment.fetcher import FetchBlocked, FetchedPage
+from icp_chatbot.enrichment.pages import rank_pages
 from icp_chatbot.llm.types import LLM, LLMError, Usage
 from icp_chatbot.versions import ConfigVersionData
 
@@ -30,8 +30,8 @@ log = logging.getLogger(__name__)
 SEEDABLE = frozenset(
     {"product", "business_model", "value_proposition", "industries", "customer_segments"}
 )
-KEY_PAGE_WORDS = ("product", "solution", "platform", "service", "about", "customer", "industr")
-MAX_EXTRA_PAGES = 2
+MAX_EXTRA_PAGES = 3  # with the home page, at most four pages are read
+PER_PAGE_CHARS = 4_000
 MAX_COMBINED_CHARS = 15_000
 MAX_VALUES_PER_SLOT = 5
 MAX_VALUE_CHARS = 100
@@ -133,20 +133,22 @@ class EnrichmentService:
         except FetchBlocked as exc:
             return EnrichmentOutcome("blocked", website=site, detail=exc.reason)
 
-        pages, texts, status = [home.url], [home.text], "ok"
-        extra = [
-            link
-            for link in home.links
-            if any(word in urlsplit(link).path.lower() for word in KEY_PAGE_WORDS)
-        ][:MAX_EXTRA_PAGES]
-        for link in extra:
-            try:
-                page = await self._fetcher.fetch(link)
-            except FetchBlocked:
+        pages, texts, status = [home.url], [home.text[:PER_PAGE_CHARS]], "ok"
+        # the sitemap lists the site's pages; without one, use the links on the home page
+        sitemap = getattr(self._fetcher, "sitemap", None)
+        urls = (await sitemap(home.url) if sitemap else []) or home.links
+        extra = rank_pages(urls, home.url, MAX_EXTRA_PAGES)
+        fetched = await asyncio.gather(
+            *(self._fetcher.fetch(link) for link in extra), return_exceptions=True
+        )
+        for page in fetched:
+            if isinstance(page, FetchBlocked):
                 status = "partial"
-                continue
-            pages.append(page.url)
-            texts.append(page.text)
+            elif isinstance(page, BaseException):
+                raise page
+            else:
+                pages.append(page.url)
+                texts.append(page.text[:PER_PAGE_CHARS])
 
         combined = "\n\n".join(texts)[:MAX_COMBINED_CHARS]
         try:

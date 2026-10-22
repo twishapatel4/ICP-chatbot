@@ -75,6 +75,7 @@ async def test_a_successful_run_returns_capped_inferred_seeds():
         "https://acme.test": home,
         "https://acme.test/product": page("https://acme.test/product", "Payroll API"),
         "https://acme.test/about": page("https://acme.test/about", "Founded 2019"),
+        "https://acme.test/solutions/hr": page("https://acme.test/solutions/hr", "HR teams"),
     })  # fmt: skip
     llm = FakeLLM(
         {"seed": [profile(
@@ -91,8 +92,9 @@ async def test_a_successful_run_returns_capped_inferred_seeds():
         "https://acme.test/",
         "https://acme.test/product",
         "https://acme.test/about",
+        "https://acme.test/solutions/hr",
     ]
-    assert "https://acme.test/blog" not in fetcher.fetched  # only two key pages after the home page
+    assert "https://acme.test/blog" not in fetcher.fetched  # only key pages after the home page
     assert set(outcome.seed) == {"product", "business_model", "industries"}
     assert outcome.seed["business_model"].values == ["B2B"]  # only listed models are kept
     assert outcome.seed["industries"].values == ["Startups"]

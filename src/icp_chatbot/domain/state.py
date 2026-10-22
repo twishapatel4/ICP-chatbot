@@ -128,7 +128,10 @@ class SessionState(BaseModel):
     detail_started_at: int | None = None  # questions_asked when detail mode began
     pending_slot: str | None = None  # slot the last question targeted
     pending_question: str = ""
-    pending_kind: str = ""  # opener, best_customer, slot, fallback
+    pending_kind: str = ""  # opener, best_customer, slot, thread, fallback
+    thread_run: int = 0  # follow-ups in a row on something the user brought up
+    thread_topic: str = ""  # what the user brought up that we are following, if anything
+    thread_slot: str = ""  # the slot it informs
     pending_options: list[str] = Field(default_factory=list)  # suggested answers, if any
     pending_multi: bool = True  # more than one option may be picked
     segment: dict[str, str] = Field(default_factory=dict)

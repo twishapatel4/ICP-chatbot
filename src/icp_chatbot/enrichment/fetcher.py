@@ -9,6 +9,7 @@ isolated network that cannot reach internal services or credentials.
 
 import asyncio
 import ipaddress
+import re
 import socket
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -21,10 +22,22 @@ from bs4 import BeautifulSoup
 USER_AGENT = "LeadNestICPBot/1.0"
 ALLOWED_PORTS = {None, 80, 443}
 TEXT_TYPES = {"text/html", "application/xhtml+xml", "text/plain"}
+XML_TYPES = {"application/xml", "text/xml"}
+MAX_SITEMAP_URLS = 500
+MAX_CHILD_SITEMAPS = 2
+_LOC = re.compile(
+    r"<loc>\s*(?:<!\[CDATA\[)?\s*(.*?)\s*(?:\]\]>)?\s*</loc>", re.IGNORECASE | re.DOTALL
+)
 ROBOTS_LIMIT_BYTES = 100_000
 MAX_LINKS = 30
 
 Resolver = Callable[[str], Awaitable[list[str]]]
+
+
+def same_site(a: str | None, b: str | None) -> bool:
+    """The same website, counting example.com and www.example.com as one."""
+    strip = lambda h: (h or "").lower().removeprefix("www.")  # noqa: E731
+    return bool(a) and strip(a) == strip(b)
 
 
 class FetchBlocked(Exception):
@@ -105,7 +118,11 @@ def html_to_text(html: str, base_url: str, max_chars: int) -> tuple[str, list[st
     for a in soup.find_all("a", href=True):
         absolute = urldefrag(urljoin(base_url, a["href"]))[0]
         link = urlsplit(absolute)
-        if link.scheme in ("http", "https") and link.hostname == host and absolute not in links:
+        if (
+            link.scheme in ("http", "https")
+            and same_site(link.hostname, host)
+            and absolute not in links
+        ):
             links.append(absolute)
         if len(links) >= MAX_LINKS:
             break
@@ -166,6 +183,37 @@ class SafeFetcher:
         return parser
 
     async def fetch(self, url: str) -> FetchedPage:
+        final, html, truncated = await self._get(url, TEXT_TYPES)
+        text, links = html_to_text(html, final, self._max_chars)
+        return FetchedPage(final, text, links, truncated)
+
+    async def sitemap(self, site: str) -> list[str]:
+        """Page addresses from the site's /sitemap.xml (and up to two child sitemaps), on the same
+        host only. Every request goes through the same checks as a page. Empty if there is none."""
+        parts = urlsplit(site)
+        origin = f"{parts.scheme}://{parts.netloc}"
+        try:
+            _, xml, _ = await self._get(origin + "/sitemap.xml", TEXT_TYPES | XML_TYPES)
+            found = _LOC.findall(xml)
+            children = [u for u in found if u.lower().endswith(".xml")][:MAX_CHILD_SITEMAPS]
+            for child in children:
+                try:
+                    _, more, _ = await self._get(child, TEXT_TYPES | XML_TYPES)
+                except FetchBlocked:
+                    continue
+                found += _LOC.findall(more)
+        except FetchBlocked:
+            return []
+        host = parts.hostname
+        urls = [
+            u
+            for u in found
+            if not u.lower().endswith(".xml") and same_site(urlsplit(u).hostname, host)
+        ]
+        return list(dict.fromkeys(urls))[:MAX_SITEMAP_URLS]
+
+    async def _get(self, url: str, allowed: set[str]) -> tuple[str, str, bool]:
+        """The final address, the decoded body and whether it was cut at the size limit."""
         robots_cache: dict = {}
         headers = {"User-Agent": self._user_agent, "Accept": "text/html,text/plain"}
         try:
@@ -191,13 +239,12 @@ class SafeFetcher:
                         ctype = (
                             response.headers.get("content-type", "").split(";")[0].strip().lower()
                         )
-                        if ctype not in TEXT_TYPES:
+                        if ctype not in allowed:
                             raise FetchBlocked("content_type", ctype or "none")
                         body, truncated = await self._read(response, self._max_bytes)
                         encoding = response.charset_encoding or "utf-8"
                         html = body.decode(encoding, errors="replace")
-                        text, links = html_to_text(html, current, self._max_chars)
-                        return FetchedPage(current, text, links, truncated)
+                        return current, html, truncated
                 raise FetchBlocked("too_many_redirects", url)
         except httpx.HTTPError as exc:
             raise FetchBlocked("network", type(exc).__name__) from exc

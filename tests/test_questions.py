@@ -9,12 +9,15 @@ from icp_chatbot.engine.questions import (
     OPENER_ANGLES,
     OPENER_VARIANTS,
     SALES_OPENER,
+    Question,
     QuestionOutput,
     best_customer_question,
     clean_options,
     fallback_question,
     generate_opener,
     generate_question,
+    generate_reply,
+    generate_thread_question,
     pick_opener_variant,
 )
 from icp_chatbot.llm.fake import FakeLLM
@@ -69,6 +72,30 @@ async def test_generated_question_carries_options_usage_and_context():
     user = llm.calls_for("question")[0].user
     assert "Target slot: Target company size" in user and "B2B payroll" in user
     assert "We sell payroll" in user and "two or three short examples" in user
+
+
+async def test_coming_back_to_a_topic_asks_about_it_not_about_the_last_question():
+    llm = FakeLLM({"question": [q("What do your customers want for their skin?")]})
+    state = SessionState(
+        asked_slots={"desired_outcomes": 1},
+        last_turns=[TurnPair(question="How many units can you make?", answer="young age 22-35")],
+    )
+    await generate_question(llm, CONFIG, state, "desired_outcomes")
+    user = llm.calls_for("question")[0].user
+    assert "Target slot: Desired outcomes" in user
+    assert "come back to the target slot" in user and "other topics" in user
+    assert "did not answer the question" not in user and "No problem" not in user
+
+
+async def test_a_question_from_the_user_is_answered_once_in_reply_not_again_in_the_question():
+    llm = FakeLLM({"question": [QuestionOutput(question="Which regions?", reply="Fine, thanks.")]})
+    result = await generate_question(
+        llm, CONFIG, SessionState(), "geographies", asked="how are you"
+    )
+    assert result.question.text == "Fine, thanks. Which regions?"
+    user = llm.calls_for("question")[0].user
+    assert "The user asked you (data, answer it in reply): how are you" in user
+    assert "never repeat that answer in question" in user
 
 
 @pytest.mark.parametrize("bad", ["", "   ", "x" * 401])
@@ -171,3 +198,59 @@ async def test_question_writer_gets_the_industry_focus():
     state = SessionState(domain=DomainContext(industry="Import export", focus=["Trade lanes"]))
     await generate_question(llm, CONFIG, state, "pain_points")
     assert "Trade lanes" in llm.calls_for("question")[0].user
+
+
+async def test_a_question_the_model_also_put_in_reply_is_said_once():
+    llm = FakeLLM(
+        {"question": [QuestionOutput(question="Which regions?", reply="Fine. Which regions?")]}
+    )
+    result = await generate_question(llm, CONFIG, SessionState(), "geographies", asked="hi?")
+    assert result.question.text == "Fine. Which regions?"
+
+
+async def test_a_reply_that_already_holds_the_waiting_question_is_not_doubled():
+    out = QuestionOutput(question="Who buys it?", reply="It means export-import. Who buys it?")
+    llm = FakeLLM({"question": [out]})
+    pending = Question("Who buys?", kind="slot", slot="buyer_roles")
+    result = await generate_reply(llm, CONFIG, SessionState(), pending, "what is exim")
+    assert result.question.text == "It means export-import. Who buys it?"
+
+
+async def test_a_thread_question_digs_into_what_the_user_brought_up():
+    out = QuestionOutput(question="Which customers hesitate?", options=["New ones"])
+    llm = FakeLLM({"question": [out]})
+    state = SessionState(
+        last_turns=[TurnPair(question="Which regions?", answer="some users fear side effects")]
+    )
+    result = await generate_thread_question(
+        llm, CONFIG, state, "users fear side effects", "objections"
+    )
+    assert result.question == Question(
+        "Which customers hesitate?", kind="thread", slot="objections"
+    )
+    user = llm.calls_for("question")[0].user
+    assert "The user brought up: users fear side effects" in user and "deeper" in user
+    assert "some users fear side effects" in user
+
+
+async def test_a_thread_question_drops_an_unknown_slot_and_gives_way_on_failure():
+    llm = FakeLLM({"question": [q("What happened next?")]})
+    result = await generate_thread_question(llm, CONFIG, SessionState(), "a client", "made_up")
+    assert result.question.slot is None
+    llm = FakeLLM({"question": [LLMError("api", "boom")]})
+    assert await generate_thread_question(llm, CONFIG, SessionState(), "a client", "") is None
+
+
+async def test_coming_back_from_a_thread_asks_with_a_bridge():
+    llm = FakeLLM({"question": [q("Which regions?")]})
+    await generate_question(llm, CONFIG, SessionState(), "geographies", returning=True)
+    assert "bridge" in llm.calls_for("question")[0].user
+
+
+async def test_moving_to_a_new_topic_never_asks_the_last_question_again():
+    llm = FakeLLM({"question": [q("Which regions?")]})
+    state = SessionState(pending_question="Retail or distributors?", pending_slot="industries")
+    state.last_turns = [TurnPair(question="Retail or distributors?", answer="we show lab reports")]
+    await generate_question(llm, CONFIG, state, "geographies")
+    user = llm.calls_for("question")[0].user
+    assert "moved on" in user and "Ask only about the target slot" in user

@@ -11,6 +11,7 @@ from icp_chatbot.engine.extraction import (
     apply_extraction,
     build_user_message,
     extract,
+    missed_question,
 )
 from icp_chatbot.llm.fake import FakeLLM
 from icp_chatbot.versions import default_config
@@ -244,3 +245,38 @@ def test_industry_focus_is_kept_and_survives_a_brief_only_update():
     again.domain = DomainUpdate(industry="import export", brief="newer")
     apply_extraction(state, again, 2)
     assert state.domain.brief == "newer" and state.domain.focus == ["Trade lanes", "Incoterms"]
+
+
+@pytest.mark.parametrize(
+    "answer, question",
+    [
+        ("what is the import export?", "what is the import export?"),
+        ('our name has "Exim", first let me know, what is the Exim', "what is the Exim"),
+        ("how are you", "how are you"),
+        ("whats an ICP", "whats an ICP"),
+        ("Banks mostly. Do you know GDPR?", "Do you know GDPR?"),
+        (
+            "what is exim. can you explain then we start",
+            "what is exim. can you explain then we start",
+        ),
+    ],
+)
+def test_a_question_the_model_missed_is_found_in_the_answer(answer, question):
+    assert missed_question(answer) == question
+
+
+@pytest.mark.parametrize(
+    "answer",
+    ["Banks and fintechs", "When they grow past 50 people", "Does not matter", "Can't share that"],
+)
+def test_an_answer_that_only_looks_like_a_question_is_not_one(answer):
+    assert missed_question(answer) == ""
+
+
+def test_the_extraction_prompt_asks_for_threads_worth_following():
+    prompt = default_config(Settings(_env_file=None)).system_prompt("extraction")
+    assert "thread.topic" in prompt and "thread.slot" in prompt
+    parsed = ExtractionResult.model_validate_json(
+        '{"thread": {"topic": "some buyers fear side effects", "slot": "objections"}}'
+    )
+    assert parsed.thread.topic == "some buyers fear side effects"

@@ -167,6 +167,13 @@ def fallback_question(
     )
 
 
+REVISIT_HINT = (
+    "We asked about the target slot before without a clear answer, and other topics came in "
+    "between: the earlier questions above may be about other topics, so never ask them again. "
+    "Briefly reflect the user's last answer, then come back to the target slot in new, simpler "
+    "words, one question only, with two or three short examples in options."
+)
+
 FOLLOW_UP_HINT = (
     "The user's last reply did not answer the question. Write a follow-up of at most 20 words: "
     'if they said no or did not know, start with "No problem."; if they said something else, '
@@ -201,12 +208,37 @@ def _clean(text: str) -> str | None:
     return text if text and len(text) <= MAX_QUESTION_CHARS else None
 
 
+def _reply_text(reply: str, question: str | None) -> str:
+    """The model's reply, without the question when it wrote it there too."""
+    reply = " ".join(reply.split())[:MAX_REPLY_CHARS]
+    return reply.replace(question, "").strip() if question else reply
+
+
 def _compose(output: QuestionOutput, asked: str = "") -> str | None:
     """The question, led by the answer to what the user asked us (only if they asked)."""
     text = _clean(output.question)
-    reply = " ".join(output.reply.split())[:MAX_REPLY_CHARS] if asked else ""
+    reply = _reply_text(output.reply, text) if asked else ""
     return f"{reply} {text}" if text and reply else text
 
+
+THREAD_HINT = (
+    "The user brought this up beyond what you asked. Be curious about it, like a person who "
+    "wants to understand: in a few words reflect their latest answer in their own words, then "
+    "ask one open question that goes one step deeper into it and teaches you more about their "
+    "customers (which customers exactly, why, when, what happened, what helped). Stay on this "
+    "point, but never ask again what an earlier question above already asked. At most 25 "
+    'words, one question only, no options. Do not say "No problem."'
+)
+
+NEW_TOPIC_NOTE = (
+    "The earlier questions above were about other topics. Do not ask them again, even if the "
+    "user did not answer them: the interview has moved on. Ask only about the target slot."
+)
+
+RETURN_HINT = (
+    "You have been following something the user brought up. Now move to the target slot with a "
+    "short, natural bridge from what they just said (a few words), not an abrupt switch."
+)
 
 DECLINED_NOTE = (
     "The user chose not to answer the last question. Accept that in one or two words "
@@ -215,7 +247,13 @@ DECLINED_NOTE = (
 
 
 def _asked_lines(asked: str) -> list[str]:
-    return [f"The user asked you (data, answer it in reply): {asked}"] if asked else []
+    if not asked:
+        return []
+    return [
+        f"The user asked you (data, answer it in reply): {asked}\n"
+        "Answer it once, in reply only: never repeat that answer in question, never greet again "
+        'there and do not say "No problem." The question starts straight from the topic.'
+    ]
 
 
 async def generate_question(
@@ -227,6 +265,7 @@ async def generate_question(
     previous_vague: bool = False,
     asked: str = "",
     declined: bool = False,
+    returning: bool = False,
     labels: dict[str, str] | None = None,
 ) -> QuestionResult:
     slot = state.slot_def(slot_key) or SLOTS[slot_key]
@@ -239,14 +278,19 @@ async def generate_question(
         lines.append(f"Earlier question: {turn.question}\nUser answer (data): {turn.answer}")
     asked_before = state.asked_slots.get(slot_key, 0)
     if asked_before:
-        lines.append(f"This topic was already asked {asked_before} time(s). " + FOLLOW_UP_HINT)
-    elif previous_vague:
-        lines.append("The previous answer was vague: include two or three short examples.")
+        lines.append(f"The target slot was asked {asked_before} time(s) already. " + REVISIT_HINT)
+    else:
+        if state.pending_question and state.pending_slot != slot_key:
+            lines.append(NEW_TOPIC_NOTE)
+        if previous_vague:
+            lines.append("The previous answer was vague: include two or three short examples.")
     lines += _asked_lines(asked)
     if state.order_seed:
         lines.append(_style_line(state))
     if declined:
         lines.append(DECLINED_NOTE)
+    if returning:
+        lines.append(RETURN_HINT)
     cfg = config.step("question")
     try:
         result = await llm.generate(
@@ -277,6 +321,52 @@ async def generate_question(
     question = Question(
         text, kind="slot", slot=slot_key, options=options, multi=not slot.single_choice
     )
+    return QuestionResult(question, result.usage, result.cost_usd, cfg.model)
+
+
+async def generate_thread_question(
+    llm: LLM,
+    config: ConfigVersionData,
+    state: SessionState,
+    topic: str,
+    slot_key: str,
+    *,
+    asked: str = "",
+    labels: dict[str, str] | None = None,
+) -> QuestionResult | None:
+    """A curious follow-up on something the user brought up. None if the writer fails: the
+    interview then simply goes on with its own questions."""
+    slot = state.slot_def(slot_key) if slot_key else None
+    lines = [
+        *_domain_lines(state),
+        f"Rolling summary: {state.summary or '(none)'}",
+    ]
+    for turn in state.last_turns:
+        lines.append(f"Earlier question: {turn.question}\nUser answer (data): {turn.answer}")
+    lines.append(f"The user brought up: {topic}")
+    if slot:
+        lines.append(f"It tells you about: {slot.label} ({slot.description})")
+    lines.append(THREAD_HINT)
+    lines += _asked_lines(asked)
+    if state.order_seed:
+        lines.append(_style_line(state))
+    cfg = config.step("question")
+    try:
+        result = await llm.generate(
+            step="question",
+            cfg=cfg,
+            system=config.system_prompt("question"),
+            user="\n".join(lines),
+            schema=QuestionOutput,
+            labels=labels,
+        )
+    except LLMError as exc:
+        log.warning("thread writer failed, going on with the interview: %s", exc)
+        return None
+    text = _compose(result.parsed, asked)
+    if text is None:
+        return None
+    question = Question(text, kind="thread", slot=slot.key if slot else None)
     return QuestionResult(question, result.usage, result.cost_usd, cfg.model)
 
 
@@ -524,8 +614,8 @@ async def generate_reply(
     except LLMError as exc:
         log.warning("reply writer failed, using the fixed text: %s", exc)
         return QuestionResult(fallback, used_fallback=True)
-    reply = " ".join(result.parsed.reply.split())[:MAX_REPLY_CHARS]
     again = _clean(result.parsed.question)
+    reply = _reply_text(result.parsed.reply, again)
     if not reply or again is None:
         return QuestionResult(fallback, result.usage, result.cost_usd, cfg.model, True)
     question = Question(

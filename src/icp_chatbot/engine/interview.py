@@ -20,7 +20,14 @@ from icp_chatbot.domain.state import (
     SlotValue,
     is_non_answer,
 )
-from icp_chatbot.engine.extraction import ExtractionResult, Flags, apply_extraction, extract
+from icp_chatbot.engine.extraction import (
+    ExtractionResult,
+    Flags,
+    Thread,
+    apply_extraction,
+    extract,
+    missed_question,
+)
 from icp_chatbot.engine.planner import COMPLETION_CONFIDENCE, Ask, Caps, plan_next
 from icp_chatbot.engine.questions import (
     Question,
@@ -31,6 +38,7 @@ from icp_chatbot.engine.questions import (
     generate_probe,
     generate_question,
     generate_reply,
+    generate_thread_question,
 )
 from icp_chatbot.enrichment.service import EnrichmentOutcome
 from icp_chatbot.llm.types import LLM, LLMError, Usage
@@ -46,6 +54,7 @@ MAX_PROBES = 6  # absolute limit per slot, however well the user is engaging
 PROGRESS = 0.05  # confidence a clarification must add to count as progress
 PROBE_MIN_IMPORTANCE = 0.6
 MAX_USER_QUESTIONS = 6  # past this, questions are treated like any other off-track reply
+MAX_THREAD_QUESTIONS = 3  # curious follow-ups in a row on what the user brought up
 REDIRECT_PREFIX = "Let's get back to describing your ideal customer. "
 RETRY_PREFIX = "Sorry, I didn't catch that. "
 DECLINE_PREFIX = (
@@ -97,13 +106,47 @@ class TurnResult:
 def _declined(
     state: SessionState, target: str | None, kind: str, text: str, applied: list[str]
 ) -> bool:
-    """A bare "no" or "not sure" to a question that needs a real answer, not yet re-asked."""
+    """A bare "no" or "not sure" to a question that needs a real answer, not yet re-asked. A
+    curious follow-up on something the user brought up never needs one."""
     return (
-        is_non_answer(text)
+        kind != "thread"
+        and is_non_answer(text)
         and not applied
         and target not in NONE_IS_AN_ANSWER
         and not state.declines.get(target or kind)
     )
+
+
+def _set_aside(state: SessionState, target: str | None, kind: str) -> None:
+    """The user will not answer this question: never ask it, or a follow-up to it, again. For a
+    curious follow-up that only ends the detour; the topic itself stays open."""
+    if target and kind != "thread" and target not in state.skipped:
+        state.skipped.append(target)
+    if kind in ("opener", "best_customer"):
+        state.followups[kind] = 1
+
+
+def _thread(
+    extraction: ExtractionResult | None, state: SessionState, kind: str, unanswered: bool
+) -> Thread | None:
+    """Something the user brought up that is worth a curious follow-up. On a detour we keep
+    digging while the answers teach us about their customers, whether or not the model marks it."""
+    new = extraction.thread if extraction else None
+    new = new if new and new.topic.strip() else None
+    if state.thread_run >= MAX_THREAD_QUESTIONS:
+        return None
+    if kind != "thread":
+        return new
+    if unanswered:
+        return None  # the detour ran dry: back to our own questions
+    return new or Thread(topic=state.thread_topic, slot=state.thread_slot)
+
+
+def _unflagged_question(flags: Flags, applied: list[str], text: str) -> bool:
+    """A reply that recorded nothing and holds a question the model did not flag."""
+    if flags.asks_bot or flags.refuses or flags.wants_to_finish or applied:
+        return False
+    return not is_non_answer(text) and bool(missed_question(text))
 
 
 def _pure_question(flags: Flags, applied: list[str], state: SessionState) -> bool:
@@ -256,6 +299,11 @@ class InterviewEngine:
         if extraction:
             applied = apply_extraction(state, extraction, turn_no, target).applied
         flags = extraction.flags if extraction else Flags()
+        if extraction and _unflagged_question(flags, applied, text):
+            # the model often misses a question, or calls it off topic: answer it all the same
+            flags = flags.model_copy(update={"asks_bot": missed_question(text)})
+        # the last reply left this same question waiting, so the user has seen it twice already
+        put_again = bool(state.last_turns) and state.last_turns[-1].question == question_text
         state.answers_received = turn_no
         state.push_turn(question_text, text)
 
@@ -269,6 +317,13 @@ class InterviewEngine:
                 slot=target,
                 options=tuple(state.pending_options),
                 multi=state.pending_multi,
+            )
+        elif _pure_question(flags, applied, state) and put_again:
+            # asked us something again instead of answering: answer, then move on, never repeat
+            state.user_questions += 1
+            _set_aside(state, target, question_kind)
+            status, stop_reason, question = await self._next(
+                state, config, False, labels, spend, flags.asks_bot
             )
         elif _pure_question(flags, applied, state):
             state.user_questions += 1
@@ -306,10 +361,7 @@ class InterviewEngine:
             status, stop_reason = "completed", "user_finished"
         elif flags.refuses and not applied:
             # a firm no: respect it, never push, move on to the next topic
-            if target:
-                state.skipped.append(target) if target not in state.skipped else None
-            if question_kind in ("opener", "best_customer"):
-                state.followups[question_kind] = 1
+            _set_aside(state, target, question_kind)
             status, stop_reason, question = await self._next(
                 state, config, False, labels, spend, flags.asks_bot, declined=True
             )
@@ -323,11 +375,16 @@ class InterviewEngine:
                 multi=state.pending_multi,
             )
         else:
-            unanswered = flags.vague or not applied
+            # vague about the question but clear about something else: an answer, so move on
+            told_more = any(
+                state.confidence(k) >= COMPLETION_CONFIDENCE for k in applied if k != target
+            )
+            unanswered = not applied or (flags.vague and not told_more)
             if flags.asks_bot:
                 state.user_questions += 1
+            thread = _thread(extraction, state, question_kind, unanswered)
             status, stop_reason, question = await self._next(
-                state, config, unanswered, labels, spend, flags.asks_bot
+                state, config, unanswered, labels, spend, flags.asks_bot, thread=thread
             )
 
         if status != "active":
@@ -361,9 +418,24 @@ class InterviewEngine:
         )
         return self._result(session_id, state, status, question, stop_reason)
 
-    async def _next(self, state, config, previous_vague, labels, spend, asked="", declined=False):
+    async def _next(
+        self, state, config, previous_vague, labels, spend, asked="", declined=False, thread=None
+    ):
         """Choose and write the next question. Returns (status, stop_reason, question)."""
         kind, question, user_asked = state.pending_kind, state.pending_question, asked
+        if thread:  # follow the user where it teaches us about their customers
+            result = await generate_thread_question(
+                self._llm, config, state, thread.topic, thread.slot, asked=user_asked, labels=labels
+            )
+            if result is not None:
+                spend.add(result.usage, result.cost_usd)
+                spend.models["question"] = result.model
+                self._record_question(state, result.question)
+                state.thread_run += 1
+                state.thread_topic, state.thread_slot = thread.topic, thread.slot
+                return "active", None, result.question
+        returning, state.thread_run = state.thread_run > 0, 0
+        state.thread_topic, state.thread_slot = "", ""
         if kind in ("opener", "best_customer") and previous_vague and not state.followups.get(kind):
             state.followups[kind] = 1  # one follow-up, then move on
             result = await generate_followup(
@@ -408,6 +480,7 @@ class InterviewEngine:
             previous_vague=previous_vague,
             asked=user_asked,
             declined=declined,
+            returning=returning,
             labels=labels,
         )
         spend.add(result.usage, result.cost_usd)
@@ -447,7 +520,7 @@ class InterviewEngine:
         state.pending_slot = question.slot
         state.pending_options = list(question.options)
         state.pending_multi = question.multi
-        if question.slot:
+        if question.slot and question.kind != "thread":  # a detour is the user's, not our topic
             state.asked_slots[question.slot] = state.asked_slots.get(question.slot, 0) + 1
 
     # -- finishing early and detail mode ------------------------------------------------------

@@ -1,4 +1,4 @@
-from icp_chatbot.domain.slots import SLOT_LIST
+from icp_chatbot.domain.slots import SLOT_LIST, SLOTS
 from icp_chatbot.domain.state import SessionState, SlotSource, SlotValue
 from icp_chatbot.engine.planner import (
     Ask,
@@ -152,3 +152,45 @@ def test_exclusions_are_not_asked_early_in_a_shuffled_session():
         state = SessionState(order_seed=seed, questions_asked=2)
         plan = plan_next(state, Caps())
         assert isinstance(plan, Ask) and plan.slot != "disqualifiers"
+
+
+def test_company_slots_wait_until_we_know_whether_customers_are_companies_or_people():
+    gated = {s.key for s in SLOT_LIST if s.skip_if}  # company size, industries, customer profile
+    for seed in range(1, 40):  # whatever order the session shuffles its topics into
+        state = SessionState(order_seed=seed)
+        while state.asked_slots.get("business_model", 0) < 2:  # then it is let go
+            plan = plan_next(state, CAPS)
+            assert isinstance(plan, Ask) and plan.slot not in gated, (seed, plan)
+            state.asked_slots[plan.slot] = state.asked_slots.get(plan.slot, 0) + 1
+            state.pending_slot = plan.slot
+            if plan.slot != "business_model":  # B2B or B2C stays unknown
+                known(state, plan.slot)
+
+
+def test_company_slots_follow_once_the_business_model_is_known_or_cannot_be_asked():
+    for decided in ("known", "skipped", "asked twice"):
+        state = SessionState()
+        for slot in blocking_slots_for(state):
+            if not slot.skip_if and slot.key != "business_model":
+                known(state, slot.key)
+        if decided == "known":
+            known(state, "business_model", values=("B2B",))
+        elif decided == "skipped":
+            state.skipped.append("business_model")
+        else:
+            state.asked_slots["business_model"] = 2
+        plan = plan_next(state, CAPS)
+        assert isinstance(plan, Ask) and SLOTS[plan.slot].skip_if, (decided, plan)
+
+
+def test_a_guessed_business_model_is_checked_before_company_slots_are_asked():
+    state = SessionState()
+    for slot in blocking_slots_for(state):
+        if not slot.skip_if and slot.key != "business_model":
+            known(state, slot.key)
+    known(state, "business_model", confidence=0.6, values=("B2B",))  # inferred, not said
+    plan = plan_next(state, CAPS)
+    assert isinstance(plan, Ask) and not SLOTS[plan.slot].skip_if
+    state.asked_slots["business_model"] = 1  # asked once: the answer stands
+    plan = plan_next(state, CAPS)
+    assert isinstance(plan, Ask) and SLOTS[plan.slot].skip_if

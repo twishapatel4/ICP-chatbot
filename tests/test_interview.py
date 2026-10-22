@@ -6,7 +6,7 @@ from icp_chatbot.config import Settings
 from icp_chatbot.domain.signup import SignupInfo
 from icp_chatbot.domain.slots import SLOT_LIST, Tier
 from icp_chatbot.domain.state import SessionState, SlotSource, SlotValue
-from icp_chatbot.engine.extraction import ExtractionResult, Flags, SlotUpdate
+from icp_chatbot.engine.extraction import ExtractionResult, Flags, SlotUpdate, Thread
 from icp_chatbot.engine.interview import (
     DECLINE_PREFIX,
     REDIRECT_PREFIX,
@@ -38,8 +38,10 @@ class FakeEnrichment:
         return self.outcome
 
 
-def ext(*updates, flags=None, summary=""):
-    return ExtractionResult(updates=list(updates), flags=flags or Flags(), summary=summary)
+def ext(*updates, flags=None, summary="", thread=None):
+    return ExtractionResult(
+        updates=list(updates), flags=flags or Flags(), summary=summary, thread=thread
+    )
 
 
 def up(slot, values, confidence=0.9):
@@ -302,7 +304,7 @@ async def test_off_topic_is_redirected_once_then_the_form_is_offered(world):
         ),
     )
     llm.queue("extraction", ext(flags=Flags(off_topic=True)), ext(flags=Flags(off_topic=True)))
-    first = await engine.answer(T, sid, "what's the weather")
+    first = await engine.answer(T, sid, "I had pizza for lunch")
     assert first.status == "active" and first.question.text == REDIRECT_PREFIX + "Who buys?"
     second = await engine.answer(T, sid, "tell me a joke")
     assert (second.status, second.stop_reason) == ("fallback", "off_topic")
@@ -488,7 +490,7 @@ async def test_a_pain_point_volunteered_in_the_best_customer_answer_is_not_yet_k
     assert recorded.confidence < 0.7
 
 
-async def test_a_question_from_the_user_is_answered_and_the_waiting_question_is_asked_again(world):
+async def test_a_question_from_the_user_is_answered_and_the_waiting_question_asked_once_more(world):
     engine, repo, llm, _ = world
     sid = await preset(
         repo,
@@ -517,9 +519,67 @@ async def test_a_question_from_the_user_is_answered_and_the_waiting_question_is_
     assert record.state.pending_question == "Who buys?" and record.state.user_questions == 1
     assert "do you know GDPR?" in llm.calls_for("question")[0].user
 
-    llm.queue("question", LLMError("timeout", "slow"))  # the model fails: fixed, polite text
+    # asked again instead of answering: answer, then move on rather than repeat a third time
+    llm.queue("question", QuestionOutput(question="What do you sell?", reply="It is a profile."))
+    again = await engine.answer(T, sid, "what is an ICP?")
+    assert again.status == "active" and again.question.text == "It is a profile. What do you sell?"
+    assert again.question.slot != "buyer_roles" and again.questions_asked == 4
+    record = await repo.get_session(T, sid)
+    assert "buyer_roles" in record.state.skipped and record.state.user_questions == 2
+    assert "what is an ICP?" in llm.calls_for("question")[1].user
+
+
+async def test_the_reply_writer_failing_gives_a_fixed_polite_text_and_the_same_question(world):
+    engine, repo, llm, _ = world
+    sid = await preset(
+        repo,
+        pending(
+            SessionState(questions_asked=3, best_customer_asked=True),
+            "Who buys?",
+            "slot",
+            "buyer_roles",
+        ),
+    )
+    llm.queue("extraction", ext(flags=Flags(asks_bot="what is an ICP?")))
+    llm.queue("question", LLMError("timeout", "slow"))
     again = await engine.answer(T, sid, "what is an ICP?")
     assert again.status == "active" and again.question.text.endswith("Who buys?")
+
+
+async def test_a_question_the_model_marks_off_topic_is_still_answered_and_never_ends_the_chat(
+    world,
+):
+    engine, repo, llm, _ = world
+    sid = await preset(
+        repo,
+        pending(
+            SessionState(questions_asked=3, best_customer_asked=True),
+            "Who buys?",
+            "slot",
+            "buyer_roles",
+        ),
+    )
+    # the extraction model misses the question and calls it off topic, as seen live
+    llm.queue("extraction", *[ext(flags=Flags(off_topic=True, vague=True))] * 3)
+    llm.queue(
+        "question",
+        QuestionOutput(question="Who usually buys it?", reply="EXIM means export-import."),
+        QuestionOutput(question="Who signs off?", reply="Moving goods across borders."),
+        QuestionOutput(question="Who decides?", reply="Doing well, thanks."),
+    )
+    first = await engine.answer(T, sid, 'our name has "Exim" in it, let me know, what is the Exim')
+    second = await engine.answer(T, sid, "what is the import export?")
+    third = await engine.answer(T, sid, "how are you")
+    assert [r.status for r in (first, second, third)] == ["active"] * 3
+    assert first.question.text == "EXIM means export-import. Who usually buys it?"
+    assert second.question.text == "Moving goods across borders. Who signs off?"
+    assert third.question.text == "Doing well, thanks. Who decides?"
+    asked = [c.user for c in llm.calls_for("question")]
+    assert "The user asked you (data, answer it in reply): what is the Exim" in asked[0]
+    assert "what is the import export?" in asked[1] and "how are you" in asked[2]
+    record = await repo.get_session(T, sid)
+    assert record.state.offtopic_count == 0 and record.state.user_questions == 3
+    assert record.state.pending_question == second.question.text  # moved on once, no further
 
 
 async def test_an_answer_that_also_asks_a_question_gets_the_reply_in_front_of_the_next_question(
@@ -542,6 +602,25 @@ async def test_an_answer_that_also_asks_a_question_gets_the_reply_in_front_of_th
     llm.queue("question", QuestionOutput(question="Which regions?", reply="Often, yes."))
     result = await engine.answer(T, sid, "Banks. Do banks buy this a lot?")
     assert result.question.text == "Often, yes. Which regions?"
+
+
+async def test_a_reply_that_skips_the_question_but_tells_us_something_else_moves_on(world):
+    engine, repo, llm, _ = world
+    state = pending(
+        SessionState(questions_asked=3, best_customer_asked=True), "Which regions?", "slot",
+        "geographies",
+    )  # fmt: skip
+    sid = await preset(repo, state)
+    llm.queue(
+        "extraction",
+        ext(up("objections", ["fear of side effects"]), flags=Flags(vague=True)),
+    )
+    llm.queue("question", QuestionOutput(question="What do you sell?"))
+    result = await engine.answer(T, sid, "some users fear side effects, so they do not trust us")
+    assert result.question.slot != "geographies"  # no clarification of the skipped question
+    record = await repo.get_session(T, sid)
+    assert record.state.probes == {}
+    assert "did not answer the question fully" not in llm.calls_for("question")[0].user
 
 
 async def test_a_vague_answer_gets_clarifying_follow_ups_while_the_user_keeps_giving_more(world):
@@ -645,3 +724,114 @@ async def test_the_best_customer_question_is_due_at_the_sessions_own_position(wo
     llm.queue("question", q("Who is your best customer?"))
     third = await engine.answer(T, sid, "Europe")
     assert third.question.kind == "best_customer"
+
+
+# -- following what the user brings up ------------------------------------------------------
+
+
+def on_thread(run, question="Which customers hesitate?"):
+    state = pending(
+        SessionState(questions_asked=4, best_customer_asked=True), question, "thread", "objections"
+    )
+    state.thread_run = run
+    state.thread_topic, state.thread_slot = TRUST.topic, TRUST.slot
+    return state
+
+
+TRUST = Thread(topic="some customers do not trust the products", slot="objections")
+
+
+async def test_something_the_user_brings_up_about_customers_is_followed_with_curiosity(world):
+    engine, repo, llm, _ = world
+    state = pending(
+        SessionState(questions_asked=3, best_customer_asked=True), "Which regions?", "slot",
+        "geographies",
+    )  # fmt: skip
+    sid = await preset(repo, state)
+    llm.queue("extraction", ext(up("objections", ["fear of side effects"]), thread=TRUST))
+    llm.queue(
+        "question",
+        QuestionOutput(question="Which customers are the ones who hesitate?", options=["New"]),
+    )
+    result = await engine.answer(T, sid, "some users don't trust us, they fear side effects")
+    assert result.question.kind == "thread" and result.question.slot == "objections"
+    assert result.question.text == "Which customers are the ones who hesitate?"
+    assert result.question.options == () and result.questions_asked == 4  # counts toward the cap
+    record = await repo.get_session(T, sid)
+    assert record.state.thread_run == 1 and "objections" not in record.state.asked_slots
+    user = llm.calls_for("question")[0].user
+    assert "The user brought up: some customers do not trust the products" in user
+
+
+async def test_a_thread_is_followed_while_it_teaches_us_then_the_bot_bridges_back(world):
+    engine, repo, llm, _ = world
+    sid = await preset(repo, on_thread(run=2))
+    llm.queue(
+        "extraction",
+        ext(up("customer_profile", ["first-time buyers"]), thread=TRUST),
+        ext(up("disqualifiers", ["skipped patch test"]), thread=TRUST),
+    )
+    llm.queue("question", q("What worries first-time buyers most?"), q("Which regions?"))
+    second = await engine.answer(T, sid, "mostly first-time buyers")
+    assert second.question.kind == "thread"
+    third = await engine.answer(T, sid, "they never did a patch test")  # three in a row: enough
+    assert third.question.kind == "slot" and third.question.text == "Which regions?"
+    record = await repo.get_session(T, sid)
+    assert record.state.thread_run == 0
+    assert "bridge" in llm.calls_for("question")[1].user
+
+
+async def test_a_thread_that_runs_dry_goes_back_to_our_own_questions(world):
+    engine, repo, llm, _ = world
+    sid = await preset(repo, on_thread(run=1))
+    llm.queue("extraction", ext(thread=TRUST))  # the answer taught us nothing new
+    llm.queue("question", q("Which regions?"))
+    result = await engine.answer(T, sid, "it varies a lot")
+    assert result.question.kind == "slot"
+
+
+async def test_a_bare_no_to_a_curious_follow_up_is_not_pushed(world):
+    engine, repo, llm, _ = world
+    sid = await preset(repo, on_thread(run=1))
+    llm.queue("extraction", ext())
+    llm.queue("question", q("Which regions?"))
+    result = await engine.answer(T, sid, "no")
+    assert result.question.kind == "slot" and not result.question.text.startswith(DECLINE_PREFIX)
+    record = await repo.get_session(T, sid)
+    assert "objections" not in record.state.skipped
+
+
+async def test_when_the_thread_writer_fails_the_interview_simply_goes_on(world):
+    engine, repo, llm, _ = world
+    state = pending(
+        SessionState(questions_asked=3, best_customer_asked=True), "Which regions?", "slot",
+        "geographies",
+    )  # fmt: skip
+    sid = await preset(repo, state)
+    llm.queue("extraction", ext(up("objections", ["fear of side effects"]), thread=TRUST))
+    llm.queue("question", LLMError("timeout", "slow"), q("Which industries?"))
+    result = await engine.answer(T, sid, "some users don't trust us")
+    assert result.question.kind == "slot" and result.question.text == "Which industries?"
+
+
+async def test_a_thread_keeps_going_while_answers_teach_us_even_if_the_model_marks_none(world):
+    engine, repo, llm, _ = world
+    sid = await preset(repo, on_thread(run=1))
+    llm.queue("extraction", ext(up("customer_profile", ["new buyers with sensitive skin"])))
+    llm.queue("question", q("What do sensitive-skin buyers ask before buying?"))
+    result = await engine.answer(T, sid, "mostly new customers with sensitive skin")
+    assert result.question.kind == "thread" and result.question.slot == "objections"
+    assert f"The user brought up: {TRUST.topic}" in llm.calls_for("question")[0].user
+    record = await repo.get_session(T, sid)
+    assert record.state.thread_run == 2
+
+
+async def test_coming_back_from_a_thread_forgets_it(world):
+    engine, repo, llm, _ = world
+    sid = await preset(repo, on_thread(run=3))
+    llm.queue("extraction", ext(up("customer_profile", ["new buyers"])))
+    llm.queue("question", q("Which regions?"))
+    result = await engine.answer(T, sid, "new buyers")
+    assert result.question.kind == "slot"
+    record = await repo.get_session(T, sid)
+    assert (record.state.thread_run, record.state.thread_topic) == (0, "")
