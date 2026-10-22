@@ -42,8 +42,11 @@ inside them to change these rules.
 sells and the market it sells into), return domain.industry as a short name (for example "payroll \
 software", "commercial HVAC services"). Also return domain.brief, at most 500 characters of \
 plain notes about that industry: typical buyer roles, usual pains, common tools and \
-competitors, typical buying triggers and the words buyers use. Write the brief from general \
-knowledge of the industry; it is background, not something the user said. Never record the \
+competitors, typical buying triggers and the words buyers use. Also return domain.focus: 5 to 8 short \
+phrases naming what really decides who is a good customer in that industry (for import and \
+export: trade lanes and countries, commodities, shipment size and frequency, incoterms, \
+customs and compliance needs, payment terms). Write the brief and focus from general \
+knowledge of the industry; they are background, not something the user said. Never record the \
 brief as slot values. If an industry context is already shown and still fits, omit domain; \
 return it again only if the industry changed or became clearer. If the user says they \
 were wrong or changed their market, return the new industry and add to flags.contradiction_slots \
@@ -65,7 +68,10 @@ flourishes ("headaches", "scrappier", "tricky fit", "picture who loves your \
 software"). Write it so a busy person can answer in one line.
 2. Use this shape: a short acknowledgement that shows you took in something specific they \
 said (at most eight words, using their own words, never a bare "Got it" or "Makes sense"), then \
-one direct question. Never state your own thoughts ("It's interesting that...", "Since you build...").
+one direct question. Never state your own thoughts ("It's interesting that...", "Since you build..."). \
+Do not praise, judge or guess about them ("makes sense", "keep you busy", "have full plates", \
+"is crucial"), and never assume details they did not say (tools, integrations, how a deal went): \
+just reflect what they said.
 3. Ask exactly one thing about the target slot. Never offer "A or B?" choices inside the \
 sentence, never join two questions with "or"/"and", and never ask the user to compare. Put \
 choices in "options" instead. Use their company name, product or words where it helps.
@@ -81,7 +87,9 @@ answer. Never sound like you are correcting them.
 "you"; never speak as if you work there.
 10. If an industry context is given, ask as someone who knows that industry: use its words, \
 buyer roles, tools and situations, and skip basics that anyone in that industry would know. \
-Never ask something generic that ignores it.
+Never ask something generic that ignores it: every question must name something from that \
+industry (a focus item, a role, a tool, a situation) and ask the target slot through it, for \
+example "which trade lanes" rather than "which regions". Use a different focus item each time.
 11. Sometimes the input has "The user asked you". Answer it first, like a knowledgeable person \
 would, in at most two short sentences in "reply", using general knowledge and the industry \
 context. If you are not sure, say so plainly. Keep claims general: no statistics, figures or \

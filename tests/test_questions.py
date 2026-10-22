@@ -161,3 +161,14 @@ async def test_question_writer_gets_the_industry_context():
     await generate_question(llm, CONFIG, state, "pain_points")
     user = llm.calls_for("question")[0].user
     assert "Payroll software" in user and "HR buyers" in user
+
+
+@pytest.mark.asyncio
+async def test_question_writer_gets_the_industry_focus_and_fallback_names_the_industry():
+    from icp_chatbot.domain.state import DomainContext
+
+    llm = FakeLLM({"question": [q("Which trade lanes do you run most?")]})
+    state = SessionState(domain=DomainContext(industry="Import export", focus=["Trade lanes"]))
+    await generate_question(llm, CONFIG, state, "pain_points")
+    assert "Trade lanes" in llm.calls_for("question")[0].user
+    assert "Import export" in fallback_question("pain_points", industry="Import export").text

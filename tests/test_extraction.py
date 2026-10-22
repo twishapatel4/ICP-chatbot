@@ -228,3 +228,19 @@ def test_a_changed_market_drops_what_was_said_about_the_old_one():
     third.domain = DomainUpdate(industry="Legal tech")
     apply_extraction(state, third, 3)
     assert "industries" in state.slots
+
+
+def test_industry_focus_is_kept_and_survives_a_brief_only_update():
+    from icp_chatbot.engine.extraction import DomainUpdate
+
+    state = SessionState()
+    first = result()
+    first.domain = DomainUpdate(
+        industry="Import export", brief="b", focus=["Trade lanes", "trade lanes", "Incoterms"]
+    )
+    apply_extraction(state, first, 1)
+    assert state.domain.focus == ["Trade lanes", "Incoterms"]
+    again = result()
+    again.domain = DomainUpdate(industry="import export", brief="newer")
+    apply_extraction(state, again, 2)
+    assert state.domain.brief == "newer" and state.domain.focus == ["Trade lanes", "Incoterms"]

@@ -28,6 +28,8 @@ OFF_TARGET_CAP = 0.6
 EVIDENCE_LIMIT = 200
 SUMMARY_LIMIT = 600
 INDUSTRY_LIMIT = 80
+FOCUS_LIMIT = 8
+FOCUS_ITEM_LIMIT = 80
 BRIEF_LIMIT = 700
 STAYS_ON_CHANGE = frozenset({"online_presence"})  # facts about the user, not the old market
 
@@ -52,6 +54,7 @@ class Flags(BaseModel):
 class DomainUpdate(BaseModel):
     industry: str = ""
     brief: str = ""
+    focus: list[str] = Field(default_factory=list)
     changed_market: bool = False  # the user says the earlier industry was wrong or has changed
 
 
@@ -171,6 +174,9 @@ def _apply_domain(state: SessionState, update: DomainUpdate | None, kept_slots: 
     if not industry:
         return
     brief = " ".join(update.brief.split())[:BRIEF_LIMIT]
+    focus = normalize_values([" ".join(f.split())[:FOCUS_ITEM_LIMIT] for f in update.focus])[
+        :FOCUS_LIMIT
+    ]
     current = state.domain
     if update.changed_market and current and current.industry.casefold() != industry.casefold():
         # what was said about the old market no longer holds, except what was just said
@@ -178,7 +184,11 @@ def _apply_domain(state: SessionState, update: DomainUpdate | None, kept_slots: 
             del state.slots[key]
             state.contradictions = [c for c in state.contradictions if c != key]
     if current and current.industry.casefold() == industry.casefold():
-        if brief:
-            state.domain = DomainContext(industry=current.industry, brief=brief)
+        if brief or focus:
+            state.domain = DomainContext(
+                industry=current.industry,
+                brief=brief or current.brief,
+                focus=focus or current.focus,
+            )
         return
-    state.domain = DomainContext(industry=industry, brief=brief)
+    state.domain = DomainContext(industry=industry, brief=brief, focus=focus)

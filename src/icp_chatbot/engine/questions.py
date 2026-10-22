@@ -113,15 +113,44 @@ def pick_opener_variant(company_name: str, role: str | None) -> str:
     return OPENER_VARIANTS[digest[0] % len(OPENER_VARIANTS)]
 
 
-def fallback_question(slot_key: str, asked_before: int = 0) -> Question:
+# Plain wording per topic for when the question writer is unavailable. {c} is "your customers"
+# or, once the industry is known, "your <industry> customers".
+FALLBACK_ASKS = {
+    "industries": "What kinds of businesses buy from you? A few examples help.",
+    "company_size": "Roughly how big are {c}? Think headcount.",
+    "revenue_range": "Roughly how much revenue do {c} make in a year?",
+    "geographies": "Which countries or regions do {c} mostly come from?",
+    "company_type": "Are {c} mostly large enterprises, mid-size firms or small businesses?",
+    "customer_segments": "Who do {c} themselves sell to?",
+    "pain_points": "What problems do {c} run into that lead them to you?",
+    "desired_outcomes": "What result do {c} hope to get from working with you?",
+    "current_processes": "How do {c} handle this today, before they find you?",
+    "use_cases": "What do {c} mainly use you for?",
+    "tech_stack": "What tools or software do {c} already use?",
+    "incumbents": "Who else do {c} usually consider or already work with?",
+    "budget_range": "What kind of budget do {c} usually have for this?",
+    "deal_size": "What does a typical deal with {c} look like in value?",
+    "purchase_frequency": "How often do {c} buy from you?",
+    "buyer_roles": "Who on the {c} side usually decides or has a say?",
+    "sales_cycle": "How long does it usually take from first chat to a deal with {c}?",
+    "objections": "What makes {c} hesitate or say no?",
+    "buying_triggers": "What usually makes {c} reach out to you at that moment?",
+    "disqualifiers": "Are there kinds of businesses you would rather not work with?",
+    "success_definition": "What does a really successful customer look like to you?",
+    "compliance": "Do {c} have rules or certifications you have to meet?",
+    "market_position": "How would you say you compare with others who serve {c}?",
+}
+
+
+def fallback_question(slot_key: str, asked_before: int = 0, industry: str = "") -> Question:
     slot = SLOTS[slot_key]
+    customers = f"your {industry} customers" if industry else "your customers"
+    ask = FALLBACK_ASKS.get(slot_key)
+    if ask is None:
+        ask = f"What can you tell me about {slot.label.lower()}? {slot.description}."
+    text = ask.format(c=customers)
     if asked_before:  # never repeat the same wording: rephrase and make answering easy
-        text = (
-            f"No problem, let me put it another way. {slot.description.rstrip('.')}? "
-            "A few words or one example is enough."
-        )
-    else:
-        text = f"Next, could you tell me about this: {slot.label.lower()}? {slot.description}."
+        text = f"Let me put that another way. {text} A few words or one example is enough."
     return Question(
         text,
         kind="fallback",
@@ -133,9 +162,15 @@ def fallback_question(slot_key: str, asked_before: int = 0) -> Question:
 
 FOLLOW_UP_HINT = (
     "The user's last reply did not answer the question. Write a follow-up of at most 20 words: "
-    'start with "No problem.", then ask the same thing in simpler words, one question only, '
+    'if they said no or did not know, start with "No problem."; if they said something else, '
+    "briefly reflect it in their own words instead. Then ask the same thing in simpler words, "
+    "one question only, "
     "and put two or three short examples in options. Do not repeat the earlier wording."
 )
+
+
+def _industry(state: SessionState) -> str:
+    return state.domain.industry if state.domain else ""
 
 
 def _domain_lines(state: SessionState) -> list[str]:
@@ -221,11 +256,13 @@ async def generate_question(
         )
     except LLMError as exc:
         log.warning("question writer failed, using the fixed text: %s", exc)
-        return QuestionResult(fallback_question(slot_key, asked_before), used_fallback=True)
+        return QuestionResult(
+            fallback_question(slot_key, asked_before, _industry(state)), used_fallback=True
+        )
     text = _compose(result.parsed, asked)
     if text is None:
         return QuestionResult(
-            fallback_question(slot_key, asked_before),
+            fallback_question(slot_key, asked_before, _industry(state)),
             result.usage,
             result.cost_usd,
             cfg.model,
@@ -523,7 +560,7 @@ async def generate_probe(
     lines.append(PROBE_HINT)
     lines += _asked_lines(asked)
     cfg = config.step("question")
-    fallback = fallback_question(slot_key, asked_before=1)
+    fallback = fallback_question(slot_key, asked_before=1, industry=_industry(state))
     try:
         result = await llm.generate(
             step="question",

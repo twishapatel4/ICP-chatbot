@@ -466,7 +466,7 @@ async def test_a_slot_asked_again_is_written_as_a_follow_up_with_a_different_fal
     llm.queue("extraction", ext(flags=Flags(vague=True)))
     llm.queue("question", LLMError("api", "down"))
     result = await engine.answer(T, sid, "hard to say")
-    assert result.question.text.startswith("No problem, let me put it another way")
+    assert result.question.text.startswith("Let me put that another way")
 
 
 async def test_a_pain_point_volunteered_in_the_best_customer_answer_is_not_yet_known(world):

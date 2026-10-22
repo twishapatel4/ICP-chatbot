@@ -80,11 +80,17 @@ class DomainContext(BaseModel):
 
     industry: str
     brief: str = ""  # buyer roles, pains, tools, triggers and vocabulary typical for the industry
+    focus: list[str] = Field(default_factory=list)  # things that decide fit in this industry
 
     def prompt_lines(self) -> str:
         lines = f"Industry of this company: {self.industry}"
         if self.brief:
             lines += f"\nWhat is typical in this industry (background, not facts about them): {self.brief}"
+        if self.focus:
+            lines += (
+                "\nWhat decides who is a good customer in this industry (build the question "
+                "around these, in these words): " + "; ".join(self.focus)
+            )
         return lines
 
 

@@ -12,7 +12,7 @@ from icp_chatbot.domain.state import SessionState
 COMPLETION_CONFIDENCE = 0.7  # a slot at or above this counts as known
 REVISIT_BELOW = 0.4  # an asked slot is asked again only below this, or if contradicted
 CONTRADICTED_CONFIDENCE = 0.2  # a contradicted slot is treated as barely known
-MAX_ASKS_PER_SLOT = 3  # guard against loops
+MAX_ASKS_PER_SLOT = 2  # guard against loops
 MIN_TOPICS = 3  # quick mode needs at least this many tier B topics asked
 
 QUICK_WEIGHTS = {Tier.A: 1.0, Tier.B: 0.5}
