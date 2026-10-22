@@ -1,11 +1,12 @@
 """Step 1 of every turn: turn the user's answer into slot updates (spec section 5.2)."""
 
 import json
+import re
 from dataclasses import dataclass, field
 
 from pydantic import BaseModel, Field
 
-from icp_chatbot.domain.slots import SLOTS
+from icp_chatbot.domain.slots import SLOTS, CustomField
 from icp_chatbot.domain.state import (
     CONFIRMED_CONFIDENCE,
     NONE_IS_AN_ANSWER,
@@ -29,6 +30,8 @@ EVIDENCE_LIMIT = 200
 SUMMARY_LIMIT = 600
 INDUSTRY_LIMIT = 80
 FOCUS_LIMIT = 8
+FIELD_LIMIT = 7
+PROTECTED_SLOTS = frozenset({"product", "business_model", "pain_points", "desired_outcomes"})
 FOCUS_ITEM_LIMIT = 80
 BRIEF_LIMIT = 700
 STAYS_ON_CHANGE = frozenset({"online_presence"})  # facts about the user, not the old market
@@ -55,6 +58,8 @@ class DomainUpdate(BaseModel):
     industry: str = ""
     brief: str = ""
     focus: list[str] = Field(default_factory=list)
+    fields: list[CustomField] = Field(default_factory=list)  # what this industry must know
+    not_needed: list[str] = Field(default_factory=list)  # standard slot keys that do not matter
     changed_market: bool = False  # the user says the earlier industry was wrong or has changed
 
 
@@ -113,8 +118,11 @@ def apply_extraction(
     with: only known slots, a stated value replaces an inferred one, and an inferred value the
     user agrees with becomes confirmed."""
     outcome = ApplyOutcome()
+    own = {f.key for f in _custom(state)}
+    if result.domain:  # fields defined in this very answer can already be filled by it
+        own |= {f.key for f in _clean_fields(result.domain.fields)}
     for update in result.updates:
-        if update.slot not in SLOTS:
+        if update.slot not in SLOTS and update.slot not in own:
             outcome.ignored.append(update.slot)
             continue
         values = real_values(update.slot, normalize_values(update.values))
@@ -157,7 +165,7 @@ def apply_extraction(
             state.contradictions.remove(update.slot)
 
     for slot in result.flags.contradiction_slots:
-        if slot in SLOTS and slot not in state.contradictions:
+        if (slot in SLOTS or slot in own) and slot not in state.contradictions:
             state.contradictions.append(slot)
     _apply_domain(state, result.domain, outcome.applied)
     if result.summary.strip():
@@ -183,12 +191,40 @@ def _apply_domain(state: SessionState, update: DomainUpdate | None, kept_slots: 
         for key in [k for k in state.slots if k not in kept_slots and k not in STAYS_ON_CHANGE]:
             del state.slots[key]
             state.contradictions = [c for c in state.contradictions if c != key]
+    fields = _clean_fields(update.fields)
+    not_needed = [k for k in update.not_needed if k in SLOTS and k not in PROTECTED_SLOTS]
     if current and current.industry.casefold() == industry.casefold():
-        if brief or focus:
-            state.domain = DomainContext(
-                industry=current.industry,
-                brief=brief or current.brief,
-                focus=focus or current.focus,
-            )
+        known = {f.key for f in current.fields}
+        added = [f for f in fields if f.key not in known]  # fields already asked about stay put
+        state.domain = DomainContext(
+            industry=current.industry,
+            brief=brief or current.brief,
+            focus=focus or current.focus,
+            fields=[*current.fields, *added][:FIELD_LIMIT],
+            not_needed=normalize_values([*current.not_needed, *not_needed]),
+        )
         return
-    state.domain = DomainContext(industry=industry, brief=brief, focus=focus)
+    state.domain = DomainContext(
+        industry=industry,
+        brief=brief,
+        focus=focus,
+        fields=fields,
+        not_needed=normalize_values(not_needed),
+    )
+
+
+def _custom(state: SessionState) -> list[CustomField]:
+    return state.domain.fields if state.domain else []
+
+
+def _clean_fields(fields: list[CustomField]) -> list[CustomField]:
+    """The industry's own fields from the model: readable snake_case keys that never clash with
+    a standard slot, each with a label and a plain question."""
+    out: list[CustomField] = []
+    for f in fields:
+        key = re.sub(r"[^a-z0-9]+", "_", f.key.lower()).strip("_")[:40]
+        label, ask = " ".join(f.label.split())[:60], " ".join(f.ask.split())[:200]
+        if not key or key in SLOTS or not label or not ask or any(o.key == key for o in out):
+            continue
+        out.append(f.model_copy(update={"key": key, "label": label, "ask": ask}))
+    return out[:FIELD_LIMIT]

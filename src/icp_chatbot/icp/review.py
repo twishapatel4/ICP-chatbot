@@ -8,7 +8,6 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
-from icp_chatbot.domain.slots import SLOTS
 from icp_chatbot.domain.state import SlotSource, normalize_values
 from icp_chatbot.icp.document import (
     FieldEntry,
@@ -68,10 +67,10 @@ class FeedbackSpec:
 def _rebuild(document: ICPDocument, entries: dict[str, FieldEntry], model) -> ICPDocument:
     rebuilt = document.model_copy(
         update={
-            "sections": group_by_section(entries),
+            "sections": group_by_section(entries, document.slot_defs()),
             "scoring_model": model,
-            "summary": render_summary(entries),
-            "completeness": compute_completeness(entries),
+            "summary": render_summary(entries, document.slot_defs()),
+            "completeness": compute_completeness(entries, document.needed_defs()),
         }
     )
     return sync_field_requirements(rebuilt)
@@ -84,7 +83,7 @@ def apply_edit(
     model = document.scoring_model
 
     if isinstance(edit, FieldEdit):
-        if edit.slot not in SLOTS:
+        if edit.slot not in {s.key for s in document.slot_defs()}:
             raise ValueError(f"unknown field: {edit.slot}")
         old = entries[edit.slot].values if edit.slot in entries else []
         values = normalize_values(edit.values)

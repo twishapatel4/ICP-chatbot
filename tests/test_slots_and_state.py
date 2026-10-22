@@ -22,7 +22,7 @@ def test_tier_a_slots_match_the_spec():
     assert keys == {
         "industries", "company_size", "revenue_range", "geographies", "pain_points",
         "desired_outcomes", "buyer_roles", "buyer_departments", "disqualifiers",
-        "customer_segments",
+        "customer_segments", "product", "business_model", "customer_profile",
     }  # fmt: skip
 
 

@@ -174,7 +174,15 @@ async def test_a_later_answer_gets_a_planned_slot_question_and_a_turn_record(wor
         "best_customer",
     )
     sid = await preset(repo, state)
-    llm.queue("extraction", ext(up("industries", ["Fintech"]), up("geographies", ["Europe"])))
+    llm.queue(
+        "extraction",
+        ext(
+            up("industries", ["Fintech"]),
+            up("geographies", ["Europe"]),
+            up("product", ["Payments"]),
+            up("business_model", ["B2B"]),
+        ),
+    )
     llm.queue("question", q("What problems do these banks have?"))
     result = await engine.answer(T, sid, "Banks in Europe")
     # industries and geographies are known, so the most important unknown slot comes next

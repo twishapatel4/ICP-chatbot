@@ -29,13 +29,16 @@ def test_completeness_counts_known_slots_and_skips_inapplicable_ones():
     tier_a = [
         "industries", "company_size", "revenue_range", "geographies", "pain_points",
         "desired_outcomes", "buyer_roles", "buyer_departments", "disqualifiers",
+        "product",
     ]  # fmt: skip
     entries = {k: entry(["x"]) for k in tier_a}
+    entries["business_model"] = entry(["B2B"])
     assert compute_completeness(entries).tier_a == 1.0
     entries["industries"] = entry(["x"], confidence=0.5)  # below the 0.7 bar
-    assert compute_completeness(entries).tier_a == round(8 / 9, 4)
+    assert compute_completeness(entries).tier_a == round(10 / 11, 4)
     b2c = {k: entry(["x"]) for k in tier_a if not k.startswith("buyer_")}
     b2c["business_model"] = entry(["B2C"])
+    b2c["customer_profile"] = entry(["x"])
     assert compute_completeness(b2c).tier_a == 1.0  # buyer slots do not apply to B2C
 
 

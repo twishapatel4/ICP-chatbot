@@ -62,8 +62,9 @@ class BuildResult:
 
 def entries_from_state(state: SessionState, today: date) -> dict[str, FieldEntry]:
     entries = {}
+    custom = {f.key for f in state.domain.fields} if state.domain else set()
     for key, value in state.slots.items():
-        if key not in SLOTS or not value.values:
+        if (key not in SLOTS and key not in custom) or not value.values:
             continue
         said_by_user = value.source in (SlotSource.STATED, SlotSource.CONFIRMED)
         entries[key] = FieldEntry(
@@ -144,13 +145,23 @@ async def build_icp(
                 )
         open_questions.extend(q for q in synthesis.open_questions if q.strip())
 
-    open_questions.extend(missing_slots(entries))
+    shell = ICPDocument(
+        sections={},
+        scoring_model=default_scoring_model({}),
+        completeness=compute_completeness({}),
+        custom_fields=list(state.domain.fields) if state.domain else [],
+        not_needed=list(state.domain.not_needed) if state.domain else [],
+    )
+    needed = shell.needed_defs()
+    open_questions.extend(missing_slots(entries, defs=needed))
     slot_values = {key: e.values for key, e in entries.items() if e.values}
-    document = ICPDocument(
-        sections=group_by_section(entries),
-        scoring_model=default_scoring_model(slot_values, disqualifiers),
-        summary=render_summary(entries),
-        completeness=compute_completeness(entries),
-        open_questions=open_questions,
+    document = shell.model_copy(
+        update={
+            "sections": group_by_section(entries, shell.slot_defs()),
+            "scoring_model": default_scoring_model(slot_values, disqualifiers),
+            "summary": render_summary(entries, shell.slot_defs()),
+            "completeness": compute_completeness(entries, needed),
+            "open_questions": open_questions,
+        }
     )
     return BuildResult(sync_field_requirements(document), usage, cost, fallback)

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from icp_chatbot.domain.signup import SignupInfo
-from icp_chatbot.domain.slots import SLOTS
+from icp_chatbot.domain.slots import SLOTS, SlotDef
 from icp_chatbot.domain.state import SessionState, SlotValue, is_non_answer
 from icp_chatbot.llm.types import LLM, LLMError, Usage
 from icp_chatbot.versions import ConfigVersionData
@@ -113,10 +113,15 @@ def pick_opener_variant(company_name: str, role: str | None) -> str:
     return OPENER_VARIANTS[digest[0] % len(OPENER_VARIANTS)]
 
 
-# Plain wording per topic for when the question writer is unavailable. {c} is "your customers"
-# or, once the industry is known, "your <industry> customers".
+# Plain wording per topic for when the question writer is unavailable.
 FALLBACK_ASKS = {
-    "industries": "What kinds of businesses buy from you? A few examples help.",
+    "product": "What does your business do, and what is your part in it?",
+    "business_model": "Do you mainly work with businesses, with individuals and families, or both?",
+    "how_we_work": "How does a job usually run for you, from first contact to getting paid?",
+    "lead_sources": "Where do new customers usually come from?",
+    "value_proposition": "Why do customers pick you over others?",
+    "customer_profile": "Who are your typical customers? Think age, household, budget, what they want.",
+    "industries": "What kinds of businesses buy from you?",
     "company_size": "Roughly how big are {c}? Think headcount.",
     "revenue_range": "Roughly how much revenue do {c} make in a year?",
     "geographies": "Which countries or regions do {c} mostly come from?",
@@ -131,7 +136,7 @@ FALLBACK_ASKS = {
     "budget_range": "What kind of budget do {c} usually have for this?",
     "deal_size": "What does a typical deal with {c} look like in value?",
     "purchase_frequency": "How often do {c} buy from you?",
-    "buyer_roles": "Who on the {c} side usually decides or has a say?",
+    "buyer_roles": "Who usually makes the decision when {c} buy?",
     "sales_cycle": "How long does it usually take from first chat to a deal with {c}?",
     "objections": "What makes {c} hesitate or say no?",
     "buying_triggers": "What usually makes {c} reach out to you at that moment?",
@@ -142,10 +147,12 @@ FALLBACK_ASKS = {
 }
 
 
-def fallback_question(slot_key: str, asked_before: int = 0, industry: str = "") -> Question:
-    slot = SLOTS[slot_key]
-    customers = f"your {industry} customers" if industry else "your customers"
-    ask = FALLBACK_ASKS.get(slot_key)
+def fallback_question(
+    slot_key: str, asked_before: int = 0, slot: SlotDef | None = None
+) -> Question:
+    slot = slot or SLOTS[slot_key]
+    customers = "your customers"
+    ask = FALLBACK_ASKS.get(slot_key) if slot_key in SLOTS else slot.description
     if ask is None:
         ask = f"What can you tell me about {slot.label.lower()}? {slot.description}."
     text = ask.format(c=customers)
@@ -167,10 +174,6 @@ FOLLOW_UP_HINT = (
     "one question only, "
     "and put two or three short examples in options. Do not repeat the earlier wording."
 )
-
-
-def _industry(state: SessionState) -> str:
-    return state.domain.industry if state.domain else ""
 
 
 def _domain_lines(state: SessionState) -> list[str]:
@@ -226,7 +229,7 @@ async def generate_question(
     declined: bool = False,
     labels: dict[str, str] | None = None,
 ) -> QuestionResult:
-    slot = SLOTS[slot_key]
+    slot = state.slot_def(slot_key) or SLOTS[slot_key]
     lines = [
         *_domain_lines(state),
         f"Target slot: {slot.label} ({slot.description})",
@@ -256,13 +259,11 @@ async def generate_question(
         )
     except LLMError as exc:
         log.warning("question writer failed, using the fixed text: %s", exc)
-        return QuestionResult(
-            fallback_question(slot_key, asked_before, _industry(state)), used_fallback=True
-        )
+        return QuestionResult(fallback_question(slot_key, asked_before, slot), used_fallback=True)
     text = _compose(result.parsed, asked)
     if text is None:
         return QuestionResult(
-            fallback_question(slot_key, asked_before, _industry(state)),
+            fallback_question(slot_key, asked_before, slot),
             result.usage,
             result.cost_usd,
             cfg.model,
@@ -548,7 +549,7 @@ async def generate_probe(
 ) -> QuestionResult:
     """The answer to a slot question was vague or partial: show we understood it and ask for
     the missing detail, instead of moving on to another topic."""
-    slot = SLOTS[slot_key]
+    slot = state.slot_def(slot_key) or SLOTS[slot_key]
     lines = [
         *_domain_lines(state),
         f"Target slot: {slot.label} ({slot.description})",
@@ -560,7 +561,7 @@ async def generate_probe(
     lines.append(PROBE_HINT)
     lines += _asked_lines(asked)
     cfg = config.step("question")
-    fallback = fallback_question(slot_key, asked_before=1, industry=_industry(state))
+    fallback = fallback_question(slot_key, asked_before=1, slot=slot)
     try:
         result = await llm.generate(
             step="question",

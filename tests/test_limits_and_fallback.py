@@ -95,6 +95,7 @@ def test_the_form_asks_every_blocking_tier_a_slot_as_required():
     assert required == {
         "industries", "company_size", "revenue_range", "geographies", "pain_points",
         "desired_outcomes", "buyer_roles", "buyer_departments", "disqualifiers",
+        "product", "business_model", "customer_profile",
     }  # fmt: skip
     size = next(f for f in form if f.key == "company_size")
     assert "1-10" in size.choices

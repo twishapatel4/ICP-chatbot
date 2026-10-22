@@ -13,7 +13,6 @@ from sqlalchemy.exc import IntegrityError
 
 from icp_chatbot.config import Settings
 from icp_chatbot.domain.signup import SignupInfo
-from icp_chatbot.domain.slots import SLOTS
 from icp_chatbot.domain.state import (
     NONE_IS_AN_ANSWER,
     SessionState,
@@ -421,7 +420,7 @@ class InterviewEngine:
     def _probe_slot(state: SessionState, previous_vague: bool) -> str | None:
         """The slot just asked about, if the answer was vague or partial and worth a follow-up."""
         key = state.pending_slot
-        slot = SLOTS.get(key) if key and state.pending_kind == "slot" else None
+        slot = state.slot_def(key) if key and state.pending_kind == "slot" else None
         if slot is None or not (slot.blocks or slot.importance >= PROBE_MIN_IMPORTANCE):
             return None
         if key in state.skipped or state.mode != "quick":

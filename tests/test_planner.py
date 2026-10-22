@@ -22,7 +22,7 @@ def fill_tier_a(state):
 
 
 def test_empty_state_asks_the_most_important_tier_a_slot_first():
-    assert plan_next(SessionState(), CAPS) == Ask("industries")  # importance 1.0, first in order
+    assert plan_next(SessionState(), CAPS) == Ask("product")  # what the company does comes first
 
 
 def test_known_slots_are_not_asked_and_lower_confidence_is_asked_sooner():
@@ -42,7 +42,8 @@ def test_buyer_slots_are_skipped_for_b2c_companies():
     ]
     assert not any(s.key.startswith("buyer_") for s in blocking_slots_for(state))
     for slot in fill_tier_a_except_buyers:
-        known(state, slot.key)
+        if slot.key != "business_model":
+            known(state, slot.key)
     assert tier_a_complete(state)
 
 

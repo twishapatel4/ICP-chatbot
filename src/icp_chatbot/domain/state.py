@@ -6,7 +6,13 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from icp_chatbot.domain.slots import SLOTS, SlotDef
+from icp_chatbot.domain.slots import (
+    SLOT_LIST,
+    SLOTS,
+    CustomField,
+    SlotDef,
+    with_custom,
+)
 
 SEED_CONFIDENCE_CAP = 0.5  # inferred values never exceed this until the user confirms them
 CONFIRMED_CONFIDENCE = 0.9  # confidence once the user confirms a value
@@ -81,11 +87,17 @@ class DomainContext(BaseModel):
     industry: str
     brief: str = ""  # buyer roles, pains, tools, triggers and vocabulary typical for the industry
     focus: list[str] = Field(default_factory=list)  # things that decide fit in this industry
+    fields: list[CustomField] = Field(default_factory=list)  # what this industry needs to know
+    not_needed: list[str] = Field(default_factory=list)  # standard slots that do not matter here
 
     def prompt_lines(self) -> str:
         lines = f"Industry of this company: {self.industry}"
         if self.brief:
             lines += f"\nWhat is typical in this industry (background, not facts about them): {self.brief}"
+        if self.fields:
+            lines += "\nFields this industry needs (asked about one by one): " + "; ".join(
+                f"{f.key} = {f.label}" for f in self.fields
+            )
         if self.focus:
             lines += (
                 "\nWhat decides who is a good customer in this industry (build the question "
@@ -137,8 +149,19 @@ class SessionState(BaseModel):
         value = self.slots.get(key)
         return list(value.values) if value else []
 
+    def slot_defs(self) -> list[SlotDef]:
+        return with_custom(self.domain.fields) if self.domain else list(SLOT_LIST)
+
+    def slot_def(self, key: str) -> SlotDef | None:
+        if key in SLOTS:
+            return SLOTS[key]
+        return next((s for s in self.slot_defs() if s.key == key), None)
+
     def is_applicable(self, slot: SlotDef) -> bool:
-        """A slot is skipped when a skip rule matches a value already known (e.g. B2C)."""
+        """A slot is skipped when this industry does not need it, or when a skip rule matches a
+        value already known (e.g. B2C)."""
+        if self.domain and slot.key in self.domain.not_needed:
+            return False
         for other_key, other_value in slot.skip_if:
             if any(v.lower() == other_value.lower() for v in self.values(other_key)):
                 return False

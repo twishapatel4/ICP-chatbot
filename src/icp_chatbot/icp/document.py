@@ -4,7 +4,15 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from icp_chatbot.domain.slots import SECTION_ORDER, SLOT_LIST, SLOTS, Tier
+from icp_chatbot.domain.slots import (
+    SECTION_ORDER,
+    SLOT_LIST,
+    SLOTS,
+    CustomField,
+    SlotDef,
+    Tier,
+    with_custom,
+)
 from icp_chatbot.domain.state import SlotSource, real_values
 from icp_chatbot.icp.scoring import ScoringModel
 
@@ -33,6 +41,15 @@ class ICPDocument(BaseModel):
     completeness: Completeness
     open_questions: list[str] = Field(default_factory=list)
     built_at_turn: int = 0  # answers received when the bot built this version
+    custom_fields: list[CustomField] = Field(default_factory=list)  # this industry's own fields
+    not_needed: list[str] = Field(default_factory=list)  # standard fields this industry skips
+
+    def slot_defs(self) -> list[SlotDef]:
+        return with_custom(self.custom_fields)
+
+    def needed_defs(self) -> list[SlotDef]:
+        """The fields this industry cares about: completeness and gaps ignore the rest."""
+        return [s for s in self.slot_defs() if s.key not in self.not_needed]
 
     def entries(self) -> dict[str, FieldEntry]:
         return {slot: e for section in self.sections.values() for slot, e in section.items()}
@@ -41,13 +58,16 @@ class ICPDocument(BaseModel):
         return {slot: e.values for slot, e in self.entries().items() if e.values}
 
 
-def group_by_section(entries: dict[str, FieldEntry]) -> dict[str, dict[str, FieldEntry]]:
+def group_by_section(
+    entries: dict[str, FieldEntry], defs: list[SlotDef] | None = None
+) -> dict[str, dict[str, FieldEntry]]:
     """Place entries in their sections, in registry order; empty sections are omitted."""
+    defs = defs or with_custom([])
     grouped: dict[str, dict[str, FieldEntry]] = {}
     for section in SECTION_ORDER:
         fields = {
             s.key: entries[s.key]
-            for s in SLOT_LIST
+            for s in defs
             if s.section == section and s.key in entries and entries[s.key].values
         }
         if fields:
@@ -70,32 +90,37 @@ def _is_known(slot, entries: dict[str, FieldEntry]) -> bool:
     )
 
 
-def missing_slots(entries: dict[str, FieldEntry], limit: int = 5) -> list[str]:
+def missing_slots(
+    entries: dict[str, FieldEntry], limit: int = 5, defs: list[SlotDef] | None = None
+) -> list[str]:
     """Plain-language notes for the tier A and B fields that are still unknown (not recorded,
     only a non-answer, or below the known confidence), most important first. Worked out from the
     data, so the list does not depend on what the model remembers to mention."""
     gaps = [
         s
-        for s in SLOT_LIST
+        for s in defs or SLOT_LIST
         if s.tier in (Tier.A, Tier.B) and _applicable(s, entries) and not _is_known(s, entries)
     ]
     gaps.sort(key=lambda s: (s.tier != Tier.A, -s.importance))
     return [f"Not yet known: {s.label.lower()}. {s.description.rstrip('.')}." for s in gaps[:limit]]
 
 
-def compute_completeness(entries: dict[str, FieldEntry]) -> Completeness:
+def compute_completeness(
+    entries: dict[str, FieldEntry], defs: list[SlotDef] | None = None
+) -> Completeness:
     def share(slots) -> float:
         slots = [s for s in slots if _applicable(s, entries)]
         if not slots:
             return 1.0
         return round(sum(1 for s in slots if _is_known(s, entries)) / len(slots), 4)
 
-    tier_a = [s for s in SLOT_LIST if s.tier == Tier.A and s.blocks]
-    tier_b = [s for s in SLOT_LIST if s.tier == Tier.B]
+    defs = defs or list(SLOT_LIST)
+    tier_a = [s for s in defs if s.tier == Tier.A and s.blocks]
+    tier_b = [s for s in defs if s.tier == Tier.B]
     return Completeness(tier_a=share(tier_a), tier_b=share(tier_b))
 
 
-def render_summary(entries: dict[str, FieldEntry]) -> str:
+def render_summary(entries: dict[str, FieldEntry], defs: list[SlotDef] | None = None) -> str:
     """A readable summary generated only from the fields, so the two cannot disagree. Values that
     were inferred rather than stated are marked."""
 
@@ -108,12 +133,25 @@ def render_summary(entries: dict[str, FieldEntry]) -> str:
         return f"{text} (inferred)" if inferred else text
 
     lines = []
+    about = [
+        ("What they do", "product"),
+        ("sells to", "business_model"),
+        ("how they work", "how_we_work"),
+        ("clients come from", "lead_sources"),
+        ("chosen for", "value_proposition"),
+    ]
+    mine = "; ".join(f"{label}: {v}" for label, key in about if (v := show(key)))
+    if mine:
+        lines.append(f"About the company: {mine}.")
     parts = [
+        ("Who they are", "customer_profile"),
         ("Target industries", "industries"),
         ("company size", "company_size"),
         ("revenue", "revenue_range"),
         ("geographies", "geographies"),
     ]
+    own = [s for s in defs or [] if s.section == "industry_specifics" and show(s.key)]
+    parts += [(s.label.lower(), s.key) for s in own]
     firm = "; ".join(f"{label}: {v}" for label, key in parts if (v := show(key)))
     if firm:
         lines.append(f"Ideal customer: {firm}.")

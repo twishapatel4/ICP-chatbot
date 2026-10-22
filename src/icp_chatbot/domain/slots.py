@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
+from pydantic import BaseModel, Field
+
 
 class Tier(StrEnum):
     A = "A"  # must be asked
@@ -21,6 +23,7 @@ SECTION_ORDER = (
     "buying_structure",
     "intent_and_timing",
     "success_and_exclusions",
+    "industry_specifics",  # fields that only this company's industry needs
 )
 
 SIZE_BANDS = ("1-10", "11-50", "51-200", "201-1,000", "1,001-5,000", "5,000+")
@@ -65,26 +68,88 @@ class SlotDef:
         return self.blocks_completion
 
 
+class CustomField(BaseModel):
+    """A field this industry needs, chosen during the interview rather than fixed in advance."""
+
+    key: str  # snake_case, never one of the standard keys
+    label: str
+    ask: str  # a plain question for someone in this industry, used if the writer is unavailable
+    importance: float = Field(0.7, ge=0.0, le=1.0)
+    choices: list[str] = Field(default_factory=list)
+
+
+def custom_slot_def(field: CustomField, important: bool) -> SlotDef:
+    return SlotDef(
+        field.key,
+        "industry_specifics",
+        field.label,
+        field.ask,
+        Tier.A if important else Tier.B,
+        field.importance,
+        choices=tuple(field.choices),
+    )
+
+
+CUSTOM_BLOCKING = 3  # how many of an industry's own fields must be known before we can stop
+
+
+def with_custom(fields: list[CustomField]) -> list[SlotDef]:
+    """The standard slots plus the fields this industry needs (the strongest ones block)."""
+    ranked = sorted(fields, key=lambda f: -f.importance)
+    important = {f.key for f in ranked[:CUSTOM_BLOCKING]}
+    return [*SLOT_LIST, *(custom_slot_def(f, f.key in important) for f in fields)]
+
+
 def _s(key, section, label, description, tier, importance=0.5, **kw) -> SlotDef:
     return SlotDef(key, section, label, description, Tier(tier), importance, **kw)
 
 
 _B2C = (("business_model", "B2C"),)
+_B2B = (("business_model", "B2B"),)
 
 SLOT_LIST: tuple[SlotDef, ...] = (
     # 1. Seller context (inferred from signup and the website, not asked)
-    _s("product", "seller_context", "Product or offering", "What the company sells", "C", 0.9),
+    _s(
+        "product",
+        "seller_context",
+        "What the company does",
+        "What the company does or sells, and the role it plays (for example broker, maker, agency)",
+        "A",
+        1.0,
+    ),
     _s(
         "business_model",
         "seller_context",
-        "Business model",
-        "B2B, B2C or both",
-        "C",
-        0.9,
+        "Who they sell to",
+        "Businesses (B2B), individuals or families (B2C), or both",
+        "A",
+        0.95,
         choices=BUSINESS_MODELS,
+        single_choice=True,
     ),
     _s(
-        "value_proposition", "seller_context", "Value proposition", "Why customers buy it", "C", 0.5
+        "how_we_work",
+        "seller_context",
+        "How the company works",
+        "How the company delivers and earns: its steps from first contact to a closed deal, and how it is paid",
+        "B",
+        0.85,
+    ),
+    _s(
+        "lead_sources",
+        "seller_context",
+        "How customers find them",
+        "Where new customers come from today (referrals, ads, walk-ins, partners, outreach)",
+        "B",
+        0.6,
+    ),
+    _s(
+        "value_proposition",
+        "seller_context",
+        "Why customers choose them",
+        "Why customers pick this company over others",
+        "B",
+        0.6,
     ),
     _s(
         "online_presence",
@@ -96,12 +161,22 @@ SLOT_LIST: tuple[SlotDef, ...] = (
     ),
     # 2. Target firmographics
     _s(
+        "customer_profile",
+        "target_firmographics",
+        "Who the customers are",
+        "For individual or family customers: who they are (life stage, household, income, where they live, what they want)",
+        "A",
+        1.0,
+        skip_if=_B2B,
+    ),
+    _s(
         "industries",
         "target_firmographics",
         "Target industries and sub-industries",
         "Industries of the companies to sell to",
         "A",
         1.0,
+        skip_if=_B2C,
     ),
     _s(
         "company_size",
@@ -112,6 +187,7 @@ SLOT_LIST: tuple[SlotDef, ...] = (
         0.9,
         choices=SIZE_BANDS,
         single_choice=True,
+        skip_if=_B2C,
     ),
     _s(
         "revenue_range",
@@ -122,6 +198,7 @@ SLOT_LIST: tuple[SlotDef, ...] = (
         0.6,
         choices=REVENUE_BANDS,
         single_choice=True,
+        skip_if=_B2C,
     ),
     _s(
         "geographies",

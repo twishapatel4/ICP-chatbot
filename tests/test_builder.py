@@ -140,6 +140,8 @@ async def test_a_low_confidence_or_non_answer_field_is_listed_as_unknown():
     state = SessionState()
     state.slots["pain_points"] = slot(["price sensitivity"], 0.6)
     state.slots["buyer_roles"] = slot(["none"])
+    state.slots["product"] = slot(["flats"])
+    state.slots["business_model"] = slot(["B2B"])
     result = await build_icp(FakeLLM({"final_icp": [ICPSynthesis()]}), CONFIG, state, today=TODAY)
     text = " ".join(result.document.open_questions).lower()
     assert "pain points" in text and "buyer roles" in text
