@@ -3,6 +3,7 @@
 Plain code, no model. Deterministic: ties resolve by registry order.
 """
 
+import hashlib
 from dataclasses import dataclass
 
 from icp_chatbot.domain.slots import SLOT_LIST, STOP_TOPICS, SlotDef, Tier
@@ -16,6 +17,21 @@ MIN_TOPICS = 3  # quick mode needs at least this many tier B topics asked
 
 QUICK_WEIGHTS = {Tier.A: 1.0, Tier.B: 0.5}
 DETAIL_WEIGHTS = {Tier.D: 1.0, Tier.A: 0.6, Tier.B: 0.4}
+
+
+LATE_SLOTS = frozenset({"disqualifiers"})  # too abrupt as an early question
+LATE_AFTER = 5  # questions asked before a late slot is welcome
+LATE_FACTOR = 0.3
+JITTER_LOW, JITTER_SPAN = 0.6, 0.8  # a session's own shuffle scales each slot by 0.6 to 1.4
+
+
+def order_jitter(state: SessionState, slot: SlotDef) -> float:
+    """Stable per session and slot, so each interview visits its topics in its own order."""
+    if not state.order_seed:
+        return 1.0
+    early = slot.key in LATE_SLOTS and state.questions_asked < LATE_AFTER
+    digest = hashlib.sha256(f"{state.order_seed}:{slot.key}".encode()).digest()
+    return (JITTER_LOW + JITTER_SPAN * digest[0] / 255) * (LATE_FACTOR if early else 1.0)
 
 
 @dataclass(frozen=True)
@@ -39,7 +55,9 @@ Plan = Ask | Stop
 
 
 def blocking_slots_for(state: SessionState) -> list[SlotDef]:
-    return [s for s in SLOT_LIST if s.blocks and state.is_applicable(s)]
+    return [
+        s for s in SLOT_LIST if s.blocks and state.is_applicable(s) and s.key not in state.skipped
+    ]
 
 
 def tier_a_complete(state: SessionState) -> bool:
@@ -65,7 +83,7 @@ def plan_next(state: SessionState, caps: Caps) -> Plan:
     best_score = 0.0
     for slot in SLOT_LIST:
         weight = weights.get(slot.tier)
-        if not weight or not state.is_applicable(slot):
+        if not weight or not state.is_applicable(slot) or slot.key in state.skipped:
             continue
         contradicted = slot.key in state.contradictions
         confidence = state.confidence(slot.key)
@@ -82,7 +100,7 @@ def plan_next(state: SessionState, caps: Caps) -> Plan:
             continue
         if asked >= MAX_ASKS_PER_SLOT:
             continue
-        score = weight * slot.importance * (1.0 - confidence)
+        score = weight * slot.importance * (1.0 - confidence) * order_jitter(state, slot)
         if asked and slot.key == state.pending_slot:
             score *= 0.4  # just asked and not answered: other topics go first, then come back
         if score > best_score:

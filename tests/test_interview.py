@@ -57,7 +57,9 @@ async def world():
     repo = Repo(make_session_factory(engine_db))
     llm = FakeLLM({}, Usage(100, 10, 0, 0))
     enrichment = FakeEnrichment()
-    engine = InterviewEngine(repo=repo, llm=llm, enrichment=enrichment, settings=SETTINGS)
+    engine = InterviewEngine(
+        repo=repo, llm=llm, enrichment=enrichment, settings=SETTINGS, vary_order=False
+    )
     yield engine, repo, llm, enrichment
     await engine_db.dispose()
 
@@ -532,3 +534,106 @@ async def test_an_answer_that_also_asks_a_question_gets_the_reply_in_front_of_th
     llm.queue("question", QuestionOutput(question="Which regions?", reply="Often, yes."))
     result = await engine.answer(T, sid, "Banks. Do banks buy this a lot?")
     assert result.question.text == "Often, yes. Which regions?"
+
+
+async def test_a_vague_answer_gets_clarifying_follow_ups_while_the_user_keeps_giving_more(world):
+    engine, repo, llm, _ = world
+    state = pending(
+        SessionState(questions_asked=3, best_customer_asked=True), "Which industries?", "slot",
+        "industries",
+    )  # fmt: skip
+    sid = await preset(repo, state)
+    llm.queue("extraction", ext(up("industries", ["bigger companies"], 0.3)))
+    llm.queue("question", QuestionOutput(question="Bigger how? Roughly how many people?"))
+    result = await engine.answer(T, sid, "bigger companies mostly")
+    assert result.question.slot == "industries" and "Bigger how" in result.question.text
+    assert result.questions_asked == 3  # a clarification does not use up a question
+    assert "did not answer the question fully" in llm.calls_for("question")[0].user
+
+    for reply, confidence in (("banks i guess", 0.45), ("retail banks", 0.6)):  # still improving
+        llm.queue("extraction", ext(up("industries", [reply], confidence)))
+        llm.queue("question", q("Which kind exactly?"))
+        result = await engine.answer(T, sid, reply)
+        assert result.question.slot == "industries"
+    assert (await repo.get_session(T, sid)).state.probes["industries"] == 3
+
+
+async def test_clarifying_stops_when_the_user_gets_nowhere_twice(world):
+    engine, repo, llm, _ = world
+    state = pending(
+        SessionState(questions_asked=3, best_customer_asked=True), "Which industries?", "slot",
+        "industries",
+    )  # fmt: skip
+    sid = await preset(repo, state)
+    llm.queue("extraction", ext(up("industries", ["companies"], 0.3)))
+    llm.queue("question", q("Which kind of companies?"))
+    await engine.answer(T, sid, "companies")  # probe 1
+    llm.queue("extraction", ext(up("industries", ["companies"], 0.3)))
+    llm.queue("question", q("Can you name one?"))
+    result = await engine.answer(T, sid, "companies, you know")  # nothing new: one more try
+    assert result.question.slot == "industries"
+    llm.queue("extraction", ext(up("industries", ["companies"], 0.3)))
+    llm.queue("question", q("Which regions?"))
+    result = await engine.answer(T, sid, "just companies")  # nothing new again: let it go
+    assert result.question.slot != "industries"
+
+
+async def test_a_firm_refusal_moves_on_at_once_and_is_never_asked_again(world):
+    engine, repo, llm, _ = world
+    state = pending(
+        SessionState(questions_asked=3, best_customer_asked=True), "Which industries?", "slot",
+        "industries",
+    )  # fmt: skip
+    sid = await preset(repo, state)
+    llm.queue("extraction", ext(flags=Flags(refuses=True)))
+    llm.queue("question", q("Understood. Which regions?"))
+    result = await engine.answer(T, sid, "I'd rather not say")
+    assert result.question.slot not in (None, "industries")
+    assert "chose not to answer" in llm.calls_for("question")[0].user
+    record = await repo.get_session(T, sid)
+    assert record.state.skipped == ["industries"] and not record.state.probes
+    assert "industries" not in {a for a in record.state.asked_slots if a != "industries"}
+    from icp_chatbot.engine.planner import Ask, Caps, plan_next
+
+    for _ in range(5):  # the planner never comes back to it
+        record.state.questions_asked = 3
+        plan = plan_next(record.state, Caps())
+        assert not (isinstance(plan, Ask) and plan.slot == "industries")
+        if isinstance(plan, Ask):
+            record.state.asked_slots[plan.slot] = record.state.asked_slots.get(plan.slot, 0) + 1
+
+
+async def test_a_refusal_of_the_opener_skips_its_follow_up(world):
+    engine, repo, llm, _ = world
+    llm.queue("opener", q("Opener?"))
+    first = await started(world)
+    llm.queue("extraction", ext(flags=Flags(refuses=True)))
+    llm.queue("question", q("Understood. Who is a customer you like?"))
+    second = await engine.answer(T, first.session_id, "skip this")
+    assert second.question.kind == "best_customer"
+
+
+async def test_an_answer_that_filled_other_slots_is_not_pressed_on_the_asked_one(world):
+    engine, repo, llm, _ = world
+    sid = await preset(
+        repo,
+        pending(SessionState(questions_asked=3, best_customer_asked=True), "Pains?", "slot", "pain_points"),
+    )  # fmt: skip
+    llm.queue("extraction", ext(up("buyer_roles", ["CFO"])))
+    llm.queue("question", q("Which regions?"))
+    result = await engine.answer(T, sid, "CFOs")
+    assert result.question.slot != "pain_points"
+
+
+async def test_the_best_customer_question_is_due_at_the_sessions_own_position(world):
+    engine, repo, llm, _ = world
+    state = pending(SessionState(questions_asked=1, best_customer_at=3), "Opener?", "opener")
+    sid = await preset(repo, state)
+    llm.queue("extraction", ext(up("product", ["Payroll"])))
+    llm.queue("question", q("Which regions?"))
+    second = await engine.answer(T, sid, "payroll")
+    assert second.question.kind != "best_customer"  # not yet due: a planned topic comes first
+    llm.queue("extraction", ext(up("geographies", ["Europe"])))
+    llm.queue("question", q("Who is your best customer?"))
+    third = await engine.answer(T, sid, "Europe")
+    assert third.question.kind == "best_customer"

@@ -96,9 +96,15 @@ class SessionState(BaseModel):
     summary: str = ""
     last_turns: list[TurnPair] = Field(default_factory=list)  # at most the last two
     asked_slots: dict[str, int] = Field(default_factory=dict)  # slot key -> times asked
+    probes: dict[str, int] = Field(default_factory=dict)  # slot -> clarifying follow-ups asked
+    probe_conf: dict[str, float] = Field(default_factory=dict)  # slot -> confidence when probed
+    stalls: dict[str, int] = Field(default_factory=dict)  # slot -> probes in a row that got nowhere
+    skipped: list[str] = Field(default_factory=list)  # slots the user firmly declined to answer
     followups: dict[str, int] = Field(default_factory=dict)  # question kind -> follow-ups asked
     contradictions: list[str] = Field(default_factory=list)
     best_customer_asked: bool = False
+    best_customer_at: int = 2  # the question number at which the best-customer question is due
+    order_seed: int = 0  # non-zero: this session asks its topics in its own, shuffled order
     questions_asked: int = 0
     answers_received: int = 0
     detail_started_at: int | None = None  # questions_asked when detail mode began

@@ -56,7 +56,10 @@ async def world():
         await init_models(db)
         llm = FakeLLM({}, Usage(100, 10, 0, 0))
         app = create_app(
-            Settings(_env_file=None, **settings), llm=llm, fetcher=NoFetcher(), db_engine=db
+            Settings(_env_file=None, vary_question_order=False, **settings),
+            llm=llm,
+            fetcher=NoFetcher(),
+            db_engine=db,
         )
         client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
         built.append((client, db))

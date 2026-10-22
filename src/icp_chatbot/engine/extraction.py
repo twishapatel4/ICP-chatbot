@@ -45,6 +45,7 @@ class Flags(BaseModel):
     off_topic: bool = False
     contains_pii: bool = False
     wants_to_finish: bool = False
+    refuses: bool = False  # firmly declines to answer this question or asks to skip it
     asks_bot: str = ""  # a question the user put to us, in a few words; empty if none
 
 

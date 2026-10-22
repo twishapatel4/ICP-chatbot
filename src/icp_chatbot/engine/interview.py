@@ -5,6 +5,7 @@ optimistic version check, so two answers submitted at once cannot both be applie
 """
 
 import logging
+import random
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -12,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from icp_chatbot.config import Settings
 from icp_chatbot.domain.signup import SignupInfo
+from icp_chatbot.domain.slots import SLOTS
 from icp_chatbot.domain.state import (
     NONE_IS_AN_ANSWER,
     SessionState,
@@ -20,13 +22,14 @@ from icp_chatbot.domain.state import (
     is_non_answer,
 )
 from icp_chatbot.engine.extraction import ExtractionResult, Flags, apply_extraction, extract
-from icp_chatbot.engine.planner import Ask, Caps, plan_next
+from icp_chatbot.engine.planner import COMPLETION_CONFIDENCE, Ask, Caps, plan_next
 from icp_chatbot.engine.questions import (
     Question,
     QuestionResult,
     generate_best_customer,
     generate_followup,
     generate_opener,
+    generate_probe,
     generate_question,
     generate_reply,
 )
@@ -39,6 +42,10 @@ log = logging.getLogger(__name__)
 
 MAX_CONSECUTIVE_FAILURES = 2
 MAX_OFFTOPIC = 2
+MAX_STALLS = 2  # clarifications in a row that bring nothing new, then the interview moves on
+MAX_PROBES = 6  # absolute limit per slot, however well the user is engaging
+PROGRESS = 0.05  # confidence a clarification must add to count as progress
+PROBE_MIN_IMPORTANCE = 0.6
 MAX_USER_QUESTIONS = 6  # past this, questions are treated like any other off-track reply
 REDIRECT_PREFIX = "Let's get back to describing your ideal customer. "
 RETRY_PREFIX = "Sorry, I didn't catch that. "
@@ -127,12 +134,14 @@ class InterviewEngine:
         enrichment: Enrichment,
         settings: Settings,
         guard: Guard | None = None,
+        vary_order: bool = True,
     ):
         self._repo = repo
         self._llm = llm
         self._enrichment = enrichment
         self._settings = settings
         self._guard = guard or NullGuard()
+        self._vary_order = vary_order  # each session gets its own question order
         self._caps = Caps(
             quick_cap=settings.quick_mode_question_cap,
             detail_total_cap=settings.detail_mode_total_cap,
@@ -163,6 +172,9 @@ class InterviewEngine:
         config = await self.ensure_live_config()
 
         state = SessionState()
+        if self._vary_order:
+            state.order_seed = random.randint(1, 2**31 - 1)
+            state.best_customer_at = random.Random(state.order_seed).choice((2, 3, 4, 5))
         if signup.website:
             state.slots["online_presence"] = SlotValue(
                 values=[signup.website],
@@ -293,6 +305,15 @@ class InterviewEngine:
                 )
         elif flags.wants_to_finish:
             status, stop_reason = "completed", "user_finished"
+        elif flags.refuses and not applied:
+            # a firm no: respect it, never push, move on to the next topic
+            if target:
+                state.skipped.append(target) if target not in state.skipped else None
+            if question_kind in ("opener", "best_customer"):
+                state.followups[question_kind] = 1
+            status, stop_reason, question = await self._next(
+                state, config, False, labels, spend, flags.asks_bot, declined=True
+            )
         elif _declined(state, target, question_kind, text, applied):
             state.declines[target or question_kind] = 1  # ask once more, then move on
             question = Question(
@@ -341,7 +362,7 @@ class InterviewEngine:
         )
         return self._result(session_id, state, status, question, stop_reason)
 
-    async def _next(self, state, config, previous_vague, labels, spend, asked=""):
+    async def _next(self, state, config, previous_vague, labels, spend, asked="", declined=False):
         """Choose and write the next question. Returns (status, stop_reason, question)."""
         kind, question, user_asked = state.pending_kind, state.pending_question, asked
         if kind in ("opener", "best_customer") and previous_vague and not state.followups.get(kind):
@@ -354,16 +375,29 @@ class InterviewEngine:
                 spend.models["question"] = result.model
             self._record_question(state, result.question)
             return "active", None, result.question
-        if state.pending_kind == "opener" and not state.best_customer_asked:
+        if not state.best_customer_asked and state.questions_asked + 1 >= state.best_customer_at:
             state.best_customer_asked = True
             result = await generate_best_customer(
-                self._llm, config, state, asked=user_asked, labels=labels
+                self._llm, config, state, asked=user_asked, declined=declined, labels=labels
             )
             spend.add(result.usage, result.cost_usd)
             if result.model:
                 spend.models["question"] = result.model
             self._record_question(state, result.question)
             return "active", None, result.question
+        probe_slot = self._probe_slot(state, previous_vague)
+        if probe_slot:  # understand what they said before moving on
+            state.probes[probe_slot] = state.probes.get(probe_slot, 0) + 1
+            result = await generate_probe(
+                self._llm, config, state, probe_slot, asked=user_asked, labels=labels
+            )
+            spend.add(result.usage, result.cost_usd)
+            if result.model:
+                spend.models["question"] = result.model
+            q = result.question  # a clarification: same slot, so no new question is counted
+            state.pending_question, state.pending_options = q.text, list(q.options)
+            state.pending_multi = q.multi
+            return "active", None, q
         plan = plan_next(state, self._caps)
         if not isinstance(plan, Ask):
             return "completed", plan.reason, None
@@ -374,6 +408,7 @@ class InterviewEngine:
             plan.slot,
             previous_vague=previous_vague,
             asked=user_asked,
+            declined=declined,
             labels=labels,
         )
         spend.add(result.usage, result.cost_usd)
@@ -381,6 +416,29 @@ class InterviewEngine:
             spend.models["question"] = result.model
         self._record_question(state, result.question)
         return "active", None, result.question
+
+    @staticmethod
+    def _probe_slot(state: SessionState, previous_vague: bool) -> str | None:
+        """The slot just asked about, if the answer was vague or partial and worth a follow-up."""
+        key = state.pending_slot
+        slot = SLOTS.get(key) if key and state.pending_kind == "slot" else None
+        if slot is None or not (slot.blocks or slot.importance >= PROBE_MIN_IMPORTANCE):
+            return None
+        if key in state.skipped or state.mode != "quick":
+            return None
+        if state.last_turns and is_non_answer(state.last_turns[-1].answer):
+            return None  # a bare "no" or "not sure" is handled by the decline path
+        if key in state.probe_conf:  # they just answered a clarification: did it help?
+            gained = state.confidence(key) > state.probe_conf[key] + PROGRESS
+            state.stalls[key] = 0 if gained else state.stalls.get(key, 0) + 1
+        if state.stalls.get(key, 0) >= MAX_STALLS or state.probes.get(key, 0) >= MAX_PROBES:
+            return None  # the user is not getting anywhere with this one: let it go
+        # vague or empty, or a partial answer to this very slot; an answer that filled other
+        # slots and left this one untouched is not a reason to keep pressing
+        if previous_vague or 0 < state.confidence(key) < COMPLETION_CONFIDENCE:
+            state.probe_conf[key] = state.confidence(key)
+            return key
+        return None
 
     @staticmethod
     def _record_question(state: SessionState, question: Question) -> None:

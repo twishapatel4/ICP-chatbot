@@ -75,7 +75,7 @@ def create_app(
     enrichment = EnrichmentService(llm, fetcher, timeout_s=settings.enrichment_timeout_seconds)
     engine = InterviewEngine(
         repo=repo, llm=llm, enrichment=enrichment, settings=settings,
-        guard=BudgetGuard(repo, settings, clock),
+        guard=BudgetGuard(repo, settings, clock), vary_order=settings.vary_question_order,
     )  # fmt: skip
     limiter = RateLimiter(settings.requests_per_minute_per_tenant)
 

@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     detail_mode_total_cap: int = Field(15, ge=1)
     detail_mode_extra_questions: int = Field(5, ge=1)
     max_answer_chars: int = Field(2000, ge=1)
+    vary_question_order: bool = True  # every session asks its topics in its own order
 
     # Time budgets.
     enrichment_timeout_seconds: float = Field(5.0, gt=0)

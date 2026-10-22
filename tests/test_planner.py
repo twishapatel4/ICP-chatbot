@@ -120,3 +120,34 @@ def test_exhausted_when_nothing_is_left_to_ask():
 def test_a_slot_just_asked_and_not_answered_waits_behind_other_topics():
     state = SessionState(asked_slots={"pain_points": 1}, pending_slot="pain_points")
     assert plan_next(state, CAPS) != Ask("pain_points")
+
+
+def test_a_session_seed_changes_the_order_but_the_same_seed_gives_the_same_order():
+    from icp_chatbot.domain.state import SessionState
+    from icp_chatbot.engine.planner import Ask, Caps, plan_next
+
+    def order(seed):
+        state = SessionState(order_seed=seed)
+        out = []
+        for _ in range(6):
+            plan = plan_next(state, Caps())
+            assert isinstance(plan, Ask)
+            out.append(plan.slot)
+            state.asked_slots[plan.slot] = 1
+            state.pending_slot = plan.slot
+        return out
+
+    orders = {tuple(order(seed)) for seed in range(1, 12)}
+    assert len(orders) > 3  # sessions do not all ask in the same sequence
+    assert order(7) == order(7)
+    assert order(0) == order(0)
+
+
+def test_exclusions_are_not_asked_early_in_a_shuffled_session():
+    from icp_chatbot.domain.state import SessionState
+    from icp_chatbot.engine.planner import Ask, Caps, plan_next
+
+    for seed in range(1, 40):
+        state = SessionState(order_seed=seed, questions_asked=2)
+        plan = plan_next(state, Caps())
+        assert isinstance(plan, Ask) and plan.slot != "disqualifiers"

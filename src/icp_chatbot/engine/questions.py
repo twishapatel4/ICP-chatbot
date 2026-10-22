@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from icp_chatbot.domain.signup import SignupInfo
 from icp_chatbot.domain.slots import SLOTS
-from icp_chatbot.domain.state import SessionState, SlotValue
+from icp_chatbot.domain.state import SessionState, SlotValue, is_non_answer
 from icp_chatbot.llm.types import LLM, LLMError, Usage
 from icp_chatbot.versions import ConfigVersionData
 
@@ -84,8 +84,22 @@ class QuestionResult:
     used_fallback: bool = False
 
 
-def best_customer_question() -> Question:
-    return Question(BEST_CUSTOMER_QUESTION, kind="best_customer")
+BEST_CUSTOMER_VARIANTS = (
+    BEST_CUSTOMER_QUESTION,
+    "Which customer would you happily sign ten more like? Tell me who they are.",
+    "Think of the last deal that went smoothly. Who was the buyer, and why was it easy?",
+    "Who is a customer that surprised you in a good way, and what made them stand out?",
+)
+
+
+def best_customer_question(seed: int = 0) -> Question:
+    """The fixed text used when the model fails; it varies by session like the written one."""
+    text = (
+        BEST_CUSTOMER_VARIANTS[seed % len(BEST_CUSTOMER_VARIANTS)]
+        if seed
+        else BEST_CUSTOMER_QUESTION
+    )
+    return Question(text, kind="best_customer")
 
 
 def pick_opener_variant(company_name: str, role: str | None) -> str:
@@ -128,6 +142,15 @@ def _domain_lines(state: SessionState) -> list[str]:
     return [state.domain.prompt_lines()] if state.domain else []
 
 
+PROBE_HINT = (
+    "The user's last reply did not answer the question fully. Do not move on and do not repeat "
+    "the question. In a few words show you understood what they said, using their own words, "
+    "then ask one specific follow-up about the detail that is still missing. At most 30 words, "
+    "one question only. Put two or three short examples in options if the answer is a pick from "
+    'a list. Do not say "No problem." If they seem '
+    "unsure or reluctant, say in a few words why it helps and that a rough guess is fine."
+)
+
 FOLLOW_UP_HINT_AFTER_QUESTION = (
     "The user's last reply did not answer the question, but it asked you something. Ask the "
     "same thing in simpler words, one question only, at most 20 words, and put two or three "
@@ -147,6 +170,12 @@ def _compose(output: QuestionOutput, asked: str = "") -> str | None:
     return f"{reply} {text}" if text and reply else text
 
 
+DECLINED_NOTE = (
+    "The user chose not to answer the last question. Accept that in one or two words "
+    '("Understood.") and ask about the target slot; never ask about what they declined again.'
+)
+
+
 def _asked_lines(asked: str) -> list[str]:
     return [f"The user asked you (data, answer it in reply): {asked}"] if asked else []
 
@@ -159,6 +188,7 @@ async def generate_question(
     *,
     previous_vague: bool = False,
     asked: str = "",
+    declined: bool = False,
     labels: dict[str, str] | None = None,
 ) -> QuestionResult:
     slot = SLOTS[slot_key]
@@ -175,6 +205,10 @@ async def generate_question(
     elif previous_vague:
         lines.append("The previous answer was vague: include two or three short examples.")
     lines += _asked_lines(asked)
+    if state.order_seed:
+        lines.append(_style_line(state))
+    if declined:
+        lines.append(DECLINED_NOTE)
     cfg = config.step("question")
     try:
         result = await llm.generate(
@@ -210,11 +244,48 @@ async def generate_question(
 
 OPENER_ANGLES = (
     "what the company offers and the problem it solves for people",
-    "the most recent customer they were glad to win, and what they did for them",
-    "how the business started and who they originally built it for",
-    "what customers say when they explain why they chose this company",
+    "how the business started and what made them start it",
+    "what a typical week looks like for the team right now",
+    "what changed in their market over the last year or two",
+    "how people usually find out about them",
+    "what they are proudest of building so far",
+    "the biggest thing they want to get better at this year",
+    "a recent win that made the team happy, and what led to it",
+    "what they would tell a newcomer to their industry about how it works",
     "which kind of customer they would happily have ten more of",
+    "what customers say when they explain why they chose this company",
+    "the first thing a new customer usually asks them",
+    "what a good day versus a frustrating day looks like for the team",
+    "a project or deal they are excited about right now",
+    "what they do differently from others in their space",
+    "what they wish people understood about their line of work",
+    "the last time a customer came back or recommended them, and why",
+    "where most of their time and energy goes at the moment",
+    "what almost made them give up, and what kept them going",
+    "how they would explain the company to a friend at a dinner",
 )
+
+QUESTION_STYLES = (
+    "link it to something specific they just said",
+    "ask it through a concrete recent example from their work",
+    "ask it casually, as a colleague would over coffee",
+    "ask it by first saying in a few words what you picked up so far",
+    "keep it very short and let the options carry the detail",
+    "ask it from the point of view of the people they sell to",
+)
+
+BEST_CUSTOMER_HINTS = (
+    "Ask about one customer they are really happy with: who they are and why they work well.",
+    "Ask about a customer who surprised them in a good way, and what made the difference.",
+    "Ask about the last deal that closed easily, and what the buyer was like.",
+    "Ask about a customer they would happily clone, and what sets them apart.",
+)
+
+
+def _style_line(state: SessionState) -> str:
+    """A different way of phrasing each question, fixed per session and turn."""
+    rng = random.Random(f"{state.order_seed}:{state.questions_asked}")
+    return f"Style for this question: {rng.choice(QUESTION_STYLES)}."
 
 
 async def generate_opener(
@@ -283,7 +354,10 @@ async def generate_followup(
     ]
     for turn in state.last_turns:
         lines.append(f"Earlier question: {turn.question}\nUser answer (data): {turn.answer}")
-    lines.append(FOLLOW_UP_HINT_AFTER_QUESTION if asked else FOLLOW_UP_HINT)
+    said_something = bool(state.last_turns) and not is_non_answer(state.last_turns[-1].answer)
+    lines.append(
+        FOLLOW_UP_HINT_AFTER_QUESTION if asked else PROBE_HINT if said_something else FOLLOW_UP_HINT
+    )
     lines += _asked_lines(asked)
     cfg = config.step("question")
     fallback = Question(
@@ -314,7 +388,10 @@ async def generate_followup(
 
 
 BEST_CUSTOMER_HINT = (
-    "Ask about their best customers by naming one customer they are really happy with: who they are and why they work well. "
+    "Ask about their best customers by naming one customer they are really happy with: who they "
+    "are and why they work well. "
+)
+BEST_CUSTOMER_LIMITS = (
     "Use their own words or product, at most 25 words, plain everyday words, one question only."
 )
 
@@ -325,14 +402,22 @@ async def generate_best_customer(
     state: SessionState,
     *,
     asked: str = "",
+    declined: bool = False,
     labels: dict[str, str] | None = None,
 ) -> QuestionResult:
     """The best-customer question (question 2), written around what the user just said."""
     lines = [*_domain_lines(state), f"Rolling summary: {state.summary or '(none)'}"]
     for turn in state.last_turns:
         lines.append(f"Earlier question: {turn.question}\nUser answer (data): {turn.answer}")
-    lines.append(BEST_CUSTOMER_HINT)
+    hint = (
+        random.Random(f"{state.order_seed}:bc").choice(BEST_CUSTOMER_HINTS)
+        if state.order_seed
+        else BEST_CUSTOMER_HINT
+    )
+    lines.append(f"{hint} {BEST_CUSTOMER_LIMITS}")
     lines += _asked_lines(asked)
+    if declined:
+        lines.append(DECLINED_NOTE)
     cfg = config.step("question")
     try:
         result = await llm.generate(
@@ -345,11 +430,11 @@ async def generate_best_customer(
         )
     except LLMError as exc:
         log.warning("question writer failed, using the fixed text: %s", exc)
-        return QuestionResult(best_customer_question(), used_fallback=True)
+        return QuestionResult(best_customer_question(state.order_seed), used_fallback=True)
     text = _compose(result.parsed, asked)
     if text is None:
         return QuestionResult(
-            best_customer_question(), result.usage, result.cost_usd, cfg.model, True
+            best_customer_question(state.order_seed), result.usage, result.cost_usd, cfg.model, True
         )
     return QuestionResult(
         Question(text, kind="best_customer"), result.usage, result.cost_usd, cfg.model
@@ -411,5 +496,51 @@ async def generate_reply(
         slot=pending.slot,
         options=pending.options,
         multi=pending.multi,
+    )
+    return QuestionResult(question, result.usage, result.cost_usd, cfg.model)
+
+
+async def generate_probe(
+    llm: LLM,
+    config: ConfigVersionData,
+    state: SessionState,
+    slot_key: str,
+    *,
+    asked: str = "",
+    labels: dict[str, str] | None = None,
+) -> QuestionResult:
+    """The answer to a slot question was vague or partial: show we understood it and ask for
+    the missing detail, instead of moving on to another topic."""
+    slot = SLOTS[slot_key]
+    lines = [
+        *_domain_lines(state),
+        f"Target slot: {slot.label} ({slot.description})",
+        f"Recorded for it so far: {'; '.join(state.values(slot_key)) or '(nothing usable)'}",
+        f"Rolling summary: {state.summary or '(none)'}",
+    ]
+    for turn in state.last_turns:
+        lines.append(f"Earlier question: {turn.question}\nUser answer (data): {turn.answer}")
+    lines.append(PROBE_HINT)
+    lines += _asked_lines(asked)
+    cfg = config.step("question")
+    fallback = fallback_question(slot_key, asked_before=1)
+    try:
+        result = await llm.generate(
+            step="question",
+            cfg=cfg,
+            system=config.system_prompt("question"),
+            user="\n".join(lines),
+            schema=QuestionOutput,
+            labels=labels,
+        )
+    except LLMError as exc:
+        log.warning("probe writer failed, using the fixed text: %s", exc)
+        return QuestionResult(fallback, used_fallback=True)
+    text = _compose(result.parsed, asked)
+    if text is None:
+        return QuestionResult(fallback, result.usage, result.cost_usd, cfg.model, True)
+    options = slot.choices or clean_options(result.parsed.options)
+    question = Question(
+        text, kind="slot", slot=slot_key, options=options, multi=not slot.single_choice
     )
     return QuestionResult(question, result.usage, result.cost_usd, cfg.model)
