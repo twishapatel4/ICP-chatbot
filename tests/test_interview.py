@@ -129,6 +129,40 @@ async def test_start_copies_the_seed_without_overriding_what_the_user_stated(wor
     assert run.outcome == "ok" and run.website == "https://acme.test"
 
 
+async def test_a_site_read_before_is_reused_not_fetched_again(world):
+    engine, repo, llm, enrichment = world
+    seed = {"product": SlotValue(values=["Payroll"], confidence=0.5, source=SlotSource.INFERRED)}
+    enrichment.outcome = EnrichmentOutcome(
+        "ok",
+        website="https://acme.test",
+        pages=["https://acme.test"],
+        seed=seed,
+        usage=Usage(500, 50, 0, 0),
+    )
+    llm.queue("opener", q("It looks like you sell payroll. Right?"))
+    llm.queue("opener", q("You sell payroll, correct?"))
+    await started(world, website="acme.test")
+    second = await started(world, website="https://acme.test")
+    assert enrichment.calls == 1  # the second signup used the saved read
+    record = await repo.get_session(T, second.session_id)
+    assert record.state.slots["product"].values == ["Payroll"]
+    assert record.usage.input_tokens == 100  # only the opener was paid for, not the site read
+    [run] = await repo.list_enrichment(T, second.session_id)
+    assert run.outcome == "ok" and run.seed["product"]["values"] == ["Payroll"]
+
+
+async def test_another_site_or_a_failed_read_is_not_reused(world):
+    engine, repo, llm, enrichment = world
+    enrichment.outcome = EnrichmentOutcome("failed", website="https://acme.test", detail="timeout")
+    llm.queue("opener", q("What do you sell?"))
+    llm.queue("opener", q("What do you sell?"))
+    llm.queue("opener", q("What do you sell?"))
+    await started(world, website="acme.test")
+    await started(world, website="acme.test")  # the first read failed: try the site again
+    await started(world, website="other.test")
+    assert enrichment.calls == 3
+
+
 async def test_a_guard_can_refuse_a_start(world):
     engine, *_ = world
 
@@ -214,9 +248,10 @@ async def test_the_interview_completes_when_tier_a_and_three_topics_are_done(wor
     state.asked_slots = {"tech_stack": 1, "deal_size": 1, "sales_cycle": 1}
     sid = await preset(repo, pending(state))
     llm.queue("extraction", ext())
+    llm.queue("question", q("Thanks, I have what I need to build your profile."))
     result = await engine.answer(T, sid, "fine")
     assert (result.status, result.stop_reason, result.icp_ready) == ("completed", "complete", True)
-    assert result.question is None
+    assert result.question.kind == "closing"  # written for this user, not a fixed line
     record = await repo.get_session(T, sid)
     assert record.status == "completed" and record.state.finished and record.ended_at is not None
 
@@ -230,6 +265,7 @@ async def test_the_quick_cap_ends_the_interview(world):
         ),
     )
     llm.queue("extraction", ext())
+    llm.queue("question", q("Thanks, I have what I need to build your profile."))
     result = await engine.answer(T, sid, "ok")
     assert (result.status, result.stop_reason) == ("completed", "cap")
 
@@ -238,6 +274,7 @@ async def test_a_request_to_finish_completes_the_interview(world):
     engine, repo, llm, _ = world
     sid = await preset(repo, pending(SessionState(questions_asked=4, best_customer_asked=True)))
     llm.queue("extraction", ext(flags=Flags(wants_to_finish=True)))
+    llm.queue("question", q("Thanks, I have what I need to build your profile."))
     result = await engine.answer(T, sid, "that's enough, thanks")
     assert (result.status, result.stop_reason) == ("completed", "user_finished")
 
@@ -329,7 +366,9 @@ async def test_a_bare_no_is_re_asked_once_politely_then_we_move_on(world):
         ),
     )
     llm.queue("extraction", ext(), ext())
-    llm.queue("question", q("Understood. Who usually signs off on a project like yours?"), q("Next?"))
+    llm.queue(
+        "question", q("Understood. Who usually signs off on a project like yours?"), q("Next?")
+    )
     first = await engine.answer(T, sid, "no")
     assert first.status == "active" and first.question.slot == "buyer_roles"
     assert first.question.text == "Understood. Who usually signs off on a project like yours?"
@@ -340,7 +379,12 @@ async def test_a_bare_no_is_re_asked_once_politely_then_we_move_on(world):
 
 async def test_the_re_ask_falls_back_to_the_fixed_text_when_the_model_fails(world):
     engine, repo, llm, _ = world
-    state = pending(SessionState(questions_asked=3, best_customer_asked=True), "Who buys?", "slot", "buyer_roles")
+    state = pending(
+        SessionState(questions_asked=3, best_customer_asked=True),
+        "Who buys?",
+        "slot",
+        "buyer_roles",
+    )
     sid = await preset(repo, state)
     llm.queue("extraction", ext())
     llm.queue("question", LLMError("api", "down"))
@@ -439,7 +483,7 @@ async def test_detail_mode_ends_after_five_more_questions(world):
     asked = 1
     while result.status == "active":
         result = await engine.answer(T, sid, "an answer")
-        asked += 1 if result.question else 0
+        asked += 1 if result.question and result.status == "active" else 0
     assert result.stop_reason == "detail_quota" and result.icp_ready
     assert asked == 5  # the opening detail question plus four more answers' questions
 
@@ -928,7 +972,7 @@ async def test_a_question_asked_as_the_interview_ends_is_still_answered(world):
     assert "what is MOQ?" in llm.calls_for("question")[0].user
 
 
-async def test_finishing_without_a_question_asked_has_no_closing_text(world):
+async def test_finishing_gets_a_closing_line_written_for_the_user(world):
     engine, repo, llm, _ = world
     state = pending(
         SessionState(questions_asked=SETTINGS.quick_mode_question_cap, best_customer_asked=True), "Who buys?", "slot",
@@ -936,8 +980,9 @@ async def test_finishing_without_a_question_asked_has_no_closing_text(world):
     )  # fmt: skip
     sid = await preset(repo, state)
     llm.queue("extraction", ext(up("geographies", ["Europe"])))
+    llm.queue("question", q("Thanks, I have what I need to build your profile."))
     result = await engine.answer(T, sid, "Europe")
-    assert result.status == "completed" and result.question is None
+    assert result.status == "completed" and result.question.kind == "closing"
 
 
 async def test_the_interview_ends_when_the_details_are_known_long_before_the_cap(world):
@@ -963,6 +1008,7 @@ async def test_the_interview_ends_when_the_details_are_known_long_before_the_cap
     state.asked_slots = {key: 1 for key in list(topics.values())[:3]}
     sid = await preset(repo, state)
     llm.queue("extraction", ext(up("product", ["payroll"])))
+    llm.queue("question", q("Thanks, I have what I need to build your profile."))
     result = await engine.answer(T, sid, "payroll")
     assert (result.status, result.stop_reason) == ("completed", "complete")
     assert result.questions_asked < SETTINGS.quick_mode_question_cap
@@ -1075,3 +1121,46 @@ async def test_refusing_an_exact_figure_asks_for_a_rough_range_once(world):
     assert "rough range" in llm.calls_for("question")[0].user
     second = await engine.answer(T, sid, "still no")
     assert second.question.text == "Next?"  # asked for a range once, then moved on
+
+
+async def test_a_stated_correction_replaces_the_value_without_asking_which_is_right(world):
+    engine, repo, llm, _ = world
+    state = pending(
+        SessionState(questions_asked=4, best_customer_asked=True), "Which industries?", "slot",
+        "industries",
+    )  # fmt: skip
+    state.slots["revenue_range"] = SlotValue(
+        values=["$1M-$10M"], confidence=0.9, source=SlotSource.STATED
+    )
+    sid = await preset(repo, state)
+    llm.queue(
+        "extraction",
+        ext(
+            up("revenue_range", ["<$1M"]),
+            flags=Flags(contradiction_slots=["revenue_range"]),
+        ),
+    )
+    llm.queue("question", q("Which regions?"))
+    result = await engine.answer(T, sid, "sorry, less than 1M")
+    record = await repo.get_session(T, sid)
+    assert record.state.slots["revenue_range"].values == ["<$1M"]
+    assert result.question.kind != "clarify" and not record.state.clarified
+
+
+async def test_an_ambiguous_change_still_asks_which_value_is_right(world):
+    engine, repo, llm, _ = world
+    state = pending(
+        SessionState(questions_asked=4, best_customer_asked=True), "Which industries?", "slot",
+        "industries",
+    )  # fmt: skip
+    state.slots["revenue_range"] = SlotValue(
+        values=["$1M-$10M"], confidence=0.9, source=SlotSource.STATED
+    )
+    sid = await preset(repo, state)
+    llm.queue(
+        "extraction",
+        ext(up("revenue_range", ["<$1M"]), flags=Flags(contradiction_slots=["revenue_range"])),
+    )
+    llm.queue("question", q("Earlier you said $1M-$10M, now under $1M. Which is right?"))
+    result = await engine.answer(T, sid, "actually under 1M for some of them")
+    assert result.question.kind == "clarify"

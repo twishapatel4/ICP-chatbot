@@ -56,6 +56,7 @@ class SlotDef:
     topic: str | None = None
     choices: tuple[str, ...] = ()
     single_choice: bool = False  # one answer only: the user picks one option, not several
+    open_ended: bool = False  # described in the user's own words: never offer suggested answers
     blocks_completion: bool | None = None  # default: tier A blocks, others do not
     skip_if: tuple[
         tuple[str, str], ...
@@ -134,6 +135,7 @@ SLOT_LIST: tuple[SlotDef, ...] = (
         "How the company delivers and earns: its steps from first contact to a closed deal, and how it is paid",
         "B",
         0.85,
+        open_ended=True,
     ),
     _s(
         "lead_sources",

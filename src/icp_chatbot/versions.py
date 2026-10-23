@@ -26,6 +26,11 @@ class ConfigVersionData(BaseModel):
     prompts: dict[str, str]
     steps: dict[str, StepSettings]
 
+    def with_code_prompts(self) -> "ConfigVersionData":
+        """The prompts always come from prompts.py, so editing that file is all it takes. The
+        stored version still decides the models and settings, and what a session is pinned to."""
+        return self.model_copy(update={"prompts": {**self.prompts, **DEFAULT_PROMPTS}})
+
     def prompt(self, step: str) -> str:
         return self.prompts[step]
 

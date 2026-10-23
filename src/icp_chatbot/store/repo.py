@@ -3,7 +3,7 @@ belong to another tenant (spec section 11.4)."""
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from sqlalchemy import delete, func, select, update
@@ -362,6 +362,27 @@ class Repo:
                 )
             )
 
+    async def cached_enrichment(self, website: str, max_age_days: int) -> EnrichmentRecord | None:
+        """The newest complete read of this website within max_age_days, from any session: a
+        public site gives the same seed again, so it need not be fetched and read twice."""
+        if max_age_days <= 0:
+            return None
+        oldest = self._clock() - timedelta(days=max_age_days)
+        async with self._factory() as s:
+            row = await s.scalar(
+                select(m.EnrichmentRun)
+                .where(
+                    m.EnrichmentRun.website == website,
+                    m.EnrichmentRun.outcome == "ok",
+                    m.EnrichmentRun.created_at >= oldest,
+                )
+                .order_by(m.EnrichmentRun.id.desc())
+                .limit(1)
+            )
+            if row is None or not row.seed:
+                return None
+            return EnrichmentRecord(row.website, row.pages, row.outcome, row.seed, row.duration_ms)
+
     async def list_enrichment(self, tenant_id: str, session_id: str) -> list[EnrichmentRecord]:
         async with self._factory() as s:
             await self._owned(s, tenant_id, session_id)
@@ -384,14 +405,14 @@ class Repo:
                 .order_by(m.ConfigVersionRow.version.desc())
                 .limit(1)
             )
-            return ConfigVersionData.model_validate(row.data) if row else None
+            return ConfigVersionData.model_validate(row.data).with_code_prompts() if row else None
 
     async def get_config(self, version: int) -> ConfigVersionData:
         async with self._factory() as s:
             row = await s.get(m.ConfigVersionRow, version)
             if row is None:
                 raise NotFound(f"config version {version}")
-            return ConfigVersionData.model_validate(row.data)
+            return ConfigVersionData.model_validate(row.data).with_code_prompts()
 
     async def publish_config(self, data: ConfigVersionData, *, author: str) -> None:
         """Make this version live and retire the previously live one."""

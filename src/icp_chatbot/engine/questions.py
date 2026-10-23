@@ -245,7 +245,7 @@ DECLINED_NOTE = (
     "something instead of answering. Do not push and never ask what they skipped again. Say in "
     "one friendly sentence, made for this person and what they just said, that you noticed they "
     "passed on it and that it is fine to come back to it later, with different wording each "
-    "time (never a stock phrase such as \"That is fine.\" alone). Then ask about the target slot."
+    'time (never a stock phrase such as "That is fine." alone). Then ask about the target slot.'
 )
 
 
@@ -265,6 +265,20 @@ def _message_lines(state: SessionState) -> list[str]:
 CLOSING_HINT = (
     "The user asked something just as the interview is finished. Put the answer in reply, and a "
     "short thank-you closing line in question (no question mark, nothing new to answer)."
+)
+
+
+CLOSING_NOTE_HINT = (
+    "The interview is ending and you have enough to build their profile. Write one or two "
+    "friendly sentences in question, made for this person: mention one real detail they told "
+    "you, say their profile is coming next and that they can change it afterwards. Never use a "
+    'stock line such as "Thanks, that is everything I need." No question mark.'
+)
+CLOSING_REVISION_HINT = (
+    "The user asked for changes to their profile, but nothing new could be taken from what they "
+    "said. Write one or two friendly sentences in question, made for this person: say you will "
+    "go ahead with the current profile for now and that they can modify it later. No question "
+    "mark, no stock line."
 )
 
 
@@ -335,7 +349,9 @@ async def generate_question(
             cfg.model,
             True,
         )
-    if slot.choices:  # fixed wording of the choices wins over the model's suggestions
+    if slot.open_ended:  # a story or a process: any option would be a whole answer, not a pick
+        options = ()
+    elif slot.choices:  # fixed wording of the choices wins over the model's suggestions
         options = slot.choices
     else:
         options = clean_options(result.parsed.options)
@@ -557,13 +573,13 @@ async def generate_followup(
     return QuestionResult(question, result.usage, result.cost_usd, cfg.model)
 
 
-REASK_HINT = (
+DECLINE_REASK_HINT = (
     "The user just declined to answer the question above (their reply is in the answers above). "
     "Write one short message in your own words, made for this person: take their no naturally, "
     "mention something specific they told you, say in one plain sentence why this question helps "
     "describe their best customers, then ask the same thing again in a different, easier way. "
-    "No stock phrases such as \"No worries\", \"thanks for being open\" or \"This one really "
-    "does help us\". At most 45 words, one question only."
+    'No stock phrases such as "No worries", "thanks for being open" or "This one really '
+    'does help us". At most 45 words, one question only.'
 )
 
 
@@ -585,7 +601,7 @@ async def generate_reask(
     question: Question,
     fallback_prefix: str,
     *,
-    hint: str = REASK_HINT,
+    hint: str = DECLINE_REASK_HINT,
     labels: dict[str, str] | None = None,
 ) -> QuestionResult:
     """The one retry after a bare "no": written for this user and this question each time. The
@@ -745,18 +761,20 @@ async def generate_closing(
     llm: LLM,
     config: ConfigVersionData,
     state: SessionState,
-    asked: str,
+    asked: str = "",
     *,
+    revision: bool = False,
     labels: dict[str, str] | None = None,
 ) -> QuestionResult | None:
-    """Answer what the user asked on the turn that ends the interview. None if the writer
-    fails: the interview then just ends."""
+    """The line that ends the interview, written for this user. When they asked something on the
+    last turn it answers that first. None if the writer fails: the interview then just ends and
+    the page shows its fixed closing line."""
     lines = [
         *_domain_lines(state),
         f"Rolling summary: {state.summary or '(none)'}",
         *_message_lines(state),
         *_asked_lines(asked),
-        CLOSING_HINT,
+        CLOSING_HINT if asked else CLOSING_REVISION_HINT if revision else CLOSING_NOTE_HINT,
     ]
     cfg = config.step("question")
     try:
@@ -772,6 +790,10 @@ async def generate_closing(
         log.warning("closing writer failed, ending without an answer: %s", exc)
         return None
     closing = _clean(result.parsed.question)
+    if closing is not None and not asked:
+        return QuestionResult(
+            Question(closing, kind="closing"), result.usage, result.cost_usd, cfg.model
+        )
     reply = _reply_text(result.parsed.reply, closing)
     if not reply or closing is None:
         return None
@@ -880,7 +902,7 @@ async def generate_probe(
     text = _compose(result.parsed, asked)
     if text is None:
         return QuestionResult(fallback, result.usage, result.cost_usd, cfg.model, True)
-    options = slot.choices or clean_options(result.parsed.options)
+    options = () if slot.open_ended else slot.choices or clean_options(result.parsed.options)
     question = Question(
         text, kind="slot", slot=slot_key, options=options, multi=not slot.single_choice
     )

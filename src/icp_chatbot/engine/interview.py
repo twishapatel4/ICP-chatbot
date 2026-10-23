@@ -27,6 +27,7 @@ from icp_chatbot.engine.extraction import (
     Thread,
     apply_extraction,
     extract,
+    is_correction,
     missed_question,
 )
 from icp_chatbot.engine.planner import COMPLETION_CONFIDENCE, Ask, Caps, plan_next
@@ -42,12 +43,12 @@ from icp_chatbot.engine.questions import (
     generate_followup,
     generate_opener,
     generate_probe,
-    generate_reask,
     generate_question,
+    generate_reask,
     generate_reply,
     generate_thread_question,
 )
-from icp_chatbot.enrichment.service import EnrichmentOutcome
+from icp_chatbot.enrichment.service import EnrichmentOutcome, website_for
 from icp_chatbot.llm.types import LLM, LLMError, Usage
 from icp_chatbot.store.repo import Repo
 from icp_chatbot.versions import ConfigVersionData, default_config
@@ -67,7 +68,7 @@ REVISION_CLARIFY = (
     "Which part is missing or not right? For example the industries, company size, regions, "
     "buyers, pain points or something else. Tell me what to add or change."
 )
-REDIRECT_PREFIX ="Let's get back to describing your ideal customer. "
+REDIRECT_PREFIX = "Let's get back to describing your ideal customer. "
 RETRY_NOTICE = (
     "I could not process your last message because my AI service is not responding right now. "
     "This is not about what you wrote. Please send it again."
@@ -230,6 +231,26 @@ class InterviewEngine:
 
     # -- start -----------------------------------------------------------------------------
 
+    async def _cached_enrichment(self, signup: SignupInfo) -> EnrichmentOutcome | None:
+        """An earlier read of the same website, so the site is not fetched and paid for again."""
+        site = website_for(signup)
+        if site is None:
+            return None
+        try:
+            cached = await self._repo.cached_enrichment(site, self._settings.enrichment_cache_days)
+        except Exception:  # the cache is only a shortcut: a failed lookup means read the site
+            log.exception("enrichment cache lookup failed")
+            return None
+        if cached is None:
+            return None
+        return EnrichmentOutcome(
+            cached.outcome,
+            website=site,
+            pages=list(cached.pages),
+            seed={k: SlotValue.model_validate(v) for k, v in cached.seed.items()},
+            detail="cached",
+        )
+
     async def start(self, tenant_id: str, signup: SignupInfo) -> TurnResult:
         await self._guard.check_start(tenant_id)
         await self._repo.ensure_tenant(tenant_id, signup.company_name)
@@ -251,7 +272,9 @@ class InterviewEngine:
         labels = self._labels(session_id, 0, config.version)
         spend = _Spend()
 
-        enrichment = await self._enrichment.run(signup, config, labels)
+        enrichment = await self._cached_enrichment(signup)
+        if enrichment is None:
+            enrichment = await self._enrichment.run(signup, config, labels)
         spend.add(enrichment.usage, enrichment.cost_usd)
         state.seed = dict(enrichment.seed)
         for key, value in enrichment.seed.items():
@@ -322,7 +345,12 @@ class InterviewEngine:
         if extraction:
             outcome = apply_extraction(state, extraction, turn_no, target)
             applied = outcome.applied
-            changed = {k: v for k, v in outcome.changed.items() if k not in state.clarified}
+            corrected = extraction.flags.corrects or is_correction(text)
+            changed = {
+                k: v
+                for k, v in outcome.changed.items()
+                if k not in state.clarified and not corrected  # a stated correction is final
+            }
         flags = extraction.flags if extraction else Flags()
         if extraction and _unflagged_question(flags, applied, text):
             # the model often misses a question, or calls it off topic: answer it all the same
@@ -494,15 +522,20 @@ class InterviewEngine:
                 state, config, unanswered, labels, spend, flags.asks_bot, thread=thread
             )
 
-        if status == "completed" and question is None and stop_reason != "user_finished":
-            if flags.asks_bot:  # they asked as we finished: answer before we close
-                closing = await generate_closing(
-                    self._llm, config, state, flags.asks_bot, labels=labels
-                )
-                if closing is not None:
-                    spend.add(closing.usage, closing.cost_usd)
-                    spend.models["question"] = closing.model
-                    question = closing.question
+        if status == "completed" and question is None:
+            # the closing line is written for this user (answering what they asked, if anything)
+            closing = await generate_closing(
+                self._llm,
+                config,
+                state,
+                flags.asks_bot,
+                revision=question_kind == "revision" and not applied,
+                labels=labels,
+            )
+            if closing is not None:
+                spend.add(closing.usage, closing.cost_usd)
+                spend.models["question"] = closing.model
+                question = closing.question
 
         if status != "active":
             state.finished = status == "completed"

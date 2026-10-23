@@ -26,7 +26,9 @@ companies (B2B) or individuals (B2C) (business_model), how they work and where c
 from (how_we_work, lead_sources). If their customers are people, describe them under \
 customer_profile, never under company slots.
 5. If the answer contradicts a recorded value, record the new value and list the slot in \
-flags.contradiction_slots. If the user agrees with an inferred value, record it again at 0.9.
+flags.contradiction_slots. If the user agrees with an inferred value, record it again at 0.9. If they say an earlier answer was a mistake and give the right \
+one ("sorry, I meant B2B"), record it, set flags.corrects and do not list it as a contradiction. \
+If it could be a second value rather than a fix, leave flags.corrects off so we ask which is right.
 6. flags: vague (no usable information); off_topic (unrelated to their business or this \
 interview); contains_pii (a person's name or contact details); wants_to_finish; unsure (the user does not \
 know or is not aware: "not sure", "no idea", "even I am not aware"; also set vague); refuses (firmly \

@@ -46,6 +46,16 @@ QUESTION_START = re.compile(
 )
 
 
+CORRECTION = re.compile(
+    r"\b(sorry|i meant|i mean|my bad|my mistake|correction|typo)\b", re.IGNORECASE
+)  # only plain "I got that wrong" wording: "actually" or "instead" can also add a second value
+
+
+def is_correction(text: str) -> bool:
+    """The user is fixing something they said earlier, so the new value needs no confirming."""
+    return bool(CORRECTION.search(text))
+
+
 class SlotUpdate(BaseModel):
     slot: str
     values: list[str]
@@ -61,6 +71,7 @@ class Flags(BaseModel):
     wants_to_finish: bool = False
     unsure: bool = False  # does not know or is not aware: cannot answer, so do not ask again
     refuses: bool = False  # firmly declines to answer this question or asks to skip it
+    corrects: bool = False  # the user says an earlier answer was wrong and gives the right one
     asks_bot: str = ""  # a question the user put to us, in a few words; empty if none
 
 

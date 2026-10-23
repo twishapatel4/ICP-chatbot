@@ -298,3 +298,13 @@ async def test_a_clarifying_question_has_a_fixed_text_when_the_writer_fails():
     result = await generate_clarify(llm, CONFIG, SessionState(), "geographies", ["UK"], ["India"])
     assert "UK" in result.question.text and "India" in result.question.text
     assert result.question.kind == "clarify"
+
+
+async def test_an_open_ended_slot_never_gets_suggested_answers():
+    out = QuestionOutput(
+        question="How does a deal go from first contact to payment?", options=["A", "B", "C"]
+    )
+    result = await generate_question(
+        FakeLLM({"question": [out]}), CONFIG, SessionState(), "how_we_work"
+    )
+    assert result.question.options == ()

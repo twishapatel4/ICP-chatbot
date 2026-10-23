@@ -227,3 +227,16 @@ async def test_deleting_a_tenant_removes_everything_it_stored_and_nothing_else(e
     assert len(await repo.list_icps("t2", other)) == 1
     assert await repo.delete_tenant("t1") == 0  # nothing left; safe to repeat
     assert await repo.delete_tenant("never-existed") == 0
+
+
+async def test_stored_prompts_are_overridden_by_prompts_py(env):
+    repo, _, _ = env
+    from icp_chatbot.config import Settings
+    from icp_chatbot.prompts import DEFAULT_PROMPTS
+    from icp_chatbot.versions import default_config
+
+    config = default_config(Settings(_env_file=None))
+    config.prompts["opener"] = "an old prompt stored in the database"
+    await repo.publish_config(config, author="test")
+    assert (await repo.live_config()).prompts["opener"] == DEFAULT_PROMPTS["opener"]
+    assert (await repo.get_config(1)).prompts["opener"] == DEFAULT_PROMPTS["opener"]

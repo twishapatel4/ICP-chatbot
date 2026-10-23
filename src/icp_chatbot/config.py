@@ -37,6 +37,7 @@ class Settings(BaseSettings):
 
     # Time budgets.
     enrichment_timeout_seconds: float = Field(40.0, gt=0)
+    enrichment_cache_days: int = Field(30, ge=0)  # reuse a site's earlier read; 0 reads it again
     llm_timeout_seconds: float = Field(20.0, gt=0)
 
     # Abuse and cost controls (spec section 12).
