@@ -163,6 +163,25 @@ async def test_another_site_or_a_failed_read_is_not_reused(world):
     assert enrichment.calls == 3
 
 
+async def test_a_read_without_data_is_tried_again_and_a_partial_one_with_data_is_reused(world):
+    engine, repo, llm, enrichment = world
+    seed = {"product": SlotValue(values=["Payroll"], confidence=0.5, source=SlotSource.INFERRED)}
+    for outcome in (
+        EnrichmentOutcome("ok", website="https://acme.test", seed={}),  # read, found nothing
+        EnrichmentOutcome("partial", website="https://acme.test", seed=seed),
+    ):
+        enrichment.outcome = outcome
+        llm.queue("opener", q("What do you sell?"))
+        await started(world, website="acme.test")
+    assert enrichment.calls == 2
+    llm.queue("opener", q("You sell payroll?"))
+    third = await started(world, website="acme.test")
+    assert enrichment.calls == 2  # the partial read with data was reused
+    assert (await repo.get_session(T, third.session_id)).state.slots["product"].values == [
+        "Payroll"
+    ]
+
+
 async def test_a_guard_can_refuse_a_start(world):
     engine, *_ = world
 

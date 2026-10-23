@@ -1,53 +1,86 @@
 # ICP bot: current state (for the ChatGPT personalization comparison)
 
-Snapshot: 2026-10-23, branch `staging`, working tree including the uncommitted edits (slots.py, extraction.py, interview.py, questions.py, prompts.py, two test files). Paths are relative to the repo root. `spec` = `../docs/superpowers/specs/2026-10-15-icp-chatbot-design.md` (outside the repo). "DB v2" = the live row in Postgres `config_versions`, read with a read-only query on 2026-10-23; it has no file:line.
+Snapshot: 2026-10-23 (updated after the model-led interviewer), branch `staging`, HEAD `27c6033`. Paths are relative to the repo root. `spec` = `../docs/superpowers/specs/2026-10-15-icp-chatbot-design.md` (outside the repo). "DB v2" = the live row in Postgres `config_versions`, read with a read-only query on 2026-10-23. Line numbers are re-checked for `interview.py`, `questions.py`, `planner.py`, `agent.py`, `repo.py` and `versions.py`; for `state.py`, `prompts.py` and `extraction.py` (edited since the first version of this note) references use names, and older line numbers for untouched files are unchanged.
 
-## 0. Known context, checked
+## 0. What changed since the first version of this note
 
-| Claim from memory | What the code and DB show |
+| Change | Where |
 |---|---|
-| App reads prompts from DB v2, not prompts.py | **True.** Sessions load the live config row (`src/icp_chatbot/store/repo.py:379-394`, `src/icp_chatbot/engine/interview.py:218-226`) and stay on that version (`src/icp_chatbot/store/models.py:47`, `interview.py:301`). prompts.py is only used when no live row exists (`src/icp_chatbot/versions.py:60-66`). DB: v1 retired, v2 live (author "dev", created 2026-10-15). |
-| DB v2 also fixes the models | **True, and they differ from .env.** DB v2 uses `gemini-3.1-flash-lite` for extraction, seed, opener **and question**, and `gemini-2.5-flash` (thinking_budget 2048) for final_icp. `.env`/settings say question/opener = `gemini-3.8-flash`, final = `gemini-2.5-pro` (`src/icp_chatbot/config.py:21-23`). Users get the DB models. |
-| Slim prompts.py is not synced to the DB | **True.** None of the 5 DB prompts match prompts.py. Word counts DB vs file: extraction 1209 vs 603, question 842 vs 322, opener 242 vs 144, final 217 vs 153, seed 78 vs 63. The closest git version of the DB text is commit 7bdbb0c (2026-10-22, before slimming): question 0.98 similar, final_icp identical. Recent rules were also patched into the DB by hand (for example DB extraction already has `flags.corrects`), so the DB is a separate fork, not an old copy. |
-| Slim prompts are "unevaluated" | **Out of date.** The slimming was committed in 2a2f688 (2026-10-22 20:43, 2460 to about 1465 words). On 2026-10-23 at 11:09-11:20, a scratch script in an earlier session (`/tmp/claude-1000/.../2c81d705-.../scratchpad/eval_prompts.py`) compared DB v2 prompts with prompts.py, both on DB v2 models. Full 14 cases: mean F1 0.548 vs 0.551, cost/case $0.0168 vs $0.0113, verdict **FAIL** (mean questions 4.79 to 5.0; hostile/injection F1 0.8 to 0.4; empty_website 0.5 to 0.0; one forbidden value in both runs). A 4-case subset went 0.547 to 0.789. prompts.py has changed again since (63ab6e7, 0ea4b6a, uncommitted edits), so the current file has not been evaluated. |
-| Recent commits are about tone | **Mostly.** b7cbbdb adds the "ask for a rough range" path (`src/icp_chatbot/engine/questions.py:586-594`, `interview.py:421-448`). 0ea4b6a adds the declined note, the personalized re-ask, the vague-revision clarify and the "enough for an ICP" check (`questions.py:243-256, 576-583`; `interview.py:66-70, 395-404`; `src/icp_chatbot/engine/planner.py:136-152`). **86f2651 "bot not answerable" is about service failures, not out-of-scope questions:** it adds the plain "AI service is not responding" notices, retries and cut-off handling (`interview.py:72-79`, `src/icp_chatbot/llm/adapter.py:18-20, 41-44, 138-142`). |
+| **Prompts now come from `prompts.py`, not the DB.** Every config load overlays `DEFAULT_PROMPTS` on the stored row. The DB row still decides the version a session is pinned to, the models and the step settings. The DB prompt text (the long, hand-patched copy) is ignored. | `src/icp_chatbot/versions.py:29` (`with_code_prompts`), `src/icp_chatbot/store/repo.py:408, 415` |
+| **A second, model-led engine exists.** `AgentEngine` makes one `interviewer` call per turn and lets the model decide what to ask, when to finish and whether there is enough to build an ICP. Code keeps validation, caps and a floor. Selected by `INTERVIEW_ENGINE`; code default is `classic`, `.env` and `.env.example` set `agent`. | `src/icp_chatbot/engine/agent.py`; `src/icp_chatbot/config.py:23-24`; `src/icp_chatbot/api/app.py:78` |
+| **The edit form is gone.** The ICP card is read-only (summary, sections, "Still unclear") with "Looks good" and "Needs improvement". "Needs improvement" reopens the session through `POST /sessions/{id}/revise`. | `frontend/src/components/IcpView.tsx`; `interview.py:728` (`revise`); `app.py:147` |
+| **Not-enough-information gate.** `POST /icp` returns 422 with the missing fields instead of building a thin ICP. | `app.py:221-229`; `planner.py:136-164` |
+| New classic-engine behaviours: privacy follow-up, range ask, personalized re-ask, dynamic "you skipped this" note, stated corrections, model-written closing line, open-ended fields get no options. | sections 2 and 4 |
+
+Checked claims from earlier notes:
+
+| Claim | Status now |
+|---|---|
+| App reads prompts from DB v2 | **No longer true** (see above). Prompt text is `prompts.py`. Models and step settings are still the DB row's: `gemini-3.1-flash-lite` for extraction, seed, opener and question, and `gemini-2.5-flash` (thinking budget 2048) for final_icp. `.env` says 3.8-flash and 2.5-pro (`config.py:21-23`), which only apply when there is no DB row or in the eval. |
+| Slim prompts are unevaluated | **Still true for the current text.** The earlier eval (2026-10-23 11:09-11:20, scratch script, DB v2 models) of the slimmed prompts against the old DB prompts gave mean F1 0.548 vs 0.551, cost/case $0.0168 vs $0.0113, verdict **FAIL** (hostile/injection F1 0.8 to 0.4, empty_website 0.5 to 0.0). `prompts.py` has changed since, and these slimmed prompts are now what runs, so the current text and the new `INTERVIEWER_PROMPT` have not been evaluated. |
+| "bot not answerable" commit is about out-of-scope questions | **No**, 86f2651 is about service failures (plain "AI service is not responding" notices, retries, cut-off handling): `interview.py:72-79`, `src/icp_chatbot/llm/adapter.py:18-20, 41-44, 138-142`. |
 
 ## 1. Purpose, user, output
 
-- Purpose: when a company signs up for LeadNest, a chatbot interviews it and produces that company's Ideal Customer Profile (spec:9; `README.md:3-4`). ICP = ideal customer profile.
-- End user: a person at a company signing up to LeadNest (founder, sales and so on), talking about their own customers. Signup fields: company_name, website, email, role, industry, company_size, source (`src/icp_chatbot/domain/signup.py:15-22`). Tenant identity comes from an `X-Tenant-Id` header set by LeadNest's gateway; there is no auth in this service (`src/icp_chatbot/api/app.py:1-5, 109-114`; `README.md:32`).
-- Output: a versioned `ICPDocument` (`src/icp_chatbot/icp/document.py:36-58`). It has fields grouped by section, each with values, confidence, source (stated/confirmed/inferred), evidence, last_verified and required/preferred; a scoring model of 7 weighted criteria plus disqualifier rules (`src/icp_chatbot/icp/scoring.py:7-8, 22-30`) that LeadNest's matcher will use; a generated summary (`document.py:123-172`); completeness; and open questions. The company reviews, edits and approves it (`src/icp_chatbot/icp/review.py:1-3`; `app.py:285-313`). The builder may reword values but cannot add fields (`src/icp_chatbot/icp/builder.py:3-5, 125-139`).
+- Purpose: when a company signs up for LeadNest, a chatbot interviews it and produces that company's Ideal Customer Profile (spec:9; `README.md:3-4`).
+- End user: a person at a company signing up to LeadNest (founder, sales and so on), talking about their own customers. Signup fields: company_name, website, email, role, industry, company_size, source (`src/icp_chatbot/domain/signup.py:15-22`). Tenant identity comes from an `X-Tenant-Id` header set by LeadNest's gateway; there is no auth in this service (`app.py:1-5`; `README.md:32`).
+- Output: a versioned `ICPDocument` (`src/icp_chatbot/icp/document.py:36-58`): fields grouped by section, each with values, confidence, source (stated/confirmed/inferred), evidence, last_verified and required/preferred; a scoring model of 7 weighted criteria plus disqualifier rules (`src/icp_chatbot/icp/scoring.py:7-8, 22-30`); a generated summary; completeness; and open questions. The builder may reword values but cannot add fields (`src/icp_chatbot/icp/builder.py:3-5, 125-139`).
+- **Review step now:** the user sees the summary and fields as plain text and answers "fine or needs improvement". "Looks good" calls approve plus `verdict(correct=true)`. "Needs improvement" asks "what should be changed or added?" and sends the reply to `revise`, which reopens the session, logs a `revision_requested` feedback event and treats the note as an answer; the ICP is rebuilt afterwards. `icp/review.py` and `PATCH /icp` still exist but nothing in the UI calls them.
 
 ## 2. Conversation flow
 
+There are two engines behind the same API. `AgentEngine` subclasses `InterviewEngine`, so start (enrichment plus opener), finish, detail mode and revise are shared.
+
+### 2a. Model-led engine (`INTERVIEW_ENGINE=agent`, current local setting)
+
+`src/icp_chatbot/engine/agent.py`. **Type:** the model leads the conversation; code is a guardrail.
+
+- **One call per answer** (`AgentEngine.answer`, `agent.py:153`). Step name `interviewer`. Input (`build_message`): mode and questions asked, industry context, recorded slots as JSON, core fields still unknown, the rolling summary, **the last 12 turns** (`HISTORY_LIMIT`, `agent.py:42`), the last question asked and the user's reply between `<<< >>>`.
+- **Output** (`AgentTurn`): field updates, an optional domain update, a summary, `say`, `action` (`ask` or `finish`), `target_slot`, `options`, `enough`, `missing`, `user_wants_to_stop`, `off_topic`.
+- **What the model decides:** what to ask and how to word it, how to react to refusals, "what do you mean?", corrections and dodging, whether the profile is ready (`enough`), and when to finish. Contradictions are settled in conversation: updates are applied with `corrects=True`, so the classic "which is right?" branch is bypassed.
+- **What code still decides** (`_problem`, `agent.py:106`; `_turn`, `agent.py:131`):
+  - `say` must be non-empty and at most 700 characters;
+  - the model cannot finish unless `enough` is true or the user wants to stop;
+  - `enough` is rejected unless the basics are known: product at confidence 0.5 or more plus at least 2 of the customer fields (`planner.py:148-157`), checked on a deep copy of the state with the updates applied;
+  - a rejected reply goes back to the model **once** with the reason, then counts as a failed step (`MAX_ATTEMPTS = 2`, `agent.py:44`);
+  - question cap: quick mode 20 (`config.py:30`), detail mode `min(total cap, started + 5)`; if the model still wants to ask, the interview ends with a model-written closing (`generate_closing`);
+  - 2 consecutive model failures offer the fallback form; a second off-topic reply (counted over the whole session) does too;
+  - options come from the slot where it has fixed choices, are dropped for open-ended slots, and are cleaned otherwise (`clean_options`).
+- **Finish:** `enough` true gives the model's own closing line. If the user stops early without enough, `agent_enough=False` and `agent_missing` are stored and **no closing line is shown**, so the page can say what is missing.
+- **Build gate:** `enough_for_icp` uses the interviewer's `agent_enough` (and the floor) when present, otherwise the old 30% rule (`planner.py:160-164`). The 422 detail lists `agent_missing` or the missing core slot labels (`app.py:221-229`).
+- **Not used in this engine:** the planner, the thread/probe/follow-up writers, the decline, privacy, range, clarify and revision branches, the question styles and the per-session topic order. `generate_closing` is the only classic writer it calls.
+- **Verified:** 9 unit tests (`tests/test_agent.py`), and a nine-reply scripted run against live Gemini on 2026-10-23: the schema was accepted, fields were recorded, refusals and a user question got natural replies, and the model finished with a written closing. During that run Gemini returned 429 errors and one 30 s timeout. The run also showed the model asking one unanswered question (pain points) three times; the scripted replies did not answer it, so this is not a clean signal either way.
+
+### 2b. Classic engine (`INTERVIEW_ENGINE=classic`, code default, still used by the eval)
+
 **Type:** a code-driven state machine with LLM wording. Code decides what to ask next and when to stop, with no model involved (`planner.py:1-3`). The LLM extracts slot values from each answer and writes each message.
 
-- **Slots:** about 50 standard slots in tiers A (must ask), B (if relevant), C (inferred, never asked) and D (detail mode only) (`src/icp_chatbot/domain/slots.py:9-14, 111-536`). The extraction model also adds 4 to 7 industry-specific fields; the 3 most important must be filled before the interview can stop (`slots.py:72-101`; `prompts.py:39-47`). Skip rules: B2C skips company slots and B2B skips customer_profile (`slots.py:108-109`; `src/icp_chatbot/domain/state.py:176-184`).
-- **Start** (`interview.py:234-281`): budget guard, new session pinned to the live config, a random `order_seed`, and the best-customer question placed at question 2 to 5 (`interview.py:240-242`). Enrichment reads the company website and fills a seed; inferred values are capped at 0.5 confidence (`src/icp_chatbot/enrichment/service.py:77-94`). Then an LLM opener (`questions.py:457-501`).
-- **Each answer** (`interview.py:295-549`): check input; one extraction call (`313`); merge the values (`src/icp_chatbot/engine/extraction.py:160-228`); then the first branch that matches, in this order:
-  1. Extraction failed: show the same question again. After 2 failures in a row, offer the fallback form (`342-353`).
-  2. User asked something: answer it and ask the waiting question again (`361-380`). If they dodge the same question twice, it is set aside (`336-360`).
-  3. Off-topic: fixed redirect text plus the same question. A 2nd off-topic reply, counted across the whole session and never reset, ends the chat in the fallback form (`59, 71, 381-392`).
-  4. `wants_to_finish`: complete (`393-394`).
-  5. A vague "needs changes" note on the ICP: one fixed clarify question (`395-404`).
-  6. User won't name a client: privacy follow-up, once (`405-420`).
-  7. Refusal or "not sure" on size, revenue, budget or deal size: ask for a rough range, once (`421-448`).
-  8. Other refusal or "not sure": set the slot aside and never ask it again (`449-454`, `141-147`).
-  9. Bare "no": one personalized re-ask (`455-475`).
-  10. Contradiction: ask which answer is right. Skipped when the user says it is a correction (uncommitted) (`326-331, 476-489`).
-  11. Otherwise: choose the next question (`490-501`).
-- **Next question** (`interview.py:551-625`): a follow-up on something the user raised, at most 3 in a row (`MAX_THREAD_QUESTIONS` `65`), then a bridge back. Otherwise one follow-up to the opener or best-customer question, then the best-customer question when due, then a probe on a vague or partial slot (up to 6 per slot, stops after 2 probes with no gain; `60-63, 627-648`), and finally a planner slot.
-- **Planner score** = tier weight x importance x (1 - confidence) x per-session jitter (0.6 to 1.4). Industry fields get x1.3, a slot just asked gets x0.4, disqualifiers are damped before question 5, and slots wait until B2B/B2C is known (`planner.py:18-35, 77-83, 86-133`).
-- **Stop:** quick mode stops at 20 questions (`config.py:30-32`), or when tier A is at confidence 0.7 or higher and at least 3 tier B topics have been asked (`planner.py:12, 16, 87-91`). The spec targeted 8 to 10 questions with a hard cap of 10 (spec:17). Detail mode adds 5 more, total cap 25; the API supports it but the UI has no button (`interview.py:676-704`; `planner.py:93-99`).
-- **End:** an LLM closing line written for the user (uncommitted: now on every completion) (`interview.py:503-516`; `questions.py:760-800`). The UI then calls POST /icp: one final_icp call, falling back to values as recorded if it fails (`builder.py:95-169`). The ICP is refused if under 30% of core slots are known (`app.py:221-229`; `planner.py:136-152`). "Needs improvement" reopens the session and treats the note as an answer (`interview.py:706-721`).
+- **Slots:** about 50 standard slots in tiers A (must ask), B (if relevant), C (inferred, never asked) and D (detail mode only) (`src/icp_chatbot/domain/slots.py:9-14, 111-536`). The extraction model also adds 4 to 7 industry-specific fields. Skip rules: B2C skips company slots and B2B skips customer_profile. A slot can be flagged `open_ended` (currently `how_we_work`): it never gets suggested options (`slots.py:59`).
+- **Start** (`interview.py:254`): budget guard, new session pinned to the live config, a random `order_seed`, best-customer question at question 2 to 5. Enrichment reads the company website and fills a seed (inferred values capped at 0.5; `src/icp_chatbot/enrichment/service.py:77-94`). Then an LLM opener (`questions.py:457`). The opener prompt asks for a one-sentence description of the company from the website, then "is that right?".
+- **Each answer** (`interview.py:317`): check input; one extraction call; merge the values; then the first branch that matches, in this order:
+  1. Extraction failed: show the same question again; after 2 failures in a row, the fallback form.
+  2. User asked something and dodged the same question twice: answer it and set the question aside (`376`), with a "you passed on that" note from the model; a first ask is answered and the waiting question repeated.
+  3. Off-topic: fixed redirect text plus the same question; a 2nd off-topic reply in the session ends in the fallback form (`403`).
+  4. `wants_to_finish`: complete (`415`).
+  5. Vague "needs changes" note after the ICP (question kind `revision`): one fixed clarify question, `REVISION_CLARIFY`.
+  6. Won't name a client (best-customer question): privacy follow-up asking for the kind of client, once (`430`).
+  7. Refusal or "not sure" on company size, revenue, budget or deal size: ask for a rough range, once (`446`; `RANGE_SLOTS` `questions.py:586`).
+  8. Other refusal or "not sure": set the slot aside, never ask again, with a model-written "you skipped this" note (`declined_note`, `questions.py:252`).
+  9. Bare "no": one model-written re-ask (`generate_reask`, `questions.py:597`; `477`), with the fixed `DECLINE_PREFIX` text only as a failure fallback.
+  10. Contradiction: ask which answer is right (`498`). Skipped when the user says it is a correction: the flag `corrects` or plain wording such as "sorry", "I meant", "my mistake", "typo" (`corrected`, `348`; `is_correction` in `extraction.py`). "Actually" and "instead" no longer count, because they can add a second value.
+  11. Otherwise: choose the next question (`_next`, `573`).
+- **Next question:** a follow-up on something the user raised (at most 3 in a row), then a bridge back; otherwise a follow-up to the opener or best-customer question, then the best-customer question when due, then a probe on a vague or partial slot (up to 6 per slot, stops after 2 with no gain), and finally a planner slot (`planner.py:86`).
+- **Planner score** = tier weight x importance x (1 - confidence) x per-session jitter (0.6 to 1.4). Industry fields x1.3, a slot just asked x0.4, disqualifiers damped before question 5, slots wait until B2B/B2C is known.
+- **Stop:** quick mode stops at 20 questions, or when tier A is at confidence 0.7 or more and at least 3 tier B topics were asked (`planner.py:12, 16`). The spec targeted 8 to 10 questions with a hard cap of 10 (spec:17). Detail mode adds 5 more, total cap 25 (`interview.py:698`); the API supports it but the UI has no button.
+- **End:** an LLM-written closing line on every completion: a plain ending, a "go ahead with the current profile, you can change it later" version after a revision that added nothing, or an answer to a last user question (`interview.py:527`; `questions.py:760`). The UI then calls POST /icp (`builder.py:95-169`); refused if under 30% of core slots are known (`planner.py:136-145`).
 - **Fallback form:** static form of the tier A slots plus 6 tier B slots (`src/icp_chatbot/engine/fallback.py:1-2, 24-34`).
 
 ## 3. LLM usage
 
-- **Provider:** Google Gemini via `google-genai==2.31.0` (`requirements.txt`). Two backends, Developer API key or Vertex; `.env` uses vertex with location=global (`src/icp_chatbot/llm/factory.py:13-51`; `.env.example:9`). There is one adapter, behind an `LLM` protocol (`src/icp_chatbot/llm/types.py:76-86`).
-- **Steps** (`versions.py:13`): extraction, seed, opener, question, final_icp. All per-turn writer variants (question, probe, follow-up, re-ask, reply, clarify, thread, best-customer, closing) share the `question` step config and system prompt (for example `questions.py:330-339`).
+- **Provider:** Google Gemini via `google-genai==2.31.0`. Two backends, Developer API key or Vertex; `.env` uses vertex with location=global (`src/icp_chatbot/llm/factory.py:13-51`). One adapter behind an `LLM` protocol (`src/icp_chatbot/llm/types.py:76-86`).
+- **Steps** (`versions.py:13`): extraction, seed, opener, question, final_icp, plus **`interviewer`** for the model-led engine. `interviewer` has no row of its own in DB v2: it **borrows the `question` step's settings** and overrides temperature (0.6), max tokens (at least 3072) and, if set, the model from `MODEL_INTERVIEWER` (`agent.py:96-103`). **With `MODEL_INTERVIEWER` empty it runs on the DB question model, `gemini-3.1-flash-lite`, not on `.env` `MODEL_QUESTION`** (the comment in `config.py:23` says the opposite and is wrong for sessions that load a DB row). Its system prompt is `INTERVIEWER_PROMPT` plus the slot catalog (`versions.py:37`).
 
-**Settings** (code defaults `versions.py:60-99`; DB v2 has the same values except the models):
+**Settings** (code defaults `versions.py`; DB v2 has the same values except the models):
 
 | Step | Model (DB v2, live) | Temp | max_output_tokens | Thinking |
 |---|---|---|---|---|
@@ -55,123 +88,89 @@ Snapshot: 2026-10-23, branch `staging`, working tree including the uncommitted e
 | seed | 3.1-flash-lite | 0.0 | 2048 | minimal |
 | opener | 3.1-flash-lite | 0.7 | 2048 | low |
 | question | 3.1-flash-lite | 0.5 | 2048 | low |
+| interviewer (agent) | question model unless `MODEL_INTERVIEWER` | 0.6 | at least 3072 | low (from question) |
 | final_icp | 2.5-flash | 0.1 | 8192 | budget 2048 |
 
-- **Calls per answer:** usually 2 (extraction, then one writer). Up to 3 when the thread writer fails and another writer runs (`questions.py:401-406` then `interview.py:556-567`), or when a closing line is added (`interview.py:503-516`). Session start: 0 or 1 seed call (only with a website or work-email domain; `service.py:107-109, 154-162`) plus the opener. ICP build: 1 call, cached until a new answer arrives (`app.py:232-238`). The calls run one after another.
-- **Prompt assembly:** the system instruction is the step's prompt; extraction also gets the slot catalog appended (`versions.py:32-37`; `slots.py:550-563`). The request content is **one user string per call, not a list of chat messages** (`adapter.py:106-108`).
-  - Extraction input: industry context, all recorded slots as JSON, the rolling summary, the last question, the target slot, and the answer between `<<< >>>` (`extraction.py:111-123`). It does **not** get the last turns.
-  - Writer input: industry context, target slot, rolling summary, the last 2 question/answer pairs, then situation hints and a style line (`questions.py:308-329`).
-- **Structured output:** JSON with a pydantic `response_schema` (`adapter.py:64-73`), parsed from `response.parsed` or the raw text (`adapter.py:75-86`). Invalid output is retried; a reply cut off at max tokens is retried with double the budget, up to 8192 (`adapter.py:138-143`). Schemas: ExtractionResult with updates, domain, flags, thread and summary (`extraction.py:59-99`); QuestionOutput with question, reply and options (`questions.py:50-53`); SeedProfile (`service.py:41-48`); ICPSynthesis (`builder.py:37-52`).
-- **Rules the code enforces on output:** unknown slot keys are dropped (`extraction.py:170-173`); a weaker value never replaces a stronger one (`199-200`); pain points and outcomes given off-target are capped at 0.6 (`24-27, 181-184`); question at most 400 chars, reply at most 300 (`questions.py:39, 47, 206-214`); options are cleaned, 2 to 8, no "Other" (`65-75`); fixed choices override model options; open-ended slots get no options (uncommitted; `questions.py:352-357, 903`; `slots.py:59, 138`).
+- **Calls per answer:** agent engine: 1 (`interviewer`), 2 if its first reply is rejected, plus a closing call only when the question cap forces an end. Classic engine: usually 2 (extraction, then one writer), up to 3 with a closing line. Session start: 0 or 1 seed call plus the opener. ICP build: 1 call, cached until a new answer arrives (`app.py:232-238`). Calls run one after another.
+- **Prompt assembly:** system instruction is the step's prompt (extraction and interviewer also get the slot catalog appended; `slots.py:550-563`). The request content is **one user string per call, not a list of chat messages** (`adapter.py:106-108`). The agent engine's string carries the transcript as `You:`/`User:` lines; the classic extraction call gets no turns at all, and classic writers get only the last 2.
+- **Structured output:** JSON with a pydantic `response_schema` (`adapter.py:64-73`); invalid output is retried; a reply cut off at max tokens is retried with double the budget up to 8192 (`adapter.py:138-143`). Schemas: `ExtractionResult`, `QuestionOutput`, `AgentTurn`, `SeedProfile`, `ICPSynthesis`.
+- **Rules the code enforces on output:** unknown slot keys are dropped; a weaker value never replaces a stronger one (so a correction must come in at 0.9); pain points and outcomes given off-target are capped at 0.6; question at most 400 chars (agent `say` at most 700), reply at most 300; options cleaned to 2 to 8 with no "Other"; fixed choices override model options; open-ended slots get none.
 
 ## 4. Tone and personality
 
-- **Persona as live (DB v2 question prompt):** "a warm person ... not a form or a survey". Rules: at most 25 words, plain words, no idioms; an acknowledgement of at most 8 words in the user's own words, never a bare "Got it"; no praise, judging or guessing; exactly one question with no "A or B"; vary phrasing; and **rule 6: if the user did not answer, say "No problem."**. Rule 11: answer a user's question in at most 2 sentences; say "I don't have that information" about pricing, features or data handling; never name the model; politely decline anything unrelated.
-- **prompts.py version (not live):** "warm, curious person" (`prompts.py:57`). Shape: reflect their words, then one question, at most 25 words, and never tell them how long to answer (`prompts.py:61-63`). No praise, idioms or invented detail (`64-65`). Answer user questions "from general knowledge", say when unsure, no figures or promises, never name the model (`72-75`). Vary wording and follow the style line (`79`).
-- **Opener:** greet them as a guest; if the website was read, confirm what it says ("From your website ... Is that right, and what would you add?"); otherwise open with a random angle (`prompts.py:82-95`; `questions.py:411-432, 484`). The DB v2 opener prompt contains a broken fragment line ("the angle, so no two openers sound alike."), left over from an edit made directly in the DB.
-- **Variety comes from randomness, not from the user:**
-  - 6 question styles chosen by a seeded random pick per session and question, for example "casually, as a colleague would over coffee" or "very short, let the options carry the detail" (`questions.py:434-454`);
-  - 20 opener angles (`411-432`); 4 best-customer variants (`87-92, 443-448`);
-  - per-session topic order (`planner.py:29-35`);
-  - role-based fixed opener as fallback: founder vs sales (`questions.py:105-113`).
-- **Adapting to the user (all rule-based, keyed on extraction flags and regexes):**
-  - Language: reply in the user's language (`prompts.py:58`). Fixed texts and UI strings are English only.
-  - Industry: the extraction model writes an industry brief, focus items and custom fields, and questions use that industry's words (`state.py:95-118`; `prompts.py:39-47, 69-70`).
-  - Negative or evasive users: flags `refuses` and `unsure` plus regexes (`state.py:32-54`; `prompts.py:32-37`). They are never pushed more than once (`state.declines`, `state.py:154-156`); a declined slot goes into `skipped` and is never asked again (`planner.py:72, 105`). Code hints shape the message:
-    - DECLINED_NOTE: a friendly line that they passed, varied, no stock phrase (`questions.py:243-256`);
-    - DECLINE_REASK_HINT: one re-ask that mentions their details and why it helps, at most 45 words (`576-583`);
-    - RANGE_HINT: offer a rough range (`586-594`);
-    - PRIVACY_HINT: they don't want to name clients (`504-512`);
-    - CLARIFY_HINT: point out a contradiction "kindly and without blame" (`704-708`).
-  - Questions to the bot: answered, including questions the model missed, caught by a regex (`extraction.py:39-46, 126-138`; `interview.py:333-335`). Capped at 6 per session; after that they are handled like any other reply (`interview.py:64, 173-175`).
-  - Topics the user raises: up to 3 curious follow-ups, then a bridge back (`questions.py:224-241`; `interview.py:150-163`).
-  - Corrections ("sorry, I meant B2B") are accepted without asking which is right (uncommitted; `extraction.py:49-56`; `prompts.py:29-31`).
-  - Off-topic: one fixed redirect, "Let's get back to describing your ideal customer.", then the form (`interview.py:71, 381-392`).
-  - Closing line written for the user, banning the stock "Thanks, that is everything I need." (uncommitted; `questions.py:271-282`).
-- **Not adapted:** formality, verbosity, expertise level, mood or pace. Length is fixed at 25 words or less for everyone. There is no user-set tone or custom instructions.
-- **Contradictions inside the tone design:**
-  - DB rule 6 and FOLLOW_UP_HINT (`questions.py:177-183`) require "No problem.", while other hints forbid it (`questions.py:195, 202, 230, 291, 707, 807`).
-  - Fallback texts are the stock phrases the LLM hints ban: DECLINE_PREFIX "No worries, and thanks for being open with me..." (`interview.py:80-84`) vs DECLINE_REASK_HINT (`questions.py:581-582`). The frontend falls back to "Thanks, that is everything I need." (`frontend/src/App.tsx:118`).
-- **Service-failure notices** use plain words ("not about what you wrote") (`interview.py:72-79`) and show as red error bubbles (`App.tsx:110`).
+- **Persona (live now, from `prompts.py`):** the classic writers use `QUESTION_PROMPT`: a warm, curious person, not a form; at most 25 words; a reflection of something specific they said, then one direct question; never tell them how long to answer; no praise, judging or idioms; "you"/"your company"; answer user questions in at most two sentences from general knowledge and say plainly when unsure. The agent engine uses `INTERVIEWER_PROMPT` (10 rules, in `prompts.py`): answer before asking, react to something specific then ask one question of at most 30 words, never repeat or re-ask what was clear, start with what they do and who they sell to, an example client once around question 2 to 4, respond to refusals in own words and ask once in an easier way (kind of client, rough range) then drop it with a light "you skipped this", options only for pick-lists, a closing written for them, and a rule for revisions.
+- **No more "No problem." contradiction in prompt text:** the long DB prompts (which required "No problem.") are no longer used. Some code hints in `questions.py` still mention it as something to avoid. Fixed fallback strings remain (see below).
+- **Opener:** greet as a guest; if the website was read, describe the company in one sentence from it and ask "is that right?"; otherwise open with one of 20 random angles (`questions.py:411-432, 457`). Enrichment timeout is 40 s (`ENRICHMENT_TIMEOUT_SECONDS`); before that it was 5 s, which made scraping of slow sites fail silently.
+- **Variety:** the classic engine uses randomness (6 question styles, 20 opener angles, 4 best-customer variants, a per-session topic order); the agent engine relies on the model plus a "vary your wording" rule, and has no topic-order shuffle.
+- **Adapting to the user:**
+  - Language: reply in the user's language (both prompts). Fixed texts and UI strings are English only.
+  - Industry: the extraction (or interviewer) model writes an industry brief, focus items and custom fields; questions use that industry's words.
+  - Refusals and evasion: classic uses flags plus code hints (`DECLINED_NOTE`, `DECLINE_REASK_HINT`, `RANGE_HINT`, `PRIVACY_HINT`, `CLARIFY_HINT`); agent leaves it to prompt rule 5 and 6.
+  - Questions to the bot: answered in both engines; the classic engine caps them at 6 per session.
+  - Corrections: classic accepts them without asking (narrow wording list); agent decides itself.
+  - Off-topic: classic uses one fixed redirect then the form; agent lets the model redirect, and a second off-topic flag still ends in the form.
+- **Not adapted:** formality, verbosity, expertise level, mood or pace; there is no user-set tone or custom instructions.
+- **Remaining fixed strings that break the tone goal:** `DECLINE_PREFIX` (now only a failure fallback), `REDIRECT_PREFIX`, `REVISION_CLARIFY`, `PRIVACY_FALLBACK`, `RANGE_FALLBACK`, the service-failure notices (`interview.py:72-79`, shown as red error bubbles). The frontend no longer shows a fixed "Thanks, that is everything I need." line; when a closing line is missing, only the "Building your ICP" note appears.
 
 ## 5. Memory and state
 
-- **Per-session working memory** is a `SessionState` JSON in `sessions.state` (`state.py:121-158`; `models.py:42-61`). It holds:
-  - slots, each with values, confidence, source, source turn and evidence;
-  - the website seed, kept separately;
-  - industry context;
-  - a **rolling summary of at most 600 chars, rewritten by the extraction model on every turn** (`extraction.py:30, 226-227`; `prompts.py:38`);
-  - **the last 2 turns only** (`state.py:127, 191-192`);
-  - counters: asked, probes, stalls, skipped, declines, off-topic, user questions, thread;
-  - the pending question.
-  Saves use optimistic locking on row_version (`repo.py:154-195`).
-- **Transcript:** every Q/A is stored append-only in `turns`, with a full state snapshot per turn (`models.py:64-82, 136-141`). It is **never read back into a prompt**: `repo.list_turns` (`repo.py:238`) has no caller in `src/`.
-- **Context window:** no token counting or trimming logic. Inputs are bounded by design: last 2 turns, a 600-char summary, answers at most 2000 chars (`config.py:35`), website text at most 15,000 chars (`service.py:33-35`). The slot JSON grows with every filled slot and is never trimmed.
-- **Across sessions: nothing carries over.** Each start creates a blank `SessionState()` (`interview.py:239`). `tenants` holds only id, name, `segment` and `sharing_consent`, and neither of the last two is read anywhere (`models.py:32-39`). Earlier ICPs or answers from the same tenant are never loaded. The spec's other memory tiers were never built: episodic memory (`knowledge_items` + pgvector "exemplar cards" from past approved sessions) and statistical memory (per-segment hints) (spec:265-285; no match in `src/`).
-- **Other stored data:** append-only `icp_versions` (bot vs company author), `feedback_events`, `enrichment_runs`, and `config_versions` with draft/approved/live/retired status (`models.py:85-133`).
-- **Migrations:** a single Alembic revision, `0001`, which just runs `metadata.create_all` (`alembic/versions/0001_initial_schema.py:1-25`). The DB is at 0001.
-- **Lifecycle:** sessions idle for 48h are marked abandoned by a CLI meant to run hourly (`src/icp_chatbot/maintenance.py:11-36`; `src/icp_chatbot/cli/abandon.py`). The local DB shows 73 active, 15 completed, 1 fallback and 0 abandoned, so the job is not scheduled locally.
-- **Frontend memory:** messages live only in React state (`App.tsx:32`). A reload loses the chat display. `GET /sessions/{id}` exists (`app.py:158-181`) but the UI never calls it (`frontend/src/api.ts:33-46`).
+- **Per-session working memory** is a `SessionState` JSON in `sessions.state` (`src/icp_chatbot/domain/state.py`; `models.py:42-61`): slots with values, confidence, source, evidence; the website seed; industry context; a rolling summary of at most 600 chars rewritten each turn (by extraction in the classic engine, by the interviewer in the agent engine); `last_turns` (last 2); **`history`** (last 12 turns, written only by the agent engine); counters (asked, probes, stalls, skipped, declines, off-topic, user questions, thread); the pending question; **`agent_enough` and `agent_missing`** (the interviewer's last judgement). Saves use optimistic locking on row_version (`repo.py:154-195`).
+- **Transcript:** every Q/A is stored append-only in `turns` with a state snapshot (`models.py:64-82`). It is still **never read back into a prompt**; `repo.list_turns` has no caller in `src/`. The agent engine gets its transcript from `state.history` instead.
+- **Context window:** no token counting or trimming; inputs are bounded by design (12 turns in the agent engine, 2 in the classic writers, a 600-char summary, answers at most 2000 chars, website text at most 15,000 chars). The slot JSON grows with every filled slot.
+- **Across sessions: nothing carries over.** Each start creates a blank `SessionState()`. `tenants.segment` and `sharing_consent` exist and are read nowhere. The spec's episodic and statistical memory tiers were never built.
+- **Other stored data:** append-only `icp_versions` (bot vs company author), `feedback_events`, `enrichment_runs`, `config_versions`. Feedback events now include `approve`, `icp_verdict` (only `correct=true` is sent by the UI), `revision_requested` (the user's note) and `detail_mode_start`. The field-, weight- and requirement-edit events are no longer produced by the UI. `enrichment_runs` stores only `ok/partial/failed/blocked/skipped`, not the block reason.
+- **Migrations:** a single Alembic revision `0001` that runs `metadata.create_all`. New `SessionState` fields are JSON, so no migration was needed.
+- **Lifecycle:** sessions idle for 48h are marked abandoned by a CLI meant to run hourly (`src/icp_chatbot/maintenance.py:11-36`); the job is not scheduled locally.
+- **Frontend memory:** messages live only in React state; a reload loses the chat display. `GET /sessions/{id}` exists but the UI never calls it.
 
 ## 6. Tokens and cost
 
-- **Tracking:** usage comes from `usage_metadata`: input, output, thought and cached tokens (`types.py:20-53`). Cost uses a price table with a date-effective price for 3.8-flash (`src/icp_chatbot/llm/pricing.py:17-66`). It is summed per turn and per session (`repo.py:174-177`; `models.py:53-56, 78-81`), and logged per call with step, model, token counts, cost and latency, never text (`adapter.py:132-136`).
-- **Budget limits:** per-tenant daily caps of 200 sessions and 2M tokens, global caps of 2000 sessions and 20M tokens (`config.py:43-47`). They are **checked only when a session starts** (`src/icp_chatbot/limits.py:22-46`). A rate limit of 60 requests/min per tenant is kept in process memory (`limits.py:49-65`; `app.py:112-113`).
-- **Caching:** relies on Gemini's implicit prefix caching only: static system prompt first, dynamic content in the user message (`prompts.py:1-7`). Cached tokens are priced (`pricing.py:57-66`). There are no explicit cache objects.
-- **max_tokens** per step (table in section 3), auto-raised when a reply is cut off (`adapter.py:138-142`).
-- **Retries:** the adapter makes up to 4 attempts on 429/5xx (backoff 1, 2, 4 s) and on invalid output; a timeout is retried once (`adapter.py:18-20, 53, 100-143`). The SDK's own retry (`attempts=3`, `factory.py:15-23`) sits under it, so retries are nested. Timeout is 20 s by default, 30 s in `.env`. Worst case for one step is about 60 s.
-- **Observed cost:** $0.011 to $0.017 per eval case in the 2026-10-23 runs, but those cases are short (about 5 questions). The spec budget is about $0.14 per interview (spec:19).
+- **Tracking:** usage from `usage_metadata` (input, output, thought, cached); a price table with a date-effective price for 3.8-flash (`src/icp_chatbot/llm/pricing.py:17-66`); summed per turn and per session and logged per call without text (`adapter.py:132-136`). The agent engine records its calls under the `interviewer` model key. A new model needs a price entry or the default is used.
+- **Budget limits:** per-tenant daily caps of 200 sessions and 2M tokens, global caps of 2000 sessions and 20M tokens (`config.py:43-47`), **checked only when a session starts** (`src/icp_chatbot/limits.py:22-46`). Rate limit 60 requests/min per tenant, in process memory.
+- **Caching:** relies on Gemini implicit prefix caching only (static system prompt first). `INTERVIEWER_PROMPT` plus the catalog is a long static prefix, which helps.
+- **Retries:** up to 4 attempts on 429/5xx (backoff 1, 2, 4 s) and invalid output; a timeout is retried once (`adapter.py:18-20, 53, 100-143`). The SDK's own retry sits under it, so retries are nested. Timeout is 20 s by default, 30 s in `.env`. **In the 2026-10-23 live agent run Gemini returned 429 errors and one 30 s timeout on the interviewer step.** The agent step is a larger call than the classic writers, so it is more exposed.
+- **Observed cost:** $0.011 to $0.017 per eval case for the classic engine on short cases (about 5 questions). The agent engine's cost has not been measured; it sends a growing transcript each turn. The spec budget is about $0.14 per interview.
 
 ## 7. Privacy and safety
 
-- **Auth:** none in this service; it trusts `X-Tenant-Id` and must not be internet-facing (`README.md:32`; `app.py:1-5`). The tenant id is regex-checked (`app.py:50`). The frontend hardcodes tenant "demo" (`api.ts:3`). Every repo call checks tenant ownership (`repo.py:1-2, 126-131`).
-- **PII:**
-  - The extraction model sets `flags.contains_pii` (`prompts.py:33`; `extraction.py:70`), but **no code reads it**.
-  - Answers are stored raw in `turns.answer_text`, and again in each `state_after` snapshot (`models.py:73-75`).
-  - The signup email is used only to find a website and is not stored (`service.py:67-74`).
-  - Prompts tell the bot never to ask for personal data (`prompts.py:79`).
-  - The spec's anonymization step (spec 11.2) is not built.
-- **Logging:** app logs carry no user text (`adapter.py:132-136`; `interview.py:320`). Vertex calls carry labels with session_id, turn and config_version (`interview.py:228-230`; `factory.py:58`; `adapter.py:72`).
-- **Retention:** no TTL and no purge job. `Repo.delete_tenant` (`repo.py:414-432`) is not exposed by any API route or CLI. The endpoint is global, with no data residency (`.env.example:9`; spec 11.6).
-- **Prompt injection:**
-  - Every prompt says its input is data, not instructions (`prompts.py:10, 58-59, 84, 98, 108`).
-  - Answers are wrapped in `<<< >>>` (`extraction.py:122`), and so is website text (`service.py:159`).
-  - Output is schema-validated and slot keys are enforced in code.
-  - Website seed values are capped at 0.5 confidence (`state.py:17`; `service.py:88-93`).
-  - The model has no tools.
-  - Two eval cases cover it: `eval_cases/injection_in_answer.json` and `hidden_instructions_website.json`. In the 2026-10-23 run, the slim prompts dropped hostile/injection F1 from 0.8 to 0.4.
-- **Input validation:** answers must be non-empty and at most 2000 chars (`interview.py:285-293`; `frontend/src/components/Composer.tsx:3`). Signup fields have max lengths (`src/icp_chatbot/api/schemas.py:11-18`). There is no moderation or abuse classifier.
-- **Website fetcher:** public IPs only, every redirect re-checked, robots.txt respected, size and type limits (`src/icp_chatbot/enrichment/fetcher.py:1-8, 66-73`). DNS rebinding remains an open risk, as the file notes.
+- **Auth:** none; trusts `X-Tenant-Id` and must not be internet-facing. The frontend hardcodes tenant "demo". Every repo call checks tenant ownership.
+- **PII:** the extraction model sets `flags.contains_pii` but **no code reads it**; the `AgentTurn` schema has no PII flag at all. Answers are stored raw in `turns.answer_text` and in every `state_after` snapshot; the agent's `history` duplicates recent answers in `sessions.state`. The signup email is used only to find a website. Prompts tell the bot never to ask for personal data. The spec's anonymization step is not built.
+- **Logging:** app logs carry no user text. Vertex calls carry labels with session_id, turn and config_version.
+- **Retention:** no TTL and no purge job; `Repo.delete_tenant` is not exposed by any route or CLI.
+- **Prompt injection:** every prompt says its input is data; answers and website text are wrapped in `<<< >>>`; output is schema-validated and slot keys enforced in code; seed values capped at 0.5; the model has no tools. **New exposure in the agent engine:** the model now writes the user-visible message directly and also decides when to finish, with only length, the "enough" rule and the floor as checks. The two injection eval cases exist, but the slimmed classic prompts already scored lower on them (F1 0.8 to 0.4) and the agent engine has not been run against them.
+- **Input validation:** answers non-empty and at most 2000 chars; signup fields have max lengths. No moderation or abuse classifier.
+- **Website fetcher:** public IPs only, redirects re-checked, robots.txt respected, size and type limits; DNS rebinding remains an open risk. It identifies itself as `LeadNestICPBot/1.0`. On 2026-10-23 three sites rejected that identity: cricbuzz.com (its `robots.txt` disallows all bots except Googlebot), swiggy.com (403 from anti-bot protection) and zomato.com (connection reset, which shows up as a read timeout). Getting past that would need a browser user agent, which was not done.
 
 ## 8. Evaluation
 
-- **Eval set:** 14 handwritten JSON cases in `eval_cases/`, each with tags, a signup, optional website text, **fixed scripted answers** (2 to 6), and expected/forbidden slot values. Launch needs at least 30 cases plus a required tag set (`src/icp_chatbot/eval/cases.py:11-21`); `launch_check` currently prints "NOT READY: only 14 cases".
-- **Replay:** runs through the real engine on in-memory SQLite in a fixed order (`src/icp_chatbot/eval/replay.py:76-127`). Score is precision/recall/F1 on expected values plus forbidden-value violations (`replay.py:59-73`). The summary is compared with a baseline at a 2% margin (`src/icp_chatbot/eval/report.py:9-84`).
-- **What the eval measures:** field accuracy, completion, number of questions, cost and scoring validity. **Nothing about tone, friendliness, question quality, repetition or user experience.** The scripted answers don't respond to what the bot asks, so the back-and-forth itself isn't really tested.
-- **Eval/prod mismatch:** `cli.replay` passes no config (`src/icp_chatbot/cli/replay.py:24-25`). The in-memory DB is therefore empty, and the engine builds `default_config` from prompts.py and the .env models, 3.8-flash and 2.5-pro (`interview.py:218-226`; `versions.py:60-99`). **The standard eval tests prompts and models users never get.** Only the ad-hoc scratch script tested with DB v2 settings.
-- **Unit tests:** 26 files, **429 passed** on 2026-10-23. They use a scripted `FakeLLM` (`src/icp_chatbot/llm/fake.py:21-60`), so they check control flow and that the right hints are sent, not the wording. Tone-path examples: bare no re-asked once (`tests/test_interview.py:323`), firm refusal (`690`), user question answered (`515`), range (`1067`), stated correction (`1085`), closing line (`934`), open-ended slot gets no options (`tests/test_questions.py:303`).
-- **Production metrics:** completion, mean questions, cost, p50/p95 latency, edit rate on approved ICPs, drop-off by slot, and field/weight/requirement edits (`src/icp_chatbot/metrics/queries.py:24-112`; `src/icp_chatbot/icp/diff.py:22-25`). There is no per-message signal. The spec's twice-monthly prompt-optimizer loop (spec 9.3) is not built.
+- **Eval set:** 14 handwritten JSON cases in `eval_cases/`, each with a signup, optional website text, **fixed scripted answers** (2 to 6) and expected/forbidden slot values. Launch needs at least 30 cases; `launch_check` prints "NOT READY: only 14 cases".
+- **Replay** (`src/icp_chatbot/eval/replay.py:76-127`) runs the **classic `InterviewEngine`** (`replay.py:87`) on in-memory SQLite. It never uses `AgentEngine`, so **the engine that is now configured locally is not covered by the eval harness.** Scoring is precision/recall/F1 on expected values plus forbidden-value violations; the summary is compared with a baseline at a 2% margin.
+- **Eval/prod mismatch:** `cli.replay` passes no config, so the in-memory DB builds `default_config` (prompts.py plus the `.env` models 3.8-flash and 2.5-pro). Prompt text now matches production (both are `prompts.py`), but **the models still differ** from the DB row's 3.1-flash-lite and 2.5-flash that users get.
+- **What the eval measures:** field accuracy, completion, number of questions, cost, scoring validity. **Nothing about tone, friendliness, question quality, repetition or user experience**, and the scripted answers don't react to what the bot asks.
+- **Unit tests:** 28 test files, **441 passed** on 2026-10-23, including `tests/test_agent.py` (9 tests: model-written question and options, open-ended slots, rejected early finish retried, enough-without-basics rejected, finish when basics known, stop-early marked not enough, cap, two failures to fallback, transcript shown to the model). They use a scripted `FakeLLM`, so they check control flow and the hints sent, not wording quality.
+- **Production metrics:** completion, mean questions, cost, p50/p95 latency, edit rate on approved ICPs, drop-off by slot, field/weight/requirement edits (`src/icp_chatbot/metrics/queries.py:24-112`). With the edit form gone, the edit-rate metrics will stop moving; `revision_requested` and `icp_verdict` are the new signals, and nothing aggregates them yet. The spec's prompt-optimizer loop is not built.
 
 ## 9. Frontend
 
-- **Stack and flow:** React 18 + Vite + TypeScript, a single chat page with stages home, signup, interview, fallback, building and done (`App.tsx:9`). Plain JSON fetch through the Vite dev proxy `/api` (`api.ts:14-31`; `frontend/vite.config.ts`).
-- **No streaming:** the user sees a "Thinking..." placeholder until the whole turn finishes (`App.tsx:248`). The spec wanted median time to first streamed token under 4 s (spec:20).
-- **Suggested answers:** shown as chips, either multi-select with Confirm or single-pick that sends at once. Picks and typed text are joined with ", " into one answer (`App.tsx:141-156, 225-246`).
-- **Signup card:** asks only company name, website, industry and role (`frontend/src/components/SignupCard.tsx:4-9`). It never asks for email, size or source, so the UI cannot find a website from a work email.
-- **ICP view:** summary, sections and "Still unclear". "Looks good" calls approve plus verdict(true) (`App.tsx:177-183`). "Needs improvement" goes to the revise path (`App.tsx:185-190`; `frontend/src/components/IcpView.tsx:55`). There is no field-edit UI (`editIcp` in `api.ts:41` is unused), no detail-mode button, and verdict(false) is never sent.
+- **Stack and flow:** React 18 + Vite + TypeScript, one chat page with stages home, signup, interview, fallback, building and done (`frontend/src/App.tsx`). Plain JSON fetch through the Vite dev proxy `/api`.
+- **No streaming:** the user sees "Thinking..." until the whole turn finishes. The spec wanted median time to first streamed token under 4 s.
+- **Suggested answers:** chips, multi-select with Confirm or single-pick that sends at once; picks and typed text are joined with ", " into one answer.
+- **Signup card:** asks company name, website, industry and role only (`SignupCard.tsx:4-9`); it never asks for email, size or source.
+- **ICP view** (`IcpView.tsx`): read-only summary, sections and "Still unclear", then "Looks good" and "Needs improvement" (no edit controls, weights, completeness bars or exclusion list). "Needs improvement" asks "what should be changed or added?" and sends the next message to `/revise` (`App.tsx`: `improve`, `revising`). If the build is refused, the chat says "You have not provided enough information to build an ICP yet. Still missing: ..." and reopens the composer on the revise path. `verdict(false)` is never sent, so a "needs improvement" click is logged only as `revision_requested`. There is no detail-mode button.
 
 ## 10. Gaps vs a ChatGPT-style adaptive assistant (observations only)
 
-1. **No cross-session or user memory.** Every interview starts blank. There is no tenant profile, no reuse of earlier answers or ICPs, and no memory the user can view or edit. The spec's episodic and statistical tiers were never built.
-2. **No tone adaptation to the user.** Style variety is random per session and question. Formality, verbosity, expertise and mood are not detected, everyone gets the same 25-word limit, and there are no user-set preferences or custom instructions.
-3. **Very short context.** Writers see only the last 2 turns, a 600-char summary and the slot JSON. Extraction sees no turns at all. Each call is a single assembled string, not a chat history, so references further back depend on the summary.
-4. **The planner drives, not the user.** The bot answers user questions in at most 2 sentences and at most 6 times. Off-topic tolerance is 2 for the whole session, and the counter never resets. After that the chat becomes a static form.
-5. **No streaming, and 2 to 3 LLM calls run one after another per turn.** With nested retries, a turn can stall for a long time.
-6. **Thin feedback capture.** There is no per-message thumbs or rating, and the UI can't send a negative verdict. Revision text is stored but nothing learns from it: no optimizer loop and no retrieval of good past sessions.
-7. **Prompt/config drift across 4 sources:** prompts.py (slim, current), DB v2 (long and hand-patched, with different models), code hints in questions.py (live after a restart), and .env models (used only by the eval). The eval and production don't match, and the tone rules contradict each other ("No problem." required in DB rule 6 and FOLLOW_UP_HINT, banned elsewhere).
-8. **Fallback texts break the tone goals:** DECLINE_PREFIX, the frontend's fixed closing line, the fixed off-topic redirect, and English-only fallbacks, notices and UI for non-English users.
-9. **The eval ignores conversation quality.** There is no tone or UX rubric, no LLM-as-judge, no simulated reactive user, and 14 static cases where 30 are required.
-10. **Privacy controls are partial.** `contains_pii` is never used, there is no redaction or anonymization, no retention policy, no deletion endpoint, and raw answers are duplicated in every turn snapshot.
-11. **No abuse or moderation layer.** "Hostile" is tested only as prompt injection.
-12. **Limits are basic.** Budget caps apply only at session start, and the rate limiter lives in process memory, so it breaks with more than one worker.
-13. **Little transparency during the chat.** The user doesn't see what the bot has recorded until the final ICP. There is no way to correct the bot's understanding along the way beyond answering.
+1. **No cross-session or user memory.** Every interview starts blank. No tenant profile, no reuse of earlier answers or ICPs, no memory the user can view or edit.
+2. **No tone adaptation to the user.** Style variety is random (classic) or left to the model (agent). Formality, verbosity, expertise and mood are not detected and there are no user-set preferences.
+3. **Context.** The agent engine now sees 12 turns plus the summary, which closes most of the old "last 2 turns" gap for that engine. Classic writers still see 2, and extraction sees no turns. Each call is still one assembled string, not a chat history.
+4. **Who drives.** Resolved for the agent engine: the model decides what to ask and when to stop, with code vetoes. The classic engine is still planner-driven. The agent engine's quality is untested at scale: it has had one scripted live run and no eval.
+5. **No streaming, and slow or rate-limited turns.** One interviewer call per turn is faster than extraction plus writer, but the call is larger. With nested retries a turn can still stall. The live run hit 429s.
+6. **Model strength.** The agent engine, as configured through DB v2, runs on a small flash-lite model unless `MODEL_INTERVIEWER` is set; a stronger model was part of the intent and is not yet in place.
+7. **Thin feedback capture and no learning.** There is no per-message rating, no `verdict(false)`, and nothing learns from revision notes. A report or prompt-suggestion step over `revision_requested`, `icp_verdict` and refusals was proposed and not built.
+8. **Config drift is smaller:** prompts have one source (`prompts.py`). Models and step settings still live in DB v2 and differ from `.env`; the eval ignores the DB row; `interviewer` borrows `question` settings.
+9. **The eval ignores conversation quality and the agent engine.** No tone rubric, no LLM judge, no simulated reactive user, 14 static cases where 30 are required, and no harness run for `AgentEngine`.
+10. **Privacy controls are partial.** `contains_pii` is unused (and absent from the agent schema), no redaction, retention policy or deletion endpoint, and raw answers are duplicated across turn snapshots and `history`.
+11. **No abuse or moderation layer.** "Hostile" is tested only as prompt injection, and not against the agent engine.
+12. **Limits are basic.** Budget caps apply only at session start; the rate limiter lives in process memory; there is no per-session cost cap for the agent engine beyond the question cap.
+13. **Little transparency during the chat.** The user doesn't see what has been recorded until the final ICP.
+14. **Website scraping is fragile.** Sites with anti-bot protection or restrictive `robots.txt` (the three tested) cannot be read; the failure reason is not stored, and the chat does not tell the user the site could not be read.

@@ -124,7 +124,9 @@ async def test_the_model_can_finish_when_the_basics_are_known(world):
     sid = await session(repo, state)
     llm.queue(
         "interviewer",
-        AgentTurn(say="Great, I have what I need for banks and CFOs.", action="finish", enough=True),
+        AgentTurn(
+            say="Great, I have what I need for banks and CFOs.", action="finish", enough=True
+        ),
     )
     result = await engine.answer(T, sid, "the CFO")
     assert (result.status, result.stop_reason, result.icp_ready) == ("completed", "complete", True)
