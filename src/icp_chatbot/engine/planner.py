@@ -131,3 +131,22 @@ def plan_next(state: SessionState, caps: Caps) -> Plan:
     if best is None:
         return Stop("exhausted")
     return Ask(best.key)
+
+
+MIN_KNOWN_SHARE = 0.3  # below this share of core fields known, there is too little to build an ICP
+
+
+def missing_core_slots(state: SessionState) -> list[SlotDef]:
+    """Core fields still unknown, including ones the user declined to answer."""
+    return [
+        s
+        for s in state.slot_defs()
+        if s.blocks and state.is_applicable(s) and state.confidence(s.key) < COMPLETION_CONFIDENCE
+    ]
+
+
+def enough_for_icp(state: SessionState) -> bool:
+    core = [s for s in state.slot_defs() if s.blocks and state.is_applicable(s)]
+    if not core:
+        return True
+    return 1 - len(missing_core_slots(state)) / len(core) >= MIN_KNOWN_SHARE

@@ -389,3 +389,13 @@ def test_the_turn_response_carries_the_notice():
 
     result = TurnResult("s", None, "active", None, False, False, "quick", 1, notice="try again")
     assert TurnResponse.of(result).notice == "try again"
+
+
+async def test_building_with_too_little_information_is_refused_and_names_what_is_missing(world):
+    w = await world()
+    started = await w.start()
+    sid = started["session_id"]
+    await w.call("POST", f"/sessions/{sid}/finish")
+    built = await w.call("POST", f"/sessions/{sid}/icp")
+    assert built.status_code == 422
+    assert "Pain points" in built.json()["detail"]["not_enough_info"]

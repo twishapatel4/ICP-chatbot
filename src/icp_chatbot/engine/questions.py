@@ -157,7 +157,7 @@ def fallback_question(
         ask = f"What can you tell me about {slot.label.lower()}? {slot.description}."
     text = ask.format(c=customers)
     if asked_before:  # never repeat the same wording: rephrase and make answering easy
-        text = f"Let me put that another way. {text} A few words or one example is enough."
+        text = f"Let me put that another way. {text}"
     return Question(
         text,
         kind="fallback",
@@ -193,7 +193,7 @@ PROBE_HINT = (
     "then ask one specific follow-up about the detail that is still missing. At most 30 words, "
     "one question only. Put two or three short examples in options if the answer is a pick from "
     'a list. Do not say "No problem." If they seem '
-    "unsure or reluctant, say in a few words why it helps and that a rough guess is fine."
+    "unsure or reluctant, say briefly why it helps."
 )
 
 FOLLOW_UP_HINT_AFTER_QUESTION = (
@@ -241,10 +241,19 @@ RETURN_HINT = (
 )
 
 DECLINED_NOTE = (
-    "The user did not answer the last question: they declined, or they do not know. Accept that "
-    'in a few words ("That is fine.") without pushing, and ask about the target slot; never '
-    "ask about what they could not answer again."
+    "The user did not answer the last question: they declined, they do not know, or they asked "
+    "something instead of answering. Do not push and never ask what they skipped again. Say in "
+    "one friendly sentence, made for this person and what they just said, that you noticed they "
+    "passed on it and that it is fine to come back to it later, with different wording each "
+    "time (never a stock phrase such as \"That is fine.\" alone). Then ask about the target slot."
 )
+
+
+def declined_note(skipped: bool | str) -> str:
+    """The note for a skipped question, naming the question when we know it."""
+    if isinstance(skipped, str) and skipped:
+        return f'{DECLINED_NOTE} The question they passed on: "{skipped}"'
+    return DECLINED_NOTE
 
 
 def _message_lines(state: SessionState) -> list[str]:
@@ -277,7 +286,7 @@ async def generate_question(
     *,
     previous_vague: bool = False,
     asked: str = "",
-    declined: bool = False,
+    declined: bool | str = False,
     returning: bool = False,
     labels: dict[str, str] | None = None,
 ) -> QuestionResult:
@@ -301,7 +310,7 @@ async def generate_question(
     if state.order_seed:
         lines.append(_style_line(state))
     if declined:
-        lines.append(DECLINED_NOTE)
+        lines.append(declined_note(declined))
     if returning:
         lines.append(RETURN_HINT)
     cfg = config.step("question")
@@ -523,7 +532,7 @@ async def generate_followup(
         PRIVACY_FALLBACK
         if privacy
         else "No problem, let me put it another way. What do you sell, and what kind of company "
-        "buys it? A few words is enough."
+        "buys it?"
         if kind == "opener"
         else "No worries. Can you name one customer you were happy with, and why they worked "
         "well? One example is enough.",
@@ -548,6 +557,68 @@ async def generate_followup(
     return QuestionResult(question, result.usage, result.cost_usd, cfg.model)
 
 
+REASK_HINT = (
+    "The user just declined to answer the question above (their reply is in the answers above). "
+    "Write one short message in your own words, made for this person: take their no naturally, "
+    "mention something specific they told you, say in one plain sentence why this question helps "
+    "describe their best customers, then ask the same thing again in a different, easier way. "
+    "No stock phrases such as \"No worries\", \"thanks for being open\" or \"This one really "
+    "does help us\". At most 45 words, one question only."
+)
+
+
+async def generate_reask(
+    llm: LLM,
+    config: ConfigVersionData,
+    state: SessionState,
+    question: Question,
+    fallback_prefix: str,
+    *,
+    labels: dict[str, str] | None = None,
+) -> QuestionResult:
+    """The one retry after a bare "no": written for this user and this question each time. The
+    reviewed fixed text is the fallback if the model fails."""
+    fallback = Question(
+        fallback_prefix + question.text,
+        kind=question.kind,
+        slot=question.slot,
+        options=question.options,
+        multi=question.multi,
+    )
+    lines = [
+        *_domain_lines(state),
+        f"Rolling summary: {state.summary or '(none)'}",
+        f"Question that was declined: {question.text}",
+    ]
+    for turn in state.last_turns:
+        lines.append(f"Earlier question: {turn.question}\nUser answer (data): {turn.answer}")
+    lines.append(REASK_HINT)
+    cfg = config.step("question")
+    try:
+        result = await llm.generate(
+            step="question",
+            cfg=cfg,
+            system=config.system_prompt("question"),
+            user="\n".join(lines),
+            schema=QuestionOutput,
+            labels=labels,
+        )
+    except LLMError as exc:
+        log.warning("question writer failed, using the fixed text: %s", exc)
+        return QuestionResult(fallback, used_fallback=True)
+    text = _clean(result.parsed.question)
+    if text is None:
+        return QuestionResult(fallback, result.usage, result.cost_usd, cfg.model, True)
+    asked = Question(
+        text,
+        kind=question.kind,
+        slot=question.slot,
+        options=clean_options(result.parsed.options) or question.options,
+        multi=question.multi,
+    )
+    return QuestionResult(asked, result.usage, result.cost_usd, cfg.model)
+
+
 BEST_CUSTOMER_HINT = (
     "Ask about their best customers by naming one customer they are really happy with: who they "
     "are and why they work well. "
@@ -563,7 +634,7 @@ async def generate_best_customer(
     state: SessionState,
     *,
     asked: str = "",
-    declined: bool = False,
+    declined: bool | str = False,
     labels: dict[str, str] | None = None,
 ) -> QuestionResult:
     """The best-customer question (question 2), written around what the user just said."""
@@ -578,7 +649,7 @@ async def generate_best_customer(
     lines.append(f"{hint} {BEST_CUSTOMER_LIMITS}")
     lines += _asked_lines(asked)
     if declined:
-        lines.append(DECLINED_NOTE)
+        lines.append(declined_note(declined))
     cfg = config.step("question")
     try:
         result = await llm.generate(

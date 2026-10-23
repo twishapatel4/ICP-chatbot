@@ -329,11 +329,23 @@ async def test_a_bare_no_is_re_asked_once_politely_then_we_move_on(world):
         ),
     )
     llm.queue("extraction", ext(), ext())
-    llm.queue("question", q("Next?"))
+    llm.queue("question", q("Understood. Who usually signs off on a project like yours?"), q("Next?"))
     first = await engine.answer(T, sid, "no")
-    assert first.status == "active" and first.question.text == DECLINE_PREFIX + "Who buys?"
+    assert first.status == "active" and first.question.slot == "buyer_roles"
+    assert first.question.text == "Understood. Who usually signs off on a project like yours?"
+    assert DECLINE_PREFIX not in first.question.text  # written for this user, not canned
     second = await engine.answer(T, sid, "no")
-    assert second.question.text != DECLINE_PREFIX + "Who buys?"  # asked once more, then moved on
+    assert second.question.text == "Next?"  # asked once more, then moved on
+
+
+async def test_the_re_ask_falls_back_to_the_fixed_text_when_the_model_fails(world):
+    engine, repo, llm, _ = world
+    state = pending(SessionState(questions_asked=3, best_customer_asked=True), "Who buys?", "slot", "buyer_roles")
+    sid = await preset(repo, state)
+    llm.queue("extraction", ext())
+    llm.queue("question", LLMError("api", "down"))
+    first = await engine.answer(T, sid, "no")  # the writer fails
+    assert first.question.text == DECLINE_PREFIX + "Who buys?"
 
 
 @pytest.mark.parametrize("text", ["", "   ", "x" * 2001])
@@ -683,7 +695,7 @@ async def test_a_firm_refusal_moves_on_at_once_and_is_never_asked_again(world):
     llm.queue("question", q("Understood. Which regions?"))
     result = await engine.answer(T, sid, "I'd rather not say")
     assert result.question.slot not in (None, "industries")
-    assert "declined, or they do not know" in llm.calls_for("question")[0].user
+    assert "they declined, they do not know" in llm.calls_for("question")[0].user
     record = await repo.get_session(T, sid)
     assert record.state.skipped == ["industries"] and not record.state.probes
     assert "industries" not in {a for a in record.state.asked_slots if a != "industries"}
@@ -1031,3 +1043,17 @@ async def test_a_confidential_refusal_of_the_best_customer_asks_for_an_overview_
     llm.queue("question", q("Fine. Which industries?"))
     again = await engine.answer(T, sid, "still no")
     assert again.question.text == "Fine. Which industries?"  # asked once, then it moves on
+
+
+async def test_a_vague_revision_note_gets_one_clarifying_question_before_rebuilding(world):
+    engine, repo, llm, _ = world
+    sid = await completed_session(repo)
+    llm.queue("extraction", ext())
+    result = await engine.revise(T, sid, "the ICP did not include every needed aspect")
+    assert result.status == "active" and result.question.kind == "revision"
+    llm.queue("question", q("Anything else to add?"))
+    llm.queue("extraction", ext(up("product", ["Payroll"])))
+    done = await engine.answer(T, sid, "add our payroll product")
+    record = await repo.get_session(T, sid)
+    assert record.state.slots["product"].values == ["Payroll"]
+    assert done.status in ("active", "completed")

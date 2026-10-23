@@ -38,6 +38,7 @@ from icp_chatbot.engine.questions import (
     generate_closing,
     generate_followup,
     generate_opener,
+    generate_reask,
     generate_probe,
     generate_question,
     generate_reply,
@@ -59,6 +60,10 @@ PROBE_MIN_IMPORTANCE = 0.6
 MAX_USER_QUESTIONS = 6  # past this, questions are treated like any other off-track reply
 MAX_THREAD_QUESTIONS = 3  # curious follow-ups in a row on what the user brought up
 REVISION_QUESTION = "What should be changed or added in this profile?"
+REVISION_CLARIFY = (
+    "Which part is missing or not right? For example the industries, company size, regions, "
+    "buyers, pain points or something else. Tell me what to add or change."
+)
 REDIRECT_PREFIX ="Let's get back to describing your ideal customer. "
 RETRY_NOTICE = (
     "I could not process your last message because my AI service is not responding right now. "
@@ -71,7 +76,7 @@ DEGRADED_NOTICE = (
 DECLINE_PREFIX = (
     "No worries, and thanks for being open with me. This one really does help us: it's how we "
     "shape your profile and find better-fit customers for you, nothing more. Could you give it "
-    "a try? A few words is enough. "
+    "a try? "
 )
 
 
@@ -342,7 +347,7 @@ class InterviewEngine:
             state.user_questions += 1
             _set_aside(state, target, question_kind)
             status, stop_reason, question = await self._next(
-                state, config, False, labels, spend, flags.asks_bot
+                state, config, False, labels, spend, flags.asks_bot, declined=True
             )
         elif _pure_question(flags, applied, state):
             state.user_questions += 1
@@ -379,6 +384,16 @@ class InterviewEngine:
         elif flags.wants_to_finish:
             status, stop_reason = "completed", "user_finished"
         elif (
+            question_kind == "revision"
+            and not applied
+            and not state.declines.get("revision_clarify")
+        ):
+            # "it is missing things" says nothing we can use: ask which part, once
+            state.declines["revision_clarify"] = 1
+            question = Question(REVISION_CLARIFY, kind="revision")
+            state.pending_question, state.pending_kind = question.text, question.kind
+            state.pending_slot, state.pending_options, state.pending_multi = None, [], True
+        elif (
             flags.refuses
             and not applied
             and question_kind == "best_customer"
@@ -402,13 +417,25 @@ class InterviewEngine:
             )
         elif _declined(state, target, question_kind, text, applied):
             state.declines[target or question_kind] = 1  # ask once more, then move on
-            question = Question(
-                DECLINE_PREFIX + question_text,
-                kind=question_kind,
-                slot=target,
-                options=tuple(state.pending_options),
-                multi=state.pending_multi,
+            result = await generate_reask(
+                self._llm,
+                config,
+                state,
+                Question(
+                    question_text,
+                    kind=question_kind,
+                    slot=target,
+                    options=tuple(state.pending_options),
+                    multi=state.pending_multi,
+                ),
+                DECLINE_PREFIX,
+                labels=labels,
             )
+            spend.add(result.usage, result.cost_usd, fallback=result.used_fallback)
+            if result.model:
+                spend.models["question"] = result.model
+            question = result.question
+            state.pending_question, state.pending_options = question.text, list(question.options)
         elif changed:
             # they now say something different from what they said before: ask which is right
             slot_key, (before, now) = next(iter(changed.items()))
@@ -510,7 +537,12 @@ class InterviewEngine:
         if not state.best_customer_asked and state.questions_asked + 1 >= state.best_customer_at:
             state.best_customer_asked = True
             result = await generate_best_customer(
-                self._llm, config, state, asked=user_asked, declined=declined, labels=labels
+                self._llm,
+                config,
+                state,
+                asked=user_asked,
+                declined=(question or True) if declined else False,
+                labels=labels,
             )
             spend.add(result.usage, result.cost_usd, fallback=result.used_fallback)
             if result.model:
@@ -540,7 +572,7 @@ class InterviewEngine:
             plan.slot,
             previous_vague=previous_vague,
             asked=user_asked,
-            declined=declined,
+            declined=(question or True) if declined else False,
             returning=returning,
             labels=labels,
         )

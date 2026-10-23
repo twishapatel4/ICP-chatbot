@@ -73,6 +73,16 @@ export default function App() {
       setIcp(await api.buildIcp(id));
       setStage("done");
     } catch (e) {
+      const missing = (e instanceof api.ApiError && (e.detail as { not_enough_info?: string[] })?.not_enough_info) || null;
+      if (missing) {
+        push(
+          "bot",
+          `You have not provided enough information to build an ICP yet. Still missing: ${missing.join(", ")}. Tell me more about these and I will build it.`,
+        );
+        setRevising(true);
+        setStage("interview");
+        return;
+      }
       push("error", explain(e));
       setStage("done");
     }

@@ -33,6 +33,7 @@ from icp_chatbot.engine.interview import (
     InvalidTransition,
     SessionClosed,
 )
+from icp_chatbot.engine.planner import enough_for_icp, missing_core_slots
 from icp_chatbot.engine.questions import Question
 from icp_chatbot.enrichment.fetcher import SafeFetcher
 from icp_chatbot.enrichment.service import EnrichmentService
@@ -217,6 +218,15 @@ def create_app(
         record = await ct.repo.get_session(tenant_id, session_id)
         if record.status != "completed":
             raise HTTPException(409, "not_ready")
+        if not enough_for_icp(record.state):
+            raise HTTPException(
+                422,
+                {
+                    "not_enough_info": [
+                        s.label for s in missing_core_slots(record.state)
+                    ]
+                },
+            )
         latest = await ct.repo.latest_icp(tenant_id, session_id)
         bot = await ct.repo.latest_icp(tenant_id, session_id, author="bot")
         if bot and bot.document.get("built_at_turn") == record.state.answers_received:
