@@ -154,6 +154,9 @@ class SessionState(BaseModel):
     declines: dict[str, int] = Field(
         default_factory=dict
     )  # slot or kind -> times a bare "no" was re-asked
+    history: list[TurnPair] = Field(default_factory=list)  # recent turns for the model-led chat
+    agent_enough: bool | None = None  # the interviewer's own call: enough to build an ICP
+    agent_missing: list[str] = Field(default_factory=list)  # what it says is still unknown
     finished: bool = False
     stop_reason: str | None = None
 

@@ -115,7 +115,6 @@ export default function App() {
       setPicked([]);
     }
     if (turn.status === "completed") {
-      if (!turn.question) push("bot", "Thanks, that is everything I need.");
       return makeIcp(turn.session_id);
     }
     setStage("interview");

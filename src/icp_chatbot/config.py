@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     # Model per step (spec section 3).
     model_extraction: str = "gemini-3.1-flash-lite"
     model_question: str = "gemini-3.8-flash"
+    model_interviewer: str = ""  # the model-led interviewer; empty uses model_question
+    interview_engine: Literal["classic", "agent"] = "classic"  # agent: the model leads the chat
     model_final_icp: str = "gemini-2.5-pro"  # spec decision D7: General Availability models only
 
     # Database. Tests and local development use SQLite; production uses Postgres.

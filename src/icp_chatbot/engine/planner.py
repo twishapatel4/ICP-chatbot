@@ -145,7 +145,21 @@ def missing_core_slots(state: SessionState) -> list[SlotDef]:
     ]
 
 
+FLOOR_CONFIDENCE = 0.5
+CUSTOMER_KEYS = ("customer_profile", "industries", "company_size", "geographies", "pain_points",
+                 "buyer_roles", "buyer_departments", "business_model")  # fmt: skip
+
+
+def icp_floor_met(state: SessionState) -> bool:
+    """A sanity floor under the interviewer's own call: we know what they sell and at least two
+    things about who buys it."""
+    known = [k for k in CUSTOMER_KEYS if state.confidence(k) >= FLOOR_CONFIDENCE]
+    return state.confidence("product") >= FLOOR_CONFIDENCE and len(known) >= 2
+
+
 def enough_for_icp(state: SessionState) -> bool:
+    if state.agent_enough is not None:  # the model-led interview judged it itself
+        return state.agent_enough and icp_floor_met(state)
     core = [s for s in state.slot_defs() if s.blocks and state.is_applicable(s)]
     if not core:
         return True

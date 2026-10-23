@@ -37,7 +37,7 @@ class ConfigVersionData(BaseModel):
     def system_prompt(self, step: str) -> str:
         """The system prompt for a step. Extraction gets the slot catalog appended."""
         text = self.prompts[step]
-        if step == "extraction":
+        if step in ("extraction", "interviewer"):
             return text + render_slot_catalog()
         return text
 
