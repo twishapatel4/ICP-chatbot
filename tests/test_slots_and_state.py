@@ -82,3 +82,12 @@ def test_topics_asked_and_last_two_turns_and_round_trip():
     assert [t.question for t in state.last_turns] == ["q1", "q2"]
     restored = SessionState.model_validate(state.model_dump(mode="json"))
     assert restored == state
+
+
+def test_a_pick_list_slot_is_offered_as_examples_so_specific_answers_are_kept():
+    from icp_chatbot.domain.slots import render_slot_catalog
+
+    catalog = render_slot_catalog()
+    line = next(x for x in catalog.splitlines() if x.startswith("- geographies:"))
+    assert "not a closed list" in line and "never widened" in line and "Choices:" not in line
+    assert "Choices: 1-10; 11-50" in catalog  # closed bands stay choices

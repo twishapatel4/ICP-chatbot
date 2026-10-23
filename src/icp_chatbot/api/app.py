@@ -141,6 +141,15 @@ def create_app(
     async def detail(session_id: str, tenant_id: str = Depends(tenant), ct: Container = Depends(c)):
         return TurnResponse.of(await ct.engine.request_detail(tenant_id, session_id))
 
+    @app.post("/sessions/{session_id}/revise", response_model=TurnResponse)
+    async def revise(
+        session_id: str,
+        body: AnswerRequest,
+        tenant_id: str = Depends(tenant),
+        ct: Container = Depends(c),
+    ):
+        return TurnResponse.of(await ct.engine.revise(tenant_id, session_id, body.text))
+
     @app.post("/sessions/{session_id}/finish", response_model=TurnResponse)
     async def finish(session_id: str, tenant_id: str = Depends(tenant), ct: Container = Depends(c)):
         return TurnResponse.of(await ct.engine.finish(tenant_id, session_id))

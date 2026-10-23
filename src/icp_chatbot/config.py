@@ -27,14 +27,16 @@ class Settings(BaseSettings):
     auto_create_tables: bool = False  # development convenience; production uses Alembic
 
     # Interview limits (spec section 5.5).
-    quick_mode_question_cap: int = Field(10, ge=1)
-    detail_mode_total_cap: int = Field(15, ge=1)
+    quick_mode_question_cap: int = Field(
+        20, ge=1
+    )  # a safety ceiling: the interview ends when the ICP details are known
+    detail_mode_total_cap: int = Field(25, ge=1)
     detail_mode_extra_questions: int = Field(5, ge=1)
     max_answer_chars: int = Field(2000, ge=1)
     vary_question_order: bool = True  # every session asks its topics in its own order
 
     # Time budgets.
-    enrichment_timeout_seconds: float = Field(5.0, gt=0)
+    enrichment_timeout_seconds: float = Field(40.0, gt=0)
     llm_timeout_seconds: float = Field(20.0, gt=0)
 
     # Abuse and cost controls (spec section 12).

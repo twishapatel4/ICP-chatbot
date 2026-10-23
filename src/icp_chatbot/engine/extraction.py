@@ -59,6 +59,7 @@ class Flags(BaseModel):
     off_topic: bool = False
     contains_pii: bool = False
     wants_to_finish: bool = False
+    unsure: bool = False  # does not know or is not aware: cannot answer, so do not ask again
     refuses: bool = False  # firmly declines to answer this question or asks to skip it
     asks_bot: str = ""  # a question the user put to us, in a few words; empty if none
 
@@ -92,6 +93,8 @@ class ApplyOutcome:
     applied: list[str] = field(default_factory=list)
     confirmed: list[str] = field(default_factory=list)
     ignored: list[str] = field(default_factory=list)  # unknown slot keys from the model
+    # slot -> (what they said before, what they say now), when they changed their own answer
+    changed: dict[str, tuple[list[str], list[str]]] = field(default_factory=dict)
 
 
 def build_user_message(state: SessionState, question: str, target: str | None, answer: str) -> str:
@@ -185,6 +188,13 @@ def apply_extraction(
         elif existing and update.confidence < existing.confidence:
             continue  # a weaker statement does not replace a stronger one
 
+        if (
+            update.slot in result.flags.contradiction_slots
+            and existing
+            and existing.source in (SlotSource.STATED, SlotSource.CONFIRMED)
+            and {v.lower() for v in existing.values} != {v.lower() for v in values}
+        ):
+            outcome.changed[update.slot] = (list(existing.values), list(values))
         state.slots[update.slot] = SlotValue(
             values=values,
             confidence=update.confidence,
@@ -197,6 +207,8 @@ def apply_extraction(
             state.contradictions.remove(update.slot)
 
     for slot in result.flags.contradiction_slots:
+        if slot in outcome.applied:
+            continue  # this very answer gave the new value: the contradiction is settled
         if (slot in SLOTS or slot in own) and slot not in state.contradictions:
             state.contradictions.append(slot)
     _apply_domain(state, result.domain, outcome.applied)

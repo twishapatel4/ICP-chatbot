@@ -19,6 +19,7 @@ from icp_chatbot.domain.state import (
     SlotSource,
     SlotValue,
     is_non_answer,
+    is_unsure,
 )
 from icp_chatbot.engine.extraction import (
     ExtractionResult,
@@ -33,6 +34,8 @@ from icp_chatbot.engine.questions import (
     Question,
     QuestionResult,
     generate_best_customer,
+    generate_clarify,
+    generate_closing,
     generate_followup,
     generate_opener,
     generate_probe,
@@ -55,7 +58,8 @@ PROGRESS = 0.05  # confidence a clarification must add to count as progress
 PROBE_MIN_IMPORTANCE = 0.6
 MAX_USER_QUESTIONS = 6  # past this, questions are treated like any other off-track reply
 MAX_THREAD_QUESTIONS = 3  # curious follow-ups in a row on what the user brought up
-REDIRECT_PREFIX = "Let's get back to describing your ideal customer. "
+REVISION_QUESTION = "What should be changed or added in this profile?"
+REDIRECT_PREFIX ="Let's get back to describing your ideal customer. "
 RETRY_NOTICE = (
     "I could not process your last message because my AI service is not responding right now. "
     "This is not about what you wrote. Please send it again."
@@ -306,8 +310,11 @@ class InterviewEngine:
             state.failures += 1
             log.warning("extraction failed for session %s: %s", session_id, exc)
         applied: list[str] = []
+        changed: dict[str, tuple[list[str], list[str]]] = {}
         if extraction:
-            applied = apply_extraction(state, extraction, turn_no, target).applied
+            outcome = apply_extraction(state, extraction, turn_no, target)
+            applied = outcome.applied
+            changed = {k: v for k, v in outcome.changed.items() if k not in state.clarified}
         flags = extraction.flags if extraction else Flags()
         if extraction and _unflagged_question(flags, applied, text):
             # the model often misses a question, or calls it off topic: answer it all the same
@@ -371,8 +378,24 @@ class InterviewEngine:
                 )
         elif flags.wants_to_finish:
             status, stop_reason = "completed", "user_finished"
-        elif flags.refuses and not applied:
-            # a firm no: respect it, never push, move on to the next topic
+        elif (
+            flags.refuses
+            and not applied
+            and question_kind == "best_customer"
+            and not state.declines.get("best_customer_overview")
+        ):
+            # they will not name a client: respect that, and ask only for the kind of client
+            state.declines["best_customer_overview"] = 1
+            result = await generate_followup(
+                self._llm, config, state, question_text, question_kind, privacy=True, labels=labels
+            )
+            spend.add(result.usage, result.cost_usd, fallback=result.used_fallback)
+            if result.model:
+                spend.models["question"] = result.model
+            self._record_question(state, result.question)
+            question = result.question
+        elif (flags.refuses or flags.unsure or is_unsure(text)) and not applied:
+            # a firm no, or "I don't know": respect it, never push, move on to the next topic
             _set_aside(state, target, question_kind)
             status, stop_reason, question = await self._next(
                 state, config, False, labels, spend, flags.asks_bot, declined=True
@@ -386,6 +409,20 @@ class InterviewEngine:
                 options=tuple(state.pending_options),
                 multi=state.pending_multi,
             )
+        elif changed:
+            # they now say something different from what they said before: ask which is right
+            slot_key, (before, now) = next(iter(changed.items()))
+            state.clarified.append(slot_key)
+            result = await generate_clarify(
+                self._llm, config, state, slot_key, before, now, labels=labels
+            )
+            spend.add(result.usage, result.cost_usd, fallback=result.used_fallback)
+            if result.model:
+                spend.models["question"] = result.model
+            q = result.question  # a clarification: no new question is counted
+            state.pending_question, state.pending_kind, state.pending_slot = q.text, q.kind, q.slot
+            state.pending_options, state.pending_multi = list(q.options), q.multi
+            question = q
         else:
             # vague about the question but clear about something else: an answer, so move on
             told_more = any(
@@ -398,6 +435,16 @@ class InterviewEngine:
             status, stop_reason, question = await self._next(
                 state, config, unanswered, labels, spend, flags.asks_bot, thread=thread
             )
+
+        if status == "completed" and question is None and stop_reason != "user_finished":
+            if flags.asks_bot:  # they asked as we finished: answer before we close
+                closing = await generate_closing(
+                    self._llm, config, state, flags.asks_bot, labels=labels
+                )
+                if closing is not None:
+                    spend.add(closing.usage, closing.cost_usd)
+                    spend.models["question"] = closing.model
+                    question = closing.question
 
         if status != "active":
             state.finished = status == "completed"
@@ -581,6 +628,23 @@ class InterviewEngine:
         )
         await self._repo.add_feedback(tenant_id, session_id, type="detail_mode_start")
         return self._result(session_id, state, status, question, stop_reason, notice=spend.degraded)
+
+    async def revise(self, tenant_id: str, session_id: str, text: str) -> TurnResult:
+        """The company read the ICP description and says what is off. Reopen the finished chat and
+        take the note as an answer, so the usual follow-ups run and the ICP is rebuilt after."""
+        text = self._validate(text)
+        record = await self._repo.get_session(tenant_id, session_id)
+        if record.status != "completed":
+            raise InvalidTransition("changes are asked for after the first ICP is complete")
+        state = record.state
+        state.finished, state.stop_reason = False, None
+        state.pending_question, state.pending_kind = REVISION_QUESTION, "revision"
+        state.pending_slot, state.pending_options, state.pending_multi = None, [], True
+        await self._repo.save_state(
+            tenant_id, session_id, state, expected_version=record.row_version, status="active"
+        )
+        await self._repo.add_feedback(tenant_id, session_id, type="revision_requested", new=text)
+        return await self.answer(tenant_id, session_id, text)
 
     # -- helpers -----------------------------------------------------------------------------
 

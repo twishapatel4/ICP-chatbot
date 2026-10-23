@@ -37,8 +37,8 @@ def order_jitter(state: SessionState, slot: SlotDef) -> float:
 
 @dataclass(frozen=True)
 class Caps:
-    quick_cap: int = 10
-    detail_total_cap: int = 15
+    quick_cap: int = 20
+    detail_total_cap: int = 25
     detail_extra: int = 5
 
 

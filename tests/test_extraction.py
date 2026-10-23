@@ -81,16 +81,14 @@ def test_correcting_an_inferred_value_replaces_it_as_stated():
 
 def test_contradictions_are_flagged_and_cleared_by_a_new_value():
     state = SessionState()
+    apply_extraction(state, result(up("company_size", ["10"])), 1)
     apply_extraction(
         state,
-        result(
-            up("company_size", ["10"]),
-            flags=Flags(contradiction_slots=["company_size", "nonsense"]),
-        ),
-        1,
-    )
+        result(flags=Flags(contradiction_slots=["company_size", "nonsense"])),
+        2,
+    )  # they now say something that clashes, without a clear new value
     assert state.contradictions == ["company_size"]
-    apply_extraction(state, result(up("company_size", ["500"], 0.95)), 2)
+    apply_extraction(state, result(up("company_size", ["500"], 0.95)), 3)
     assert state.contradictions == []
 
 
@@ -280,3 +278,66 @@ def test_the_extraction_prompt_asks_for_threads_worth_following():
         '{"thread": {"topic": "some buyers fear side effects", "slot": "objections"}}'
     )
     assert parsed.thread.topic == "some buyers fear side effects"
+
+
+def test_the_extraction_prompt_keeps_specific_answers_instead_of_widening_them_to_a_choice():
+    prompt = default_config(Settings(_env_file=None)).system_prompt("extraction")
+    assert "never widen" in prompt and "countries" in prompt
+
+
+def test_the_extraction_prompt_wants_a_self_contained_copy_of_the_users_question():
+    prompt = default_config(Settings(_env_file=None)).system_prompt("extraction")
+    assert "self-contained" in prompt
+
+
+def test_a_contradiction_settled_by_the_new_value_in_the_same_answer_is_not_kept_open():
+    state = SessionState()
+    state.slots["business_model"] = SlotValue(
+        values=["B2C"], confidence=0.6, source=SlotSource.STATED
+    )
+    corrected = result(up("business_model", ["B2B"], 0.9))
+    corrected.flags.contradiction_slots = ["business_model"]
+    apply_extraction(state, corrected, 5)
+    assert state.slots["business_model"].values == ["B2B"]
+    assert state.contradictions == []  # answered: nothing left to ask again
+
+
+def test_a_contradiction_with_no_new_value_stays_open():
+    state = SessionState()
+    state.slots["industries"] = SlotValue(
+        values=["Banks"], confidence=0.9, source=SlotSource.STATED
+    )
+    unclear = result()
+    unclear.flags.contradiction_slots = ["industries"]
+    apply_extraction(state, unclear, 5)
+    assert state.contradictions == ["industries"]
+
+
+def _flagged(*updates, slots=("industries",)):
+    r = result(*updates)
+    r.flags.contradiction_slots = list(slots)
+    return r
+
+
+def test_a_changed_answer_reports_what_they_said_before_and_what_they_say_now():
+    state = SessionState()
+    state.slots["business_model"] = SlotValue(
+        values=["B2C"], confidence=0.6, source=SlotSource.STATED
+    )
+    outcome = apply_extraction(
+        state, _flagged(up("business_model", ["B2B"]), slots=("business_model",)), 5
+    )
+    assert outcome.changed == {"business_model": (["B2C"], ["B2B"])}
+
+
+def test_nothing_is_reported_for_an_inferred_value_the_same_value_or_an_unflagged_change():
+    state = SessionState()
+    state.slots["industries"] = SlotValue(
+        values=["Banks"], confidence=0.5, source=SlotSource.INFERRED
+    )
+    assert apply_extraction(state, _flagged(up("industries", ["Insurers"])), 2).changed == {}
+    state.slots["geographies"] = SlotValue(values=["UK"], confidence=0.9, source=SlotSource.STATED)
+    same = _flagged(up("geographies", ["uk"]), slots=("geographies",))
+    assert apply_extraction(state, same, 3).changed == {}
+    state.slots["company_size"] = SlotValue(values=["10"], confidence=0.9, source=SlotSource.STATED)
+    assert apply_extraction(state, result(up("company_size", ["500"])), 4).changed == {}

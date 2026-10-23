@@ -37,6 +37,18 @@ _NON_ANSWER = re.compile(
 )
 
 
+_UNSURE = re.compile(
+    r"^(not sure|unsure|idk|i ?don'?t know|dont know|don'?t know|unknown|no idea)[\s.!?]*$",
+    re.IGNORECASE,
+)
+
+
+def is_unsure(text: str) -> bool:
+    """True for a bare "not sure" or "I don't know": the user cannot answer, so asking again
+    gets nowhere."""
+    return bool(_UNSURE.match(text.strip()))
+
+
 def is_non_answer(text: str) -> bool:
     """True for replies like "no", "none" or "not sure": they say nothing about the slot."""
     return bool(_NON_ANSWER.match(text.strip()))
@@ -132,6 +144,7 @@ class SessionState(BaseModel):
     thread_run: int = 0  # follow-ups in a row on something the user brought up
     thread_topic: str = ""  # what the user brought up that we are following, if anything
     thread_slot: str = ""  # the slot it informs
+    clarified: list[str] = Field(default_factory=list)  # slots we asked "which one is right?" on
     pending_options: list[str] = Field(default_factory=list)  # suggested answers, if any
     pending_multi: bool = True  # more than one option may be picked
     segment: dict[str, str] = Field(default_factory=dict)

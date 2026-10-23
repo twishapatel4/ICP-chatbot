@@ -550,7 +550,12 @@ def render_slot_catalog() -> str:
     lines = []
     for s in SLOT_LIST:
         line = f"- {s.key}: {s.label}. {s.description}."
-        if s.choices:
+        if s.choices and s.single_choice:
             line += " Choices: " + "; ".join(s.choices) + "."
+        elif s.choices:  # a pick-list in the chat, but the user may be more specific
+            line += (
+                " Common values, not a closed list: " + "; ".join(s.choices) + ". Record what the "
+                "user says in full names (a country as a country, never widened to a region)."
+            )
         lines.append(line)
     return "\n".join(lines)

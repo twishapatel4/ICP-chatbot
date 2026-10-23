@@ -16,8 +16,8 @@ def test_defaults_match_the_spec():
     assert s.model_extraction == "gemini-3.1-flash-lite"
     assert s.model_question == "gemini-3.8-flash"
     assert s.model_final_icp == "gemini-2.5-pro"  # decision D7: GA model for the final step
-    assert s.quick_mode_question_cap == 10
-    assert s.detail_mode_total_cap == 15
+    assert s.quick_mode_question_cap == 20
+    assert s.detail_mode_total_cap == 25
     assert s.detail_mode_extra_questions == 5
     assert s.max_answer_chars == 2000
 

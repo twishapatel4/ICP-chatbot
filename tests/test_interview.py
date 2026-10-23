@@ -4,8 +4,8 @@ import pytest
 
 from icp_chatbot.config import Settings
 from icp_chatbot.domain.signup import SignupInfo
-from icp_chatbot.domain.slots import SLOT_LIST, Tier
-from icp_chatbot.domain.state import SessionState, SlotSource, SlotValue
+from icp_chatbot.domain.slots import SLOT_LIST, STOP_TOPICS, Tier
+from icp_chatbot.domain.state import SessionState, SlotSource, SlotValue, TurnPair
 from icp_chatbot.engine.extraction import ExtractionResult, Flags, SlotUpdate, Thread
 from icp_chatbot.engine.interview import (
     DECLINE_PREFIX,
@@ -223,7 +223,12 @@ async def test_the_interview_completes_when_tier_a_and_three_topics_are_done(wor
 
 async def test_the_quick_cap_ends_the_interview(world):
     engine, repo, llm, _ = world
-    sid = await preset(repo, pending(SessionState(questions_asked=10, best_customer_asked=True)))
+    sid = await preset(
+        repo,
+        pending(
+            SessionState(questions_asked=SETTINGS.quick_mode_question_cap, best_customer_asked=True)
+        ),
+    )
     llm.queue("extraction", ext())
     result = await engine.answer(T, sid, "ok")
     assert (result.status, result.stop_reason) == ("completed", "cap")
@@ -432,7 +437,7 @@ async def test_detail_mode_is_refused_when_the_session_is_not_complete_or_the_ca
     active = await preset(repo, pending(SessionState(questions_asked=3)))
     with pytest.raises(InvalidTransition):
         await engine.request_detail(T, active)
-    capped = await completed_session(repo, questions_asked=15)
+    capped = await completed_session(repo, questions_asked=SETTINGS.detail_mode_total_cap)
     with pytest.raises(InvalidTransition):
         await engine.request_detail(T, capped)
 
@@ -678,7 +683,7 @@ async def test_a_firm_refusal_moves_on_at_once_and_is_never_asked_again(world):
     llm.queue("question", q("Understood. Which regions?"))
     result = await engine.answer(T, sid, "I'd rather not say")
     assert result.question.slot not in (None, "industries")
-    assert "chose not to answer" in llm.calls_for("question")[0].user
+    assert "declined, or they do not know" in llm.calls_for("question")[0].user
     record = await repo.get_session(T, sid)
     assert record.state.skipped == ["industries"] and not record.state.probes
     assert "industries" not in {a for a in record.state.asked_slots if a != "industries"}
@@ -858,3 +863,171 @@ async def test_a_healthy_turn_has_no_notice(world):
     engine, repo, llm, _ = world
     llm.queue("opener", q("What do you sell?"))
     assert (await started(world)).notice is None
+
+
+async def test_a_user_who_does_not_know_is_not_asked_again_and_the_interview_moves_on(world):
+    engine, repo, llm, _ = world
+    state = pending(
+        SessionState(questions_asked=3, best_customer_asked=True), "What hurdles do they face?",
+        "slot", "pain_points",
+    )  # fmt: skip
+    sid = await preset(repo, state)
+    llm.queue("extraction", ext(flags=Flags(vague=True, unsure=True)))
+    llm.queue("question", q("Which regions?"))
+    result = await engine.answer(T, sid, "even I am not aware about this")
+    assert result.question.slot != "pain_points" and result.questions_asked == 4
+    record = await repo.get_session(T, sid)
+    assert "pain_points" in record.state.skipped and record.state.probes == {}
+    user = llm.calls_for("question")[0].user
+    assert "they do not know" in user and "did not answer the question fully" not in user
+
+
+@pytest.mark.parametrize("text", ["not sure", "I don't know", "no idea", "idk"])
+async def test_a_bare_dont_know_moves_on_without_a_second_ask(world, text):
+    engine, repo, llm, _ = world
+    state = pending(
+        SessionState(questions_asked=3, best_customer_asked=True), "Who buys?", "slot",
+        "buyer_roles",
+    )  # fmt: skip
+    sid = await preset(repo, state)
+    llm.queue("extraction", ext(flags=Flags(vague=True)))  # even if the model marks nothing
+    llm.queue("question", q("Which regions?"))
+    result = await engine.answer(T, sid, text)
+    assert result.question.slot != "buyer_roles"
+    assert not result.question.text.startswith(DECLINE_PREFIX)
+
+
+async def test_a_question_asked_as_the_interview_ends_is_still_answered(world):
+    engine, repo, llm, _ = world
+    state = pending(
+        SessionState(questions_asked=SETTINGS.quick_mode_question_cap, best_customer_asked=True), "Batch sizes?", "slot",
+        "geographies",
+    )  # fmt: skip
+    state.last_turns = [TurnPair(question="Batch sizes?", answer="what is MOQ?")]
+    sid = await preset(repo, state)  # the same question was already put once: we move on
+    llm.queue("extraction", ext(flags=Flags(asks_bot="what is MOQ?")))
+    llm.queue(
+        "question",
+        QuestionOutput(question="Thanks, that is all I need.", reply="MOQ is the smallest order."),
+    )
+    result = await engine.answer(T, sid, "what is MOQ?")
+    assert result.status == "completed" and result.icp_ready
+    assert result.question.text == "MOQ is the smallest order. Thanks, that is all I need."
+    assert "what is MOQ?" in llm.calls_for("question")[0].user
+
+
+async def test_finishing_without_a_question_asked_has_no_closing_text(world):
+    engine, repo, llm, _ = world
+    state = pending(
+        SessionState(questions_asked=SETTINGS.quick_mode_question_cap, best_customer_asked=True), "Who buys?", "slot",
+        "geographies",
+    )  # fmt: skip
+    sid = await preset(repo, state)
+    llm.queue("extraction", ext(up("geographies", ["Europe"])))
+    result = await engine.answer(T, sid, "Europe")
+    assert result.status == "completed" and result.question is None
+
+
+async def test_the_interview_ends_when_the_details_are_known_long_before_the_cap(world):
+    engine, repo, llm, _ = world
+    state = pending(SessionState(questions_asked=5, best_customer_asked=True), "Q?", "slot", "x")
+    for slot in SLOT_LIST:
+        if slot.tier == Tier.A and not slot.skip_if:
+            state.slots[slot.key] = SlotValue(
+                values=["x"], confidence=0.9, source=SlotSource.STATED
+            )
+    state.slots["business_model"] = SlotValue(
+        values=["B2B"], confidence=0.9, source=SlotSource.STATED
+    )
+    for slot in SLOT_LIST:
+        if slot.skip_if:
+            state.slots[slot.key] = SlotValue(
+                values=["x"], confidence=0.9, source=SlotSource.STATED
+            )
+    topics = {}  # one slot for each of three stop topics counts as asked
+    for slot in SLOT_LIST:
+        if slot.topic in STOP_TOPICS and slot.topic not in topics:
+            topics[slot.topic] = slot.key
+    state.asked_slots = {key: 1 for key in list(topics.values())[:3]}
+    sid = await preset(repo, state)
+    llm.queue("extraction", ext(up("product", ["payroll"])))
+    result = await engine.answer(T, sid, "payroll")
+    assert (result.status, result.stop_reason) == ("completed", "complete")
+    assert result.questions_asked < SETTINGS.quick_mode_question_cap
+
+
+def stated(state, key, *values, confidence=0.9, source=SlotSource.STATED):
+    state.slots[key] = SlotValue(values=list(values), confidence=confidence, source=source)
+
+
+async def test_a_user_who_contradicts_themselves_is_asked_which_one_is_right(world):
+    engine, repo, llm, _ = world
+    state = pending(
+        SessionState(questions_asked=4, best_customer_asked=True), "Who buys?", "slot",
+        "buyer_roles",
+    )  # fmt: skip
+    stated(state, "business_model", "B2C", confidence=0.6)
+    sid = await preset(repo, state)
+    flags = Flags(contradiction_slots=["business_model"])
+    llm.queue("extraction", ext(up("business_model", ["B2B"]), flags=flags))
+    llm.queue("question", q("You first said B2C and now B2B. Which is right?"))
+    result = await engine.answer(T, sid, "we sell to hospitals, so B2B")
+    assert result.question.kind == "clarify" and result.question.slot == "business_model"
+    assert result.question.options == ("B2C", "B2B") and result.questions_asked == 4
+    user = llm.calls_for("question")[0].user
+    assert "said earlier: B2C" in user and "says now: B2B" in user
+    record = await repo.get_session(T, sid)
+    assert record.state.clarified == ["business_model"]
+    assert record.state.pending_kind == "clarify"
+
+    # their answer settles it, and even if the model flags it again we do not ask twice
+    llm.queue("extraction", ext(up("business_model", ["B2B"]), flags=flags))
+    llm.queue("question", q("Which regions?"))
+    after = await engine.answer(T, sid, "B2B")
+    assert after.question.kind != "clarify"
+
+
+async def test_correcting_a_value_we_only_guessed_is_not_a_contradiction(world):
+    engine, repo, llm, _ = world
+    state = pending(
+        SessionState(questions_asked=4, best_customer_asked=True), "Who buys?", "slot",
+        "buyer_roles",
+    )  # fmt: skip
+    stated(state, "business_model", "B2C", confidence=0.5, source=SlotSource.INFERRED)
+    sid = await preset(repo, state)
+    flags = Flags(contradiction_slots=["business_model"])
+    llm.queue("extraction", ext(up("business_model", ["B2B"]), flags=flags))
+    llm.queue("question", q("Which regions?"))
+    result = await engine.answer(T, sid, "B2B")
+    assert result.question.kind != "clarify"
+
+
+async def test_revise_reopens_a_completed_session_and_takes_the_note_as_an_answer(world):
+    engine, repo, llm, _ = world
+    sid = await completed_session(repo)
+    llm.queue("extraction", ext(up("product", ["Payroll"])))
+    llm.queue("question", q("Anything else to add?"))
+    result = await engine.revise(T, sid, "We sell payroll, not HR software")
+    record = await repo.get_session(T, sid)
+    assert record.state.slots["product"].values == ["Payroll"]
+    assert result.status in ("active", "completed")
+    assert "revision_requested" in [e.type for e in await repo.list_feedback(T, sid)]
+
+
+async def test_a_confidential_refusal_of_the_best_customer_asks_for_an_overview_once(world):
+    engine, repo, llm, _ = world
+    state = pending(
+        SessionState(questions_asked=2, best_customer_asked=True),
+        "Who is one client you would clone?",
+        "best_customer",
+    )
+    sid = await preset(repo, state)
+    llm.queue("extraction", ext(flags=Flags(refuses=True)))
+    llm.queue("question", q("Understood. Just tell me the kind of client you like."))
+    result = await engine.answer(T, sid, "it is confidential and I cannot share it")
+    assert result.status == "active" and result.question.kind == "best_customer"
+    assert "confidential" in llm.calls_for("question")[0].user
+    llm.queue("extraction", ext(flags=Flags(refuses=True)))
+    llm.queue("question", q("Fine. Which industries?"))
+    again = await engine.answer(T, sid, "still no")
+    assert again.question.text == "Fine. Which industries?"  # asked once, then it moves on

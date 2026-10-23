@@ -42,3 +42,5 @@ export const editIcp = (id: string, edit: IcpEdit) =>
   call<IcpResponse>("PATCH", `/sessions/${id}/icp`, edit);
 export const sendVerdict = (id: string, correct: boolean, comment = "") =>
   call<null>("POST", `/sessions/${id}/verdict`, { correct, comment });
+export const reviseIcp = (id: string, text: string) =>
+  call<Turn>("POST", `/sessions/${id}/revise`, { text });

@@ -4,7 +4,7 @@ import Composer from "./components/Composer";
 import FallbackForm from "./components/FallbackForm";
 import IcpView from "./components/IcpView";
 import SignupCard from "./components/SignupCard";
-import type { FormField, IcpEdit, IcpResponse, StartRequest, Turn } from "./types";
+import type { FormField, IcpResponse, StartRequest, Turn } from "./types";
 
 type Stage = "home" | "signup" | "interview" | "fallback" | "building" | "done";
 interface Message {
@@ -39,6 +39,7 @@ export default function App() {
   const [missing, setMissing] = useState<string[]>([]);
   const [icp, setIcp] = useState<IcpResponse | null>(null);
   const [approved, setApproved] = useState(false);
+  const [revising, setRevising] = useState(false);
   const nextId = useRef(1);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -59,6 +60,7 @@ export default function App() {
     setMissing([]);
     setIcp(null);
     setApproved(false);
+    setRevising(false);
     setBusy(false);
     setStage("signup");
     push("bot", "Hi! Tell me a little about your company and we will begin.");
@@ -133,7 +135,9 @@ export default function App() {
     setOptions([]);
     setPicked([]);
     push("me", text);
-    return guarded(async () => handleTurn(await api.sendAnswer(sessionId, text)));
+    const call = revising ? api.reviseIcp : api.sendAnswer;
+    setRevising(false);
+    return guarded(async () => handleTurn(await call(sessionId, text)));
   };
 
   const choose = (o: string) => {
@@ -160,30 +164,20 @@ export default function App() {
       await makeIcp(sessionId);
     });
 
-  // Review actions return an error message for the card to show, or null on success.
-  async function review(job: (id: string) => Promise<void>): Promise<string | null> {
-    if (!sessionId) return "No active chat.";
-    setBusy(true);
-    try {
-      await job(sessionId);
-      return null;
-    } catch (e) {
-      return explain(e);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const editIcp = (edit: IcpEdit) => review(async (id) => setIcp(await api.editIcp(id, edit)));
   const approve = () =>
-    review(async (id) => {
-      setIcp(await api.approveIcp(id));
+    guarded(async () => {
+      if (!sessionId) return;
+      setIcp(await api.approveIcp(sessionId));
+      await api.sendVerdict(sessionId, true);
       setApproved(true);
     });
-  const verdict = (correct: boolean, comment: string) =>
-    review(async (id) => {
-      await api.sendVerdict(id, correct, comment);
-    });
+
+  function improve() {
+    setIcp(null);
+    setRevising(true);
+    push("bot", "Sorry about that. What should be changed or added?");
+    setStage("interview");
+  }
 
   if (stage === "home") {
     return (
@@ -252,9 +246,8 @@ export default function App() {
             icp={icp}
             approved={approved}
             busy={busy}
-            onEdit={editIcp}
             onApprove={approve}
-            onVerdict={verdict}
+            onImprove={improve}
             onNewChat={newChat}
           />
         )}

@@ -14,6 +14,8 @@ from icp_chatbot.engine.questions import (
     best_customer_question,
     clean_options,
     fallback_question,
+    generate_clarify,
+    generate_closing,
     generate_opener,
     generate_question,
     generate_reply,
@@ -254,3 +256,45 @@ async def test_moving_to_a_new_topic_never_asks_the_last_question_again():
     await generate_question(llm, CONFIG, state, "geographies")
     user = llm.calls_for("question")[0].user
     assert "moved on" in user and "Ask only about the target slot" in user
+
+
+async def test_the_reply_writer_sees_the_users_whole_message_not_only_the_copied_question():
+    llm = FakeLLM(
+        {"question": [QuestionOutput(question="Batch sizes?", reply="MOQ is the least.")]}
+    )
+    state = SessionState(
+        last_turns=[TurnPair(question="Batch sizes?", answer="i do not know what is MOQ, brief me")]
+    )
+    pending = Question("Batch sizes?", kind="slot", slot="batch_size")
+    await generate_reply(llm, CONFIG, state, pending, "brief me that")
+    user = llm.calls_for("question")[0].user
+    assert "i do not know what is MOQ, brief me" in user
+    assert "explain the term or idea they asked about" in user
+
+
+async def test_a_closing_answer_replies_then_ends_with_a_thank_you_not_a_question():
+    out = QuestionOutput(question="Thanks, that is all I need.", reply="MOQ is the smallest order.")
+    llm = FakeLLM({"question": [out]})
+    result = await generate_closing(llm, CONFIG, SessionState(), "what is MOQ")
+    assert result.question.text == "MOQ is the smallest order. Thanks, that is all I need."
+    assert result.question.kind == "closing"
+    assert "interview is finished" in llm.calls_for("question")[0].user
+    failing = FakeLLM({"question": [LLMError("api", "boom")]})
+    assert await generate_closing(failing, CONFIG, SessionState(), "what is MOQ") is None
+
+
+async def test_a_clarifying_question_names_what_they_said_before_and_now():
+    out = QuestionOutput(question="Earlier you said B2C and now B2B. Which is right?")
+    llm = FakeLLM({"question": [out]})
+    result = await generate_clarify(llm, CONFIG, SessionState(), "business_model", ["B2C"], ["B2B"])
+    assert result.question.kind == "clarify" and result.question.slot == "business_model"
+    assert result.question.options == ("B2C", "B2B") and not result.question.multi
+    user = llm.calls_for("question")[0].user
+    assert "said earlier: B2C" in user and "says now: B2B" in user
+
+
+async def test_a_clarifying_question_has_a_fixed_text_when_the_writer_fails():
+    llm = FakeLLM({"question": [LLMError("api", "boom")]})
+    result = await generate_clarify(llm, CONFIG, SessionState(), "geographies", ["UK"], ["India"])
+    assert "UK" in result.question.text and "India" in result.question.text
+    assert result.question.kind == "clarify"

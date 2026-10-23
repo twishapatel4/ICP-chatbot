@@ -241,8 +241,21 @@ RETURN_HINT = (
 )
 
 DECLINED_NOTE = (
-    "The user chose not to answer the last question. Accept that in one or two words "
-    '("Understood.") and ask about the target slot; never ask about what they declined again.'
+    "The user did not answer the last question: they declined, or they do not know. Accept that "
+    'in a few words ("That is fine.") without pushing, and ask about the target slot; never '
+    "ask about what they could not answer again."
+)
+
+
+def _message_lines(state: SessionState) -> list[str]:
+    """The user's whole last message: what they asked may only make sense inside it."""
+    last = state.last_turns[-1].answer if state.last_turns else ""
+    return [f"The user's whole message (data): {last}"] if last else []
+
+
+CLOSING_HINT = (
+    "The user asked something just as the interview is finished. Put the answer in reply, and a "
+    "short thank-you closing line in question (no question mark, nothing new to answer)."
 )
 
 
@@ -463,6 +476,17 @@ async def generate_opener(
     return QuestionResult(Question(text, kind="opener"), result.usage, result.cost_usd, cfg.model)
 
 
+PRIVACY_HINT = (
+    "The user said the answer is confidential. Respect that in one short sentence, then say no "
+    "names or exact details are needed, and ask for just an overview of the kind of client they "
+    "like working with (for example their type, size or what they need). One question only."
+)
+PRIVACY_FALLBACK = (
+    "Understood, and thank you for protecting your clients' privacy. No names or exact details "
+    "are needed. Just give me an overview of the kind of client you like working with."
+)
+
+
 async def generate_followup(
     llm: LLM,
     config: ConfigVersionData,
@@ -471,6 +495,7 @@ async def generate_followup(
     kind: str,
     *,
     asked: str = "",
+    privacy: bool = False,
     labels: dict[str, str] | None = None,
 ) -> QuestionResult:
     """A follow-up to a question that has no slot of its own (the opener, the best-customer
@@ -484,12 +509,20 @@ async def generate_followup(
         lines.append(f"Earlier question: {turn.question}\nUser answer (data): {turn.answer}")
     said_something = bool(state.last_turns) and not is_non_answer(state.last_turns[-1].answer)
     lines.append(
-        FOLLOW_UP_HINT_AFTER_QUESTION if asked else PROBE_HINT if said_something else FOLLOW_UP_HINT
+        PRIVACY_HINT
+        if privacy
+        else FOLLOW_UP_HINT_AFTER_QUESTION
+        if asked
+        else PROBE_HINT
+        if said_something
+        else FOLLOW_UP_HINT
     )
     lines += _asked_lines(asked)
     cfg = config.step("question")
     fallback = Question(
-        "No problem, let me put it another way. What do you sell, and what kind of company "
+        PRIVACY_FALLBACK
+        if privacy
+        else "No problem, let me put it another way. What do you sell, and what kind of company "
         "buys it? A few words is enough."
         if kind == "opener"
         else "No worries. Can you name one customer you were happy with, and why they worked "
@@ -569,8 +602,104 @@ async def generate_best_customer(
     )
 
 
+CLARIFY_HINT = (
+    "The user's answers do not agree. Say so kindly and without blame: mention what they said "
+    "earlier and what they say now, then ask which one is right for their business, or whether "
+    'both apply. At most 30 words, one question only, no options. Do not say "No problem."'
+)
+
+
+async def generate_clarify(
+    llm: LLM,
+    config: ConfigVersionData,
+    state: SessionState,
+    slot_key: str,
+    before: list[str],
+    now: list[str],
+    *,
+    labels: dict[str, str] | None = None,
+) -> QuestionResult:
+    """Ask which of two things the user said is right. The two values become the options."""
+    slot = state.slot_def(slot_key) or SLOTS[slot_key]
+    old, new = ", ".join(before), ", ".join(now)
+    options = tuple(dict.fromkeys([*before, *now]))[:6]
+    kept = Question(
+        f"Earlier you mentioned {old}, and now {new}. Which one is right for you?",
+        kind="clarify",
+        slot=slot_key,
+        options=options,
+        multi=not slot.single_choice,
+    )
+    lines = [
+        *_domain_lines(state),
+        f"Topic: {slot.label} ({slot.description})",
+        f"The user said earlier: {old}",
+        f"The user says now: {new}",
+        *_message_lines(state),
+        CLARIFY_HINT,
+    ]
+    cfg = config.step("question")
+    try:
+        result = await llm.generate(
+            step="question",
+            cfg=cfg,
+            system=config.system_prompt("question"),
+            user="\n".join(lines),
+            schema=QuestionOutput,
+            labels=labels,
+        )
+    except LLMError as exc:
+        log.warning("clarify writer failed, using the fixed text: %s", exc)
+        return QuestionResult(kept)
+    text = _clean(result.parsed.question)
+    if text is None:
+        return QuestionResult(kept, result.usage, result.cost_usd, cfg.model)
+    asked = Question(text, kind="clarify", slot=slot_key, options=options, multi=kept.multi)
+    return QuestionResult(asked, result.usage, result.cost_usd, cfg.model)
+
+
+async def generate_closing(
+    llm: LLM,
+    config: ConfigVersionData,
+    state: SessionState,
+    asked: str,
+    *,
+    labels: dict[str, str] | None = None,
+) -> QuestionResult | None:
+    """Answer what the user asked on the turn that ends the interview. None if the writer
+    fails: the interview then just ends."""
+    lines = [
+        *_domain_lines(state),
+        f"Rolling summary: {state.summary or '(none)'}",
+        *_message_lines(state),
+        *_asked_lines(asked),
+        CLOSING_HINT,
+    ]
+    cfg = config.step("question")
+    try:
+        result = await llm.generate(
+            step="question",
+            cfg=cfg,
+            system=config.system_prompt("question"),
+            user="\n".join(lines),
+            schema=QuestionOutput,
+            labels=labels,
+        )
+    except LLMError as exc:
+        log.warning("closing writer failed, ending without an answer: %s", exc)
+        return None
+    closing = _clean(result.parsed.question)
+    reply = _reply_text(result.parsed.reply, closing)
+    if not reply or closing is None:
+        return None
+    return QuestionResult(
+        Question(f"{reply} {closing}", kind="closing"), result.usage, result.cost_usd, cfg.model
+    )
+
+
 REASK_HINT = (
-    "The user asked you something instead of answering. Put your answer in reply, then ask the "
+    "The user asked you something instead of answering. Put your answer in reply: explain the "
+    "term or idea they asked about, in the context of their business, then ask the "
     "waiting question again in your own words, same meaning, at most 25 words, one question "
     'only. Do not use options. Do not say "No problem."'
 )
@@ -591,6 +720,7 @@ async def generate_reply(
         *_domain_lines(state),
         f"Rolling summary: {state.summary or '(none)'}",
         f"Question still waiting for an answer: {pending.text}",
+        *_message_lines(state),
         *_asked_lines(asked),
         REASK_HINT,
     ]
