@@ -567,6 +567,17 @@ REASK_HINT = (
 )
 
 
+RANGE_SLOTS = frozenset({"company_size", "revenue_range", "budget_range", "deal_size"})
+RANGE_HINT = (
+    "The user would not give an exact figure for the question above, or is not sure of it. Say "
+    "in one friendly sentence, in your own words and fitting what they told you, that an exact "
+    "number is not needed and that a rough range is just as useful, then ask for a range for "
+    "the same thing. Put three or four ranges that fit this company and industry in options. "
+    "At most 40 words, one question only, never a stock phrase."
+)
+RANGE_FALLBACK = "An exact figure is not needed. A rough range is just as useful. "
+
+
 async def generate_reask(
     llm: LLM,
     config: ConfigVersionData,
@@ -574,6 +585,7 @@ async def generate_reask(
     question: Question,
     fallback_prefix: str,
     *,
+    hint: str = REASK_HINT,
     labels: dict[str, str] | None = None,
 ) -> QuestionResult:
     """The one retry after a bare "no": written for this user and this question each time. The
@@ -592,7 +604,7 @@ async def generate_reask(
     ]
     for turn in state.last_turns:
         lines.append(f"Earlier question: {turn.question}\nUser answer (data): {turn.answer}")
-    lines.append(REASK_HINT)
+    lines.append(hint)
     cfg = config.step("question")
     try:
         result = await llm.generate(

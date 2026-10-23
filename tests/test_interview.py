@@ -1057,3 +1057,21 @@ async def test_a_vague_revision_note_gets_one_clarifying_question_before_rebuild
     record = await repo.get_session(T, sid)
     assert record.state.slots["product"].values == ["Payroll"]
     assert done.status in ("active", "completed")
+
+
+async def test_refusing_an_exact_figure_asks_for_a_rough_range_once(world):
+    engine, repo, llm, _ = world
+    state = pending(
+        SessionState(questions_asked=4, best_customer_asked=True),
+        "What is the typical contract value?",
+        "slot",
+        "deal_size",
+    )
+    sid = await preset(repo, state)
+    llm.queue("extraction", ext(flags=Flags(refuses=True)), ext(flags=Flags(refuses=True)))
+    llm.queue("question", q("No exact number needed. Roughly which range?"), q("Next?"))
+    first = await engine.answer(T, sid, "cannot say this")
+    assert first.question.slot == "deal_size" and "range" in first.question.text
+    assert "rough range" in llm.calls_for("question")[0].user
+    second = await engine.answer(T, sid, "still no")
+    assert second.question.text == "Next?"  # asked for a range once, then moved on

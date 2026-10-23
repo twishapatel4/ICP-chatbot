@@ -31,6 +31,9 @@ from icp_chatbot.engine.extraction import (
 )
 from icp_chatbot.engine.planner import COMPLETION_CONFIDENCE, Ask, Caps, plan_next
 from icp_chatbot.engine.questions import (
+    RANGE_FALLBACK,
+    RANGE_HINT,
+    RANGE_SLOTS,
     Question,
     QuestionResult,
     generate_best_customer,
@@ -38,8 +41,8 @@ from icp_chatbot.engine.questions import (
     generate_closing,
     generate_followup,
     generate_opener,
-    generate_reask,
     generate_probe,
+    generate_reask,
     generate_question,
     generate_reply,
     generate_thread_question,
@@ -409,6 +412,34 @@ class InterviewEngine:
                 spend.models["question"] = result.model
             self._record_question(state, result.question)
             question = result.question
+        elif (
+            (flags.refuses or flags.unsure or is_unsure(text))
+            and not applied
+            and target in RANGE_SLOTS
+            and not state.declines.get(f"range:{target}")
+        ):
+            # no exact figure: a rough range is just as useful, so ask for that once
+            state.declines[f"range:{target}"] = 1
+            result = await generate_reask(
+                self._llm,
+                config,
+                state,
+                Question(
+                    question_text,
+                    kind=question_kind,
+                    slot=target,
+                    options=tuple(state.pending_options),
+                    multi=state.pending_multi,
+                ),
+                RANGE_FALLBACK,
+                hint=RANGE_HINT,
+                labels=labels,
+            )
+            spend.add(result.usage, result.cost_usd, fallback=result.used_fallback)
+            if result.model:
+                spend.models["question"] = result.model
+            question = result.question
+            state.pending_question, state.pending_options = question.text, list(question.options)
         elif (flags.refuses or flags.unsure or is_unsure(text)) and not applied:
             # a firm no, or "I don't know": respect it, never push, move on to the next topic
             _set_aside(state, target, question_kind)
