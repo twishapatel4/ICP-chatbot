@@ -117,7 +117,9 @@ async def build_icp(
     except LLMError as exc:
         log.warning("final ICP step failed, showing values as recorded: %s", exc)
         fallback = True
-        open_questions.append("The final clean-up step failed; values are shown as recorded.")
+        open_questions.append(
+            "The final clean-up step failed because the AI service did not respond; values are shown as recorded. Please try again later."
+        )
 
     disqualifiers = []
     if synthesis:

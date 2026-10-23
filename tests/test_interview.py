@@ -9,8 +9,9 @@ from icp_chatbot.domain.state import SessionState, SlotSource, SlotValue
 from icp_chatbot.engine.extraction import ExtractionResult, Flags, SlotUpdate, Thread
 from icp_chatbot.engine.interview import (
     DECLINE_PREFIX,
+    DEGRADED_NOTICE,
     REDIRECT_PREFIX,
-    RETRY_PREFIX,
+    RETRY_NOTICE,
     InterviewEngine,
     InvalidAnswer,
     InvalidTransition,
@@ -270,7 +271,8 @@ async def test_one_extraction_failure_asks_again_and_two_in_a_row_offer_the_form
     )
     llm.queue("extraction", LLMError("api", "x"), LLMError("api", "y"))
     first = await engine.answer(T, sid, "CTOs")
-    assert first.status == "active" and first.question.text == RETRY_PREFIX + "Who buys?"
+    assert first.status == "active" and first.question.text == "Who buys?"
+    assert first.notice == RETRY_NOTICE and "not about what you wrote" in RETRY_NOTICE
     assert first.questions_asked == 3  # a retry is not a new question
     second = await engine.answer(T, sid, "CTOs")
     assert (second.status, second.fallback_form, second.stop_reason) == (
@@ -835,3 +837,24 @@ async def test_coming_back_from_a_thread_forgets_it(world):
     assert result.question.kind == "slot"
     record = await repo.get_session(T, sid)
     assert (record.state.thread_run, record.state.thread_topic) == (0, "")
+
+
+async def test_a_failed_question_writer_tells_the_user_it_is_a_service_problem(world):
+    engine, repo, llm, _ = world
+    state = pending(
+        SessionState(questions_asked=3, best_customer_asked=True), "Which regions?", "slot",
+        "geographies",
+    )  # fmt: skip
+    sid = await preset(repo, state)
+    llm.queue("extraction", ext(up("geographies", ["Europe"])), ext(up("industries", ["Banks"])))
+    llm.queue("question", LLMError("timeout", "slow"), q("Which roles buy?"))
+    broken = await engine.answer(T, sid, "Europe")
+    assert broken.question.kind == "fallback" and broken.notice == DEGRADED_NOTICE
+    fine = await engine.answer(T, sid, "banks")
+    assert fine.notice is None  # the notice only shows on the turn that was affected
+
+
+async def test_a_healthy_turn_has_no_notice(world):
+    engine, repo, llm, _ = world
+    llm.queue("opener", q("What do you sell?"))
+    assert (await started(world)).notice is None

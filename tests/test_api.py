@@ -381,3 +381,11 @@ async def test_verdict_needs_an_icp(world):
     assert (
         await w.call("POST", f"/sessions/{sid}/verdict", json={"correct": True})
     ).status_code == 404
+
+
+def test_the_turn_response_carries_the_notice():
+    from icp_chatbot.api.schemas import TurnResponse
+    from icp_chatbot.engine.interview import TurnResult
+
+    result = TurnResult("s", None, "active", None, False, False, "quick", 1, notice="try again")
+    assert TurnResponse.of(result).notice == "try again"

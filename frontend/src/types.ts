@@ -27,6 +27,7 @@ export interface Turn {
   stop_reason: string | null;
   icp_ready: boolean;
   fallback_form: boolean;
+  notice: string | null;
 }
 
 export interface FormField {

@@ -89,31 +89,66 @@ async def test_invalid_output_is_retried_once_and_usage_is_summed():
     assert result.usage.input_tokens == 200
 
 
-async def test_invalid_output_twice_raises():
-    client, _ = client_with(reply(text="bad"), reply(text="still bad"))
+async def test_invalid_output_keeps_being_retried_then_raises():
+    client, models = client_with(*[reply(text="bad")] * 4)
     with pytest.raises(LLMError) as err:
-        await call(GeminiLLM(client))
-    assert err.value.kind == "invalid_output"
+        await call(GeminiLLM(client, retry_delay_s=0))
+    assert err.value.kind == "invalid_output" and len(models.calls) == 4
 
 
-async def test_api_errors_are_mapped():
-    exc = genai_errors.APIError(
+def quota():
+    return genai_errors.APIError(
         429, {"error": {"message": "quota", "status": "RESOURCE_EXHAUSTED"}}
     )
-    client, _ = client_with(exc)
+
+
+async def test_a_quota_error_is_retried_until_it_clears():
+    client, models = client_with(quota(), quota(), reply(parsed=Answer(text="ok")))
+    result = await call(GeminiLLM(client, retry_delay_s=0))
+    assert result.parsed.text == "ok" and len(models.calls) == 3
+
+
+async def test_api_errors_are_mapped_after_the_retries_run_out():
+    client, models = client_with(*[quota()] * 4)
     with pytest.raises(LLMError) as err:
-        await call(GeminiLLM(client))
-    assert err.value.kind == "api" and "429" in err.value.message
+        await call(GeminiLLM(client, retry_delay_s=0))
+    assert err.value.kind == "api" and "429" in err.value.message and len(models.calls) == 4
 
 
-async def test_timeouts_are_mapped():
+async def test_a_request_that_can_never_work_is_not_retried():
+    bad = genai_errors.APIError(400, {"error": {"message": "bad", "status": "INVALID_ARGUMENT"}})
+    client, models = client_with(bad)
+    with pytest.raises(LLMError) as err:
+        await call(GeminiLLM(client, retry_delay_s=0))
+    assert err.value.kind == "api" and len(models.calls) == 1
+
+
+async def test_timeouts_are_retried_once_then_mapped():
     async def slow():
         await asyncio.sleep(1)
 
-    client, _ = client_with(slow)
+    client, models = client_with(slow, slow, slow)
     with pytest.raises(LLMError) as err:
-        await call(GeminiLLM(client, timeout_s=0.01))
-    assert err.value.kind == "timeout"
+        await call(GeminiLLM(client, timeout_s=0.01, retry_delay_s=0))
+    assert err.value.kind == "timeout" and len(models.calls) == 2
+
+
+async def test_a_slow_call_that_works_on_the_second_try_succeeds():
+    async def slow():
+        await asyncio.sleep(1)
+
+    client, _ = client_with(slow, reply(parsed=Answer(text="ok")))
+    assert (await call(GeminiLLM(client, timeout_s=0.05, retry_delay_s=0))).parsed.text == "ok"
+
+
+async def test_an_answer_cut_off_by_thinking_is_retried_with_more_room():
+    cut = reply(parsed=None, text='{"te')
+    cut.candidates = [SimpleNamespace(finish_reason=types.FinishReason.MAX_TOKENS)]
+    client, models = client_with(cut, reply(parsed=Answer(text="ok")))
+    cfg = StepConfig(model="gemini-2.5-pro", thinking_budget=512, max_output_tokens=512)
+    result = await call(GeminiLLM(client, retry_delay_s=0), cfg=cfg)
+    assert result.parsed.text == "ok"
+    assert [c.config.max_output_tokens for c in models.calls] == [512, 1024]
 
 
 async def test_unknown_model_costs_zero_instead_of_failing():

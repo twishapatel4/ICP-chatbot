@@ -56,6 +56,7 @@ class TurnResponse(BaseModel):
     stop_reason: str | None = None
     icp_ready: bool = False
     fallback_form: bool = False
+    notice: str | None = None  # a model step failed: tell the user it is not their fault
 
     @classmethod
     def of(cls, r: TurnResult) -> "TurnResponse":
@@ -68,6 +69,7 @@ class TurnResponse(BaseModel):
             stop_reason=r.stop_reason,
             icp_ready=r.icp_ready,
             fallback_form=r.fallback_form,
+            notice=r.notice,
         )
 
 

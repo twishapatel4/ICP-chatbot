@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import time
+from dataclasses import replace
 
 from google.genai import errors as genai_errors
 from google.genai import types
@@ -14,6 +15,9 @@ from icp_chatbot.llm.types import LLMError, LLMResult, StepConfig, T, Usage
 log = logging.getLogger(__name__)
 
 _VALID_LEVELS = {"MINIMAL", "LOW", "MEDIUM", "HIGH"}
+_TRANSIENT_CODES = {429, 500, 502, 503, 504}
+_MAX_TOKEN_CEILING = 8192  # a cut-off answer is retried with a bigger budget, up to this
+_TIMEOUT_RETRIES = 1  # a slow call is retried once: each try already waits the full timeout
 
 
 def thinking_config(cfg: StepConfig) -> types.ThinkingConfig | None:
@@ -34,18 +38,26 @@ def thinking_config(cfg: StepConfig) -> types.ThinkingConfig | None:
     return None
 
 
+def _cut_off(response) -> bool:
+    candidates = getattr(response, "candidates", None) or []
+    reason = getattr(candidates[0], "finish_reason", None) if candidates else None
+    return "MAX_TOKENS" in str(reason)
+
+
 class GeminiLLM:
     def __init__(
         self,
         client,
         *,
         timeout_s: float = 20.0,
-        invalid_output_retries: int = 1,
+        retries: int = 3,
+        retry_delay_s: float = 1.0,
         send_labels: bool = False,
     ):
         self._client = client
         self._timeout_s = timeout_s
-        self._invalid_output_retries = invalid_output_retries
+        self._retries = retries  # extra tries after a failed or unusable answer
+        self._retry_delay_s = retry_delay_s
         # Request labels are only sent to Vertex AI; the Developer API may reject them.
         self._send_labels = send_labels
 
@@ -83,9 +95,11 @@ class GeminiLLM:
         schema: type[T],
         labels: dict[str, str] | None = None,
     ) -> LLMResult[T]:
-        config = self._config(cfg, system, schema, labels)
         spent = Usage()
-        for attempt in range(self._invalid_output_retries + 1):
+        timeouts = 0
+        for attempt in range(self._retries + 1):
+            config = self._config(cfg, system, schema, labels)
+            last = attempt == self._retries
             started = time.monotonic()
             try:
                 response = await asyncio.wait_for(
@@ -95,9 +109,17 @@ class GeminiLLM:
                     timeout=self._timeout_s,
                 )
             except TimeoutError as exc:
-                raise LLMError("timeout", f"{step}: no response in {self._timeout_s}s") from exc
+                timeouts += 1
+                if last or timeouts > _TIMEOUT_RETRIES:
+                    raise LLMError("timeout", f"{step}: no response in {self._timeout_s}s") from exc
+                log.warning("%s timed out (attempt %d), retrying", step, attempt + 1)
+                continue
             except genai_errors.APIError as exc:
-                raise LLMError("api", f"{step}: {exc.code} {exc.message}") from exc
+                if exc.code not in _TRANSIENT_CODES or last:
+                    raise LLMError("api", f"{step}: {exc.code} {exc.message}") from exc
+                log.warning("%s: api %s (attempt %d), retrying", step, exc.code, attempt + 1)
+                await asyncio.sleep(self._retry_delay_s * 2**attempt)
+                continue
             latency_ms = int((time.monotonic() - started) * 1000)
             spent = spent + Usage.from_metadata(getattr(response, "usage_metadata", None))
             parsed = self._parse(response, schema)
@@ -113,5 +135,10 @@ class GeminiLLM:
                     spent.thought_tokens, cost, latency_ms,
                 )  # fmt: skip
                 return LLMResult(parsed, spent, cfg.model, latency_ms, cost)
+            if _cut_off(response) and cfg.max_output_tokens < _MAX_TOKEN_CEILING:
+                # thinking used up the budget before the answer was written: give it more room
+                cfg = replace(
+                    cfg, max_output_tokens=min(cfg.max_output_tokens * 2, _MAX_TOKEN_CEILING)
+                )
             log.warning("invalid structured output from %s (attempt %d)", step, attempt + 1)
         raise LLMError("invalid_output", f"{step}: response did not match {schema.__name__}")

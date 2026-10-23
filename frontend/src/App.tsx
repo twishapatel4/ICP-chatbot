@@ -14,7 +14,7 @@ interface Message {
 }
 
 function explain(e: unknown): string {
-  if (!(e instanceof api.ApiError)) return "Could not reach the server. Is the API running?";
+  if (!(e instanceof api.ApiError)) return "I cannot reach the server right now. Please check your connection and try again.";
   switch (e.status) {
     case 409:
       return "That answer was already received, or the chat is closed.";
@@ -23,7 +23,7 @@ function explain(e: unknown): string {
     case 429:
       return "Daily or rate limit reached. Please try again later.";
     default:
-      return `Something went wrong (${e.message}).`;
+      return "Something went wrong on our side, not with your answer. Please try again in a moment.";
   }
 }
 
@@ -76,9 +76,14 @@ export default function App() {
     }
   }
 
-  async function showFallback() {
+  async function showFallback(reason: string | null) {
     setOptions([]);
-    push("bot", "I could not continue the conversation, so here is a short form instead.");
+    push(
+      reason === "model_unavailable" ? "error" : "bot",
+      reason === "model_unavailable"
+        ? "My AI service is not responding right now, so I cannot continue the chat. This is not your fault. You can fill in this short form instead, or try again later."
+        : "I could not continue the conversation, so here is a short form instead.",
+    );
     try {
       setForm(await api.getFallbackForm());
       setStage("fallback");
@@ -89,7 +94,8 @@ export default function App() {
 
   async function handleTurn(turn: Turn) {
     setSessionId(turn.session_id);
-    if (turn.status === "fallback" || turn.fallback_form) return showFallback();
+    if (turn.status === "fallback" || turn.fallback_form) return showFallback(turn.stop_reason);
+    if (turn.notice) push("error", turn.notice);
     if (turn.question) {
       push("bot", turn.question.text);
       setOptions(turn.status === "active" ? turn.question.options : []);

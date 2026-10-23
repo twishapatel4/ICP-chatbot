@@ -56,7 +56,14 @@ PROBE_MIN_IMPORTANCE = 0.6
 MAX_USER_QUESTIONS = 6  # past this, questions are treated like any other off-track reply
 MAX_THREAD_QUESTIONS = 3  # curious follow-ups in a row on what the user brought up
 REDIRECT_PREFIX = "Let's get back to describing your ideal customer. "
-RETRY_PREFIX = "Sorry, I didn't catch that. "
+RETRY_NOTICE = (
+    "I could not process your last message because my AI service is not responding right now. "
+    "This is not about what you wrote. Please send it again."
+)
+DEGRADED_NOTICE = (
+    "My AI service is slow or unavailable right now, so this is a simpler standard question. "
+    "It is not about your answer, which was saved."
+)
 DECLINE_PREFIX = (
     "No worries, and thanks for being open with me. This one really does help us: it's how we "
     "shape your profile and find better-fit customers for you, nothing more. Could you give it "
@@ -101,6 +108,7 @@ class TurnResult:
     fallback_form: bool
     mode: str
     questions_asked: int
+    notice: str | None = None  # a plain-words note when a model step failed: not the user's fault
 
 
 def _declined(
@@ -160,11 +168,13 @@ class _Spend:
     cost: float = 0.0
     latency_ms: int = 0
     models: dict = field(default_factory=dict)
+    degraded: bool = False  # a model step failed and the user got fixed text instead
 
-    def add(self, usage: Usage, cost: float, latency_ms: int = 0) -> None:
+    def add(self, usage: Usage, cost: float, latency_ms: int = 0, fallback: bool = False) -> None:
         self.usage = self.usage + usage
         self.cost += cost
         self.latency_ms += latency_ms
+        self.degraded = self.degraded or fallback
 
 
 class InterviewEngine:
@@ -246,7 +256,7 @@ class InterviewEngine:
         )
 
         opener = await generate_opener(self._llm, config, signup, enrichment.seed, labels=labels)
-        spend.add(opener.usage, opener.cost_usd)
+        spend.add(opener.usage, opener.cost_usd, fallback=opener.used_fallback)
         state.questions_asked = 1
         state.pending_question = opener.question.text
         state.pending_kind = "opener"
@@ -255,7 +265,7 @@ class InterviewEngine:
         await self._repo.save_state(
             tenant_id, session_id, state, expected_version=1, usage=spend.usage, cost_usd=spend.cost
         )
-        return self._result(session_id, state, "active", opener.question)
+        return self._result(session_id, state, "active", opener.question, notice=spend.degraded)
 
     # -- answer ----------------------------------------------------------------------------
 
@@ -308,11 +318,13 @@ class InterviewEngine:
         state.push_turn(question_text, text)
 
         status, stop_reason, question = "active", None, None
+        retry = extraction is None and state.failures < MAX_CONSECUTIVE_FAILURES
         if extraction is None and state.failures >= MAX_CONSECUTIVE_FAILURES:
             status, stop_reason = "fallback", "model_unavailable"
         elif extraction is None:
+            spend.degraded = True
             question = Question(
-                RETRY_PREFIX + question_text,
+                question_text,
                 kind=question_kind,
                 slot=target,
                 options=tuple(state.pending_options),
@@ -341,7 +353,7 @@ class InterviewEngine:
                 flags.asks_bot,
                 labels=labels,
             )
-            spend.add(result.usage, result.cost_usd)
+            spend.add(result.usage, result.cost_usd, fallback=result.used_fallback)
             if result.model:
                 spend.models["question"] = result.model
             question = result.question  # the waiting question stays pending, nothing is consumed
@@ -416,7 +428,9 @@ class InterviewEngine:
             usage=spend.usage,
             cost_usd=spend.cost,
         )
-        return self._result(session_id, state, status, question, stop_reason)
+        return self._result(
+            session_id, state, status, question, stop_reason, notice=spend.degraded, retry=retry
+        )
 
     async def _next(
         self, state, config, previous_vague, labels, spend, asked="", declined=False, thread=None
@@ -428,7 +442,7 @@ class InterviewEngine:
                 self._llm, config, state, thread.topic, thread.slot, asked=user_asked, labels=labels
             )
             if result is not None:
-                spend.add(result.usage, result.cost_usd)
+                spend.add(result.usage, result.cost_usd, fallback=result.used_fallback)
                 spend.models["question"] = result.model
                 self._record_question(state, result.question)
                 state.thread_run += 1
@@ -441,7 +455,7 @@ class InterviewEngine:
             result = await generate_followup(
                 self._llm, config, state, question, kind, asked=user_asked, labels=labels
             )
-            spend.add(result.usage, result.cost_usd)
+            spend.add(result.usage, result.cost_usd, fallback=result.used_fallback)
             if result.model:
                 spend.models["question"] = result.model
             self._record_question(state, result.question)
@@ -451,7 +465,7 @@ class InterviewEngine:
             result = await generate_best_customer(
                 self._llm, config, state, asked=user_asked, declined=declined, labels=labels
             )
-            spend.add(result.usage, result.cost_usd)
+            spend.add(result.usage, result.cost_usd, fallback=result.used_fallback)
             if result.model:
                 spend.models["question"] = result.model
             self._record_question(state, result.question)
@@ -462,7 +476,7 @@ class InterviewEngine:
             result = await generate_probe(
                 self._llm, config, state, probe_slot, asked=user_asked, labels=labels
             )
-            spend.add(result.usage, result.cost_usd)
+            spend.add(result.usage, result.cost_usd, fallback=result.used_fallback)
             if result.model:
                 spend.models["question"] = result.model
             q = result.question  # a clarification: same slot, so no new question is counted
@@ -483,7 +497,7 @@ class InterviewEngine:
             returning=returning,
             labels=labels,
         )
-        spend.add(result.usage, result.cost_usd)
+        spend.add(result.usage, result.cost_usd, fallback=result.used_fallback)
         if result.model:
             spend.models["question"] = result.model
         self._record_question(state, result.question)
@@ -566,7 +580,7 @@ class InterviewEngine:
             cost_usd=spend.cost,
         )
         await self._repo.add_feedback(tenant_id, session_id, type="detail_mode_start")
-        return self._result(session_id, state, status, question, stop_reason)
+        return self._result(session_id, state, status, question, stop_reason, notice=spend.degraded)
 
     # -- helpers -----------------------------------------------------------------------------
 
@@ -577,6 +591,9 @@ class InterviewEngine:
         status: str,
         question: Question | None,
         stop_reason: str | None = None,
+        *,
+        notice: bool = False,
+        retry: bool = False,
     ) -> TurnResult:
         return TurnResult(
             session_id=session_id,
@@ -587,4 +604,5 @@ class InterviewEngine:
             fallback_form=status == "fallback",
             mode=state.mode,
             questions_asked=state.questions_asked,
+            notice=RETRY_NOTICE if retry else DEGRADED_NOTICE if notice else None,
         )
