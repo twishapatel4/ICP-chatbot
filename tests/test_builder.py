@@ -47,7 +47,7 @@ async def test_synthesis_cleans_values_but_keeps_source_and_confidence():
     synthesis = ICPSynthesis(
         fields=[
             FieldDraft(
-                slot="industries", values=["Financial services", "Banking"], evidence="banks"
+                slot="industries", values=["Banks", "Banking"], evidence="banks"
             )
         ],
         disqualifiers=[
@@ -60,9 +60,9 @@ async def test_synthesis_cleans_values_but_keeps_source_and_confidence():
     result = await build_icp(llm, CONFIG, make_state(), today=TODAY, labels={"turn": "9"})
     doc = result.document
     industries = doc.entries()["industries"]
-    assert industries.values == ["Financial services", "Banking"]
+    assert industries.values == ["Banks", "Banking"]
     assert industries.source == SlotSource.STATED and industries.confidence == 0.9
-    assert industries.evidence == "banks"
+    assert industries.evidence != "banks"  # the recorded evidence stays, not the model's note
     assert [d.field for d in doc.scoring_model.disqualifiers] == ["industries", "company_size"]
     assert "Which banks exactly?" in doc.open_questions
     assert validate_model(doc.scoring_model) == []
@@ -157,3 +157,11 @@ async def test_a_fully_known_core_has_no_missing_notes():
             state.slots[s.key] = slot(["x"])
     result = await build_icp(FakeLLM({"final_icp": [ICPSynthesis()]}), CONFIG, state, today=TODAY)
     assert result.document.open_questions == []
+
+
+async def test_added_wording_is_rejected_and_the_recorded_values_are_kept():
+    state = make_state()
+    before = list(entries_from_state(state, TODAY)["industries"].values)
+    synthesis = ICPSynthesis(fields=[FieldDraft(slot="industries", values=["Banks for actuarial rating"])])
+    result = await build_icp(FakeLLM({"final_icp": [synthesis]}), CONFIG, state, today=TODAY)
+    assert result.document.entries()["industries"].values == before

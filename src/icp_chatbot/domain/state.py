@@ -155,6 +155,7 @@ class SessionState(BaseModel):
         default_factory=dict
     )  # slot or kind -> times a bare "no" was re-asked
     history: list[TurnPair] = Field(default_factory=list)  # recent turns for the model-led chat
+    flips: dict[str, int] = Field(default_factory=dict)  # slot -> times the user changed the answer
     agent_enough: bool | None = None  # the interviewer's own call: enough to build an ICP
     agent_missing: list[str] = Field(default_factory=list)  # what it says is still unknown
     finished: bool = False

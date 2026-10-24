@@ -63,3 +63,15 @@ def test_the_interviewers_call_decides_but_the_floor_still_applies():
     assert enough_for_icp(state)
     state.agent_enough = False
     assert not enough_for_icp(state)
+
+
+def test_the_product_described_on_their_website_counts_once_they_have_seen_it():
+    state = SessionState(answers_received=1)
+    for key in ("industries", "buyer_roles", "company_size"):
+        known(state, key)
+    state.slots["product"] = SlotValue(values=["LMS"], confidence=0.5, source=SlotSource.INFERRED)
+    assert not icp_floor_met(state)  # one reply is too early to say they accepted it
+    state.answers_received = 2
+    assert icp_floor_met(state)
+    state.slots["industries"] = SlotValue(values=["x"], confidence=0.5, source=SlotSource.INFERRED)
+    assert not icp_floor_met(state)  # a guessed customer fact still never counts

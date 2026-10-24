@@ -173,6 +173,7 @@ async def generate_opener(
     *,
     labels: dict[str, str] | None = None,
     angle: str | None = None,
+    site_unread: bool = False,
 ) -> QuestionResult:
     """Always written by the model from what is known: the website seed (confirm-and-extend),
     the signup details, or just the company name with a randomly chosen angle so openers vary.
@@ -192,6 +193,11 @@ async def generate_opener(
         for key, value in seed.items():
             lines.append(f"- {key}: {'; '.join(value.values)}")
     else:
+        if site_unread:
+            lines.append(
+                "Their website could not be read (blocked or unavailable). Say so in one short, "
+                "friendly clause, never guess what the company does, and ask them to describe it."
+            )
         lines.append(f"Angle to open with: {angle or random.choice(OPENER_ANGLES)}")
     cfg = config.step("opener")
     try:

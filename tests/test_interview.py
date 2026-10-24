@@ -335,9 +335,11 @@ async def test_two_failed_model_calls_fall_back_to_the_form(world):
     first = await engine.answer(T, sid, "hello")
     assert first.status == "active" and first.notice is not None
     assert first.question.text == "What do you sell?"  # the same question again
-    llm.queue("interviewer", LLMError("api", "down"))
+    llm.queue("interviewer", LLMError("api", "down"), LLMError("api", "down"))
     second = await engine.answer(T, sid, "hello again")
-    assert (second.status, second.stop_reason) == ("fallback", "model_unavailable")
+    assert second.status == "active"  # three failures in a row, not two
+    third = await engine.answer(T, sid, "one more time")
+    assert (third.status, third.stop_reason) == ("fallback", "model_unavailable")
 
 
 async def test_a_success_resets_the_failure_count(world):
@@ -350,18 +352,19 @@ async def test_a_success_resets_the_failure_count(world):
     assert third.status == "active"  # not two failures in a row
 
 
-async def test_a_second_off_topic_reply_offers_the_form(world):
+async def test_three_off_topic_replies_in_a_row_offer_the_form(world):
     engine, repo, llm, _ = world
     sid = await preset(repo)
     llm.queue(
         "interviewer",
-        ask("Let us get back to your customers. What do you sell?", off_topic=True),
-        ask("Still about your business: what do you sell?", off_topic=True),
+        ask("Let us get back to your customers. Which product do you offer?", off_topic=True),
+        ask("Still about your business: which product is it?", off_topic=True),
+        ask("I can only help with your customers. Who buys from you?", off_topic=True),
     )
-    first = await engine.answer(T, sid, "what is the weather")
-    assert first.status == "active"
-    second = await engine.answer(T, sid, "who won the match")
-    assert (second.status, second.stop_reason) == ("fallback", "off_topic")
+    for text in ("what is the weather", "who won the match"):
+        assert (await engine.answer(T, sid, text)).status == "active"
+    third = await engine.answer(T, sid, "tell me a joke")
+    assert (third.status, third.stop_reason) == ("fallback", "off_topic")
 
 
 async def test_the_conversation_so_far_is_shown_to_the_model_each_turn(world):
@@ -522,9 +525,9 @@ async def test_off_topic_replies_only_count_when_they_come_in_a_row(world):
     sid = await preset(repo)
     llm.queue(
         "interviewer",
-        ask("Back to your customers: what do you sell?", off_topic=True),
+        ask("Back to your customers: which product do you offer?", off_topic=True),
         ask("Nice. Who buys it?", up("product", ["booking software"])),
-        ask("Back to your customers: who buys it?", off_topic=True),
+        ask("Let us stay on your business: who buys it?", off_topic=True),
     )
     for text in ("weather?", "we sell booking software", "a joke please"):
         result = await engine.answer(T, sid, text)
@@ -547,3 +550,83 @@ async def test_a_user_who_stops_after_the_basics_are_known_gets_an_icp(world):
     await engine.answer(T, sid, "stop, just build it")
     record = await repo.get_session(T, sid)
     assert record.state.agent_enough is True and enough_for_icp(record.state)
+
+
+def guessed(state, **slots):
+    for key, values in slots.items():
+        state.slots[key] = SlotValue(values=values, confidence=0.5, source=SlotSource.INFERRED)
+    return state
+
+
+async def test_finishing_is_held_back_once_to_confirm_what_was_guessed_from_the_website(world):
+    engine, repo, llm, _ = world
+    state = known(
+        pending(SessionState(questions_asked=6), "Who decides?"),
+        product=["Payroll"], buyer_roles=["CFO"], company_size=["50-500"], geographies=["EU"],
+    )  # fmt: skip
+    guessed(state, industries=["Banks", "Aerospace", "Retail"])
+    sid = await preset(repo, state)
+    llm.queue(
+        "interviewer",
+        AgentTurn(say="All set!", action="finish", enough=True),
+        ask("Your site lists Banks, Aerospace and Retail. Which are really your customers?"),
+    )
+    result = await engine.answer(T, sid, "the CFO")
+    assert result.status == "active" and "Which are really" in result.question.text
+    assert "never confirmed" in llm.calls_for("interviewer")[1].user
+    assert "Guessed from their website" in llm.calls_for("interviewer")[0].user
+    record = await repo.get_session(T, sid)
+    llm.queue("interviewer", AgentTurn(say="Great, banks only. Building it.", action="finish", enough=True,
+                                      updates=[up("industries", ["Banks"])]))  # fmt: skip
+    done = await engine.answer(T, sid, "just banks")
+    assert done.status == "completed"
+    record = await repo.get_session(T, sid)
+    assert record.state.slots["industries"].values == ["Banks"]
+
+
+async def test_a_guess_from_the_website_does_not_count_toward_the_floor(world):
+    engine, repo, llm, _ = world
+    state = guessed(
+        SessionState(), product=["Payroll"], industries=["Banks"], company_size=["50"],
+        buyer_roles=["CFO"],
+    )  # fmt: skip
+    assert not enough_for_icp(state.model_copy(update={"agent_enough": True}))
+
+
+async def test_an_answer_changed_over_and_over_is_raised_once_before_finishing(world):
+    engine, repo, llm, _ = world
+    state = known(
+        pending(SessionState(questions_asked=6), "Where?"),
+        product=["Payroll"], industries=["Banks"], buyer_roles=["CFO"], company_size=["50"],
+        geographies=["US"],
+    )  # fmt: skip
+    sid = await preset(repo, state)
+    regions = ["Canada", "Brazil", "Japan"]
+    says = ["Noted. Is that the one?", "Okay, is that the main region?", "Got it. So where do most clients sit?"]
+    llm.queue("interviewer", *[ask(s, up("geographies", [r])) for s, r in zip(says, regions, strict=True)])
+    for r in regions:
+        await engine.answer(T, sid, f"sorry, {r}")
+    record = await repo.get_session(T, sid)
+    assert record.state.flips["geographies"] == 3
+    llm.queue("interviewer", AgentTurn(say="Done!", action="finish", enough=True), ask("You changed the region a few times. Which one is it?"))
+    result = await engine.answer(T, sid, "ok")
+    assert result.status == "active" and "Which one is it" in result.question.text
+    assert "changed geographies more than twice" in llm.calls_for("interviewer")[-1].user
+
+
+async def test_missing_fields_are_shown_in_plain_words(world):
+    engine, repo, llm, _ = world
+    sid = await preset(repo)
+    llm.queue("interviewer", AgentTurn(say="Not enough yet.", action="finish", user_wants_to_stop=True,
+                                       missing=["buyer_roles", "practice_size"]))  # fmt: skip
+    await engine.answer(T, sid, "stop")
+    record = await repo.get_session(T, sid)
+    assert record.state.agent_missing[0] != "buyer_roles" and "practice size" in record.state.agent_missing
+
+
+async def test_an_unreadable_website_is_said_so_in_the_opener(world):
+    engine, repo, llm, enrichment = world
+    enrichment.outcome = EnrichmentOutcome("blocked", website="https://blocked.test")
+    llm.queue("opener", q("I could not read your website. What does Acme do?"))
+    await started(world, website="blocked.test")
+    assert "could not be read" in llm.calls_for("opener")[0].user

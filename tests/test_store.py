@@ -240,3 +240,11 @@ async def test_stored_prompts_are_overridden_by_prompts_py(env):
     await repo.publish_config(config, author="test")
     assert (await repo.live_config()).prompts["opener"] == DEFAULT_PROMPTS["opener"]
     assert (await repo.get_config(1)).prompts["opener"] == DEFAULT_PROMPTS["opener"]
+
+
+async def test_sessions_for_a_new_tenant_can_start_at_the_same_moment(env):
+    import asyncio
+
+    repo, _, _ = env
+    await asyncio.gather(*[repo.ensure_tenant("brand-new", "Acme") for _ in range(8)])
+    await repo.ensure_tenant("brand-new", "Acme")  # and again afterwards

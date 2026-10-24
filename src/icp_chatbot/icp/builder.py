@@ -7,6 +7,7 @@ built from the state as it is.
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from datetime import date
 
@@ -92,6 +93,16 @@ def _user_message(entries: dict[str, FieldEntry], state: SessionState) -> str:
     )
 
 
+_WORD = re.compile(r"[a-z0-9]{4,}")
+
+
+def _only_reworded(values: list[str], current: FieldEntry) -> bool:
+    """True when the rewritten values use no word that the recorded values and their evidence
+    did not already contain: rewording is fine, added descriptions are not."""
+    stems = {w[:4] for w in _WORD.findall(" ".join([*current.values, current.evidence]).lower())}
+    return all(w[:4] in stems for v in values for w in _WORD.findall(v.lower()))
+
+
 async def build_icp(
     llm: LLM,
     config: ConfigVersionData,
@@ -131,12 +142,11 @@ async def build_icp(
             values = normalize_values(draft.values)[:MAX_VALUES]
             if not values:
                 continue
-            entries[draft.slot] = current.model_copy(
-                update={
-                    "values": values,
-                    "evidence": draft.evidence[:EVIDENCE_LIMIT] or current.evidence,
-                }
-            )
+            if not _only_reworded(values, current):
+                log.info("synthesis added wording to %s, keeping the recorded values", draft.slot)
+                continue
+            # the evidence stays what was recorded: the model's note would only restate it
+            entries[draft.slot] = current.model_copy(update={"values": values})
         for draft in synthesis.disqualifiers:
             rule = make_disqualifier(draft.field, draft.operator, draft.values)
             if rule:

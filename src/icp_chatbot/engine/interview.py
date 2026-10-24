@@ -35,6 +35,7 @@ from icp_chatbot.engine.questions import (
     generate_closing,
     generate_opener,
 )
+from icp_chatbot.engine.style import recent_openings, style_problem
 from icp_chatbot.enrichment.service import EnrichmentOutcome, website_for
 from icp_chatbot.llm.types import LLM, LLMError, StepConfig, Usage
 from icp_chatbot.store.repo import Repo
@@ -42,8 +43,10 @@ from icp_chatbot.versions import ConfigVersionData, default_config
 
 log = logging.getLogger(__name__)
 
-MAX_CONSECUTIVE_FAILURES = 2
-MAX_OFFTOPIC = 2
+MAX_CONSECUTIVE_FAILURES = 3  # model hiccups are common: three in a row before the form
+MAX_OFFTOPIC = 3
+CONFIRM_SLOTS = ("product", "business_model", "industries", "customer_segments", "customer_profile")  # guesses from the website that matter most
+FLIP_LIMIT = 3  # changing the same answer this often means we should ask them to pick one
 HISTORY_LIMIT = 12  # turns the model sees in full; older ones live on in the summary
 MAX_SAY_CHARS = 700
 MAX_ATTEMPTS = 2  # the model gets one chance to fix a rejected reply
@@ -100,8 +103,10 @@ class TurnResult:
 
 
 class AgentTurn(BaseModel):
-    """What the interviewer returns each turn."""
+    """What the interviewer returns each turn. heard comes first so the model works out what the
+    user meant before it writes anything else; it is stored with the turn, never shown."""
 
+    heard: str = ""
     updates: list[SlotUpdate] = Field(default_factory=list)
     domain: DomainUpdate | None = None
     summary: str = ""
@@ -113,6 +118,12 @@ class AgentTurn(BaseModel):
     missing: list[str] = Field(default_factory=list)
     user_wants_to_stop: bool = False
     off_topic: bool = False
+
+
+def bot_said(state: SessionState) -> list[str]:
+    """The bot's messages so far, oldest first, ending with the one the user is answering."""
+    said = [t.question for t in state.history]
+    return said + [state.pending_question] if state.pending_question else said
 
 
 def build_message(state: SessionState, text: str | None, *, limit: int) -> str:
@@ -127,15 +138,31 @@ def build_message(state: SessionState, text: str | None, *, limit: int) -> str:
     ]
     if state.domain:
         lines.append(state.domain.prompt_lines())
+    guesses = {
+        k: state.slots[k].values
+        for k in CONFIRM_SLOTS
+        if k in state.slots and state.slots[k].source == SlotSource.INFERRED
+    }
+    flipped = [k for k, n in state.flips.items() if n >= FLIP_LIMIT]
     lines += [
         f"Recorded so far (JSON): {json.dumps(known, ensure_ascii=False)}",
         f"Core fields still unknown: {', '.join(core_unknown) or '(none)'}",
-        f"Rolling summary: {state.summary or '(none)'}",
     ]
+    if guesses:
+        lines.append(
+            "Guessed from their website, NOT confirmed by the user (confirm or trim before "
+            f"finishing): {json.dumps(guesses, ensure_ascii=False)}"
+        )
+    if flipped:
+        lines.append(f"They changed these answers more than twice (ask them to pick one): {', '.join(flipped)}")
+    lines.append(f"Rolling summary: {state.summary or '(none)'}")
     if state.history:
         lines.append("Conversation so far:")
         for turn in state.history[-HISTORY_LIMIT:]:
             lines.append(f"You: {turn.question}\nUser: {turn.answer}")
+    if openings := recent_openings(bot_said(state)):
+        quoted = ", ".join(f'"{o}"' for o in openings)
+        lines.append(f"Your last messages began sentences with: {quoted}. Begin yours differently.")
     reply = DETAIL_NOTE if text is None else "<<<\n" + text + "\n>>>"
     lines += [
         f"You last asked: {state.pending_question or '(nothing yet)'}",
@@ -254,7 +281,14 @@ class InterviewEngine:
             usage=enrichment.usage,
         )
 
-        opener = await generate_opener(self._llm, config, signup, enrichment.seed, labels=labels)
+        opener = await generate_opener(
+            self._llm,
+            config,
+            signup,
+            enrichment.seed,
+            labels=labels,
+            site_unread=bool(website_for(signup)) and not enrichment.seed,
+        )
         spend.add(opener.usage, opener.cost_usd, fallback=opener.used_fallback)
         state.questions_asked = 1
         state.pending_question = opener.question.text
@@ -321,12 +355,39 @@ class InterviewEngine:
                     )
         return None
 
+    @staticmethod
+    def _unsettled(state: SessionState, turn: AgentTurn) -> str:
+        """Before ending: guesses from the website the user never confirmed, and answers they keep
+        changing, are each raised once. Returns the reason for the model, or an empty string."""
+        if turn.action != "finish" or turn.user_wants_to_stop:
+            return ""
+        guesses = [
+            k
+            for k in CONFIRM_SLOTS
+            if k in state.slots and state.slots[k].source == SlotSource.INFERRED
+        ]
+        if guesses and not state.declines.get("seed_confirm"):
+            state.declines["seed_confirm"] = 1
+            return (
+                f"these were only guessed from their website and never confirmed: "
+                f"{', '.join(guesses)}. Ask them to confirm or trim them before you finish."
+            )
+        for slot, count in state.flips.items():
+            if count >= FLIP_LIMIT and not state.declines.get(f"flip:{slot}"):
+                state.declines[f"flip:{slot}"] = 1
+                return f"they changed {slot} more than twice. Ask them to pick one before you finish."
+        return ""
+
     async def _turn(
         self, state: SessionState, config, text: str | None, limit: int, labels, spend: _Spend
     ) -> AgentTurn:
         cfg = self._cfg(config)
         base = build_message(state, text, limit=limit)
+        recent = bot_said(state)
+        users = " ".join([t.answer for t in state.history] + [text or ""])
         note, problem = "", ""
+        usable: AgentTurn | None = None  # a reply that only sounded robotic, kept in case
+        declines = dict(state.declines)
         for _ in range(MAX_ATTEMPTS):
             result = await self._llm.generate(
                 step="interviewer",
@@ -338,11 +399,21 @@ class InterviewEngine:
             )
             spend.add(result.usage, result.cost_usd, result.latency_ms)
             spend.models["interviewer"] = result.model
-            problem = self._problem(state, result.parsed) or ""
+            problem = self._problem(state, result.parsed) or self._unsettled(state, result.parsed)
+            if problem and usable:
+                state.declines = declines  # the rewrite is dropped, so are the checks it set off
+                return usable
             if not problem:
-                return result.parsed
+                if usable:
+                    return result.parsed  # style is asked for once, never worth a failed turn
+                style = style_problem(result.parsed.say, recent, users)
+                if not style:
+                    return result.parsed
+                usable, problem = result.parsed, style
             log.info("interviewer reply rejected: %s", problem)
             note = f"\n\nYour previous reply was rejected: {problem} Write it again."
+        if usable:
+            return usable
         raise LLMError("invalid_output", problem)
 
     async def answer(self, tenant_id: str, session_id: str, text: str) -> TurnResult:
@@ -383,7 +454,14 @@ class InterviewEngine:
 
         status, stop_reason, question = "active", None, None
         retry = turn is None and state.failures < MAX_CONSECUTIVE_FAILURES
+        before = {}
         if turn is not None:
+            before = {
+                u.slot: {v.lower() for v in state.slots[u.slot].values}
+                for u in turn.updates
+                if u.slot in state.slots
+                and state.slots[u.slot].source in (SlotSource.STATED, SlotSource.CONFIRMED)
+            }
             apply_extraction(
                 state,
                 ExtractionResult(
@@ -395,6 +473,10 @@ class InterviewEngine:
                 turn_no,
                 target,
             )
+        for slot, old in before.items():
+            now = state.slots.get(slot)
+            if now and {v.lower() for v in now.values} != old:
+                state.flips[slot] = state.flips.get(slot, 0) + 1
         if counted:
             state.answers_received = turn_no
             state.push_turn(question_text, text)
@@ -418,7 +500,7 @@ class InterviewEngine:
             # the floor beats the model's say-so; a user who asks to stop gets what we have if it
             # clears the floor, even when the model would have liked a few more answers
             enough = floor if turn.user_wants_to_stop else turn.enough and floor
-            state.agent_enough, state.agent_missing = enough, turn.missing[:10]
+            state.agent_enough, state.agent_missing = enough, self._plain(state, turn.missing[:10])
             if turn.off_topic:
                 state.offtopic_count += 1
             else:
@@ -489,6 +571,15 @@ class InterviewEngine:
         return self._result(
             session_id, state, status, question, stop_reason, notice=spend.degraded, retry=retry
         )
+
+    @staticmethod
+    def _plain(state: SessionState, names: list[str]) -> list[str]:
+        """Field keys as the user would read them."""
+        out = []
+        for name in names:
+            slot = state.slot_def(name.strip())
+            out.append(slot.label if slot else name.replace("_", " "))
+        return out
 
     @staticmethod
     def _record_question(state: SessionState, question: Question) -> None:

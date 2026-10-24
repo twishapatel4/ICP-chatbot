@@ -25,7 +25,14 @@ export default function IcpView({ icp, approved, busy, onApprove, onImprove, onN
           {Object.entries(fields).map(([key, f]) => (
             <div className="row" key={key}>
               <span className="k">{label(key)}</span>
-              <span className="v">{f.values.join(", ")}</span>
+              <span className="v">
+                {f.values.join(", ")}
+                {f.source === "inferred" && (
+                  <span className="tag" title="Guessed from your website, not confirmed">
+                    from website, unconfirmed
+                  </span>
+                )}
+              </span>
             </div>
           ))}
         </section>

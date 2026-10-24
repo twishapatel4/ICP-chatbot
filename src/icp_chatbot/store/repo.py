@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from sqlalchemy import delete, func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from icp_chatbot.domain.state import SessionState
@@ -100,9 +101,12 @@ class Repo:
     # -- tenants and sessions -------------------------------------------------------------
 
     async def ensure_tenant(self, tenant_id: str, name: str = "") -> None:
-        async with self._factory() as s, s.begin():
-            if await s.get(m.Tenant, tenant_id) is None:
-                s.add(m.Tenant(id=tenant_id, name=name, created_at=self._clock()))
+        try:
+            async with self._factory() as s, s.begin():
+                if await s.get(m.Tenant, tenant_id) is None:
+                    s.add(m.Tenant(id=tenant_id, name=name, created_at=self._clock()))
+        except IntegrityError:  # a session for the same new tenant started at the same moment
+            pass
 
     async def create_session(self, tenant_id: str, config_version: int, state: SessionState) -> str:
         session_id = uuid4().hex
