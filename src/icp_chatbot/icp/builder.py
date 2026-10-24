@@ -126,7 +126,7 @@ async def build_icp(
         for draft in synthesis.fields:
             current = entries.get(draft.slot)
             if current is None:
-                open_questions.append(f"Ignored a field that was not recorded: {draft.slot}")
+                log.info("synthesis returned a field that was not recorded: %s", draft.slot)
                 continue
             values = normalize_values(draft.values)[:MAX_VALUES]
             if not values:

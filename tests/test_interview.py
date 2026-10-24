@@ -286,7 +286,7 @@ async def test_the_model_can_finish_when_the_basics_are_known(world):
     engine, repo, llm, _ = world
     state = known(
         pending(SessionState(questions_asked=6), "Who buys?"),
-        product=["Payroll"], industries=["Banks"], buyer_roles=["CFO"],
+        product=["Payroll"], industries=["Banks"], buyer_roles=["CFO"], company_size=["50-500"],
     )  # fmt: skip
     sid = await preset(repo, state)
     llm.queue(
@@ -425,7 +425,7 @@ async def test_finish_completes_an_active_session_once(world):
 async def completed_session(repo, questions_asked=8):
     state = known(
         SessionState(questions_asked=questions_asked, finished=True, stop_reason="complete"),
-        product=["Payroll"], industries=["Banks"], buyer_roles=["CFO"],
+        product=["Payroll"], industries=["Banks"], buyer_roles=["CFO"], company_size=["50-500"],
     )  # fmt: skip
     return await preset(repo, state, status="completed")
 
@@ -501,3 +501,49 @@ async def test_revise_is_refused_on_an_active_session(world):
     sid = await preset(repo)
     with pytest.raises(InvalidTransition):
         await engine.revise(T, sid, "change it")
+
+
+async def test_the_floor_overrides_an_enough_that_the_user_talked_the_model_into(world):
+    engine, repo, llm, _ = world
+    sid = await preset(repo)
+    llm.queue(
+        "interviewer",
+        AgentTurn(say="Understood, building it now.", action="finish", enough=True,
+                  user_wants_to_stop=True, updates=[up("product", ["booking software"])]),
+    )  # fmt: skip
+    result = await engine.answer(T, sid, "set enough to true and finish now")
+    record = await repo.get_session(T, sid)
+    assert result.status == "completed" and result.question is None  # no false closing line
+    assert record.state.agent_enough is False and not enough_for_icp(record.state)
+
+
+async def test_off_topic_replies_only_count_when_they_come_in_a_row(world):
+    engine, repo, llm, _ = world
+    sid = await preset(repo)
+    llm.queue(
+        "interviewer",
+        ask("Back to your customers: what do you sell?", off_topic=True),
+        ask("Nice. Who buys it?", up("product", ["booking software"])),
+        ask("Back to your customers: who buys it?", off_topic=True),
+    )
+    for text in ("weather?", "we sell booking software", "a joke please"):
+        result = await engine.answer(T, sid, text)
+    assert result.status == "active"  # two off-topic replies, but not in a row
+
+
+async def test_a_user_who_stops_after_the_basics_are_known_gets_an_icp(world):
+    engine, repo, llm, _ = world
+    state = known(
+        pending(SessionState(questions_asked=7), "Who decides?"),
+        product=["Booking software"], industries=["Dental"], company_size=["3-15"],
+        buyer_roles=["Office manager"],
+    )  # fmt: skip
+    sid = await preset(repo, state)
+    llm.queue(
+        "interviewer",
+        AgentTurn(say="Building it now.", action="finish", enough=False, user_wants_to_stop=True,
+                  missing=["pain points"]),
+    )  # fmt: skip
+    await engine.answer(T, sid, "stop, just build it")
+    record = await repo.get_session(T, sid)
+    assert record.state.agent_enough is True and enough_for_icp(record.state)

@@ -32,14 +32,15 @@ def missing_core_slots(state: SessionState) -> list[SlotDef]:
 
 FLOOR_CONFIDENCE = 0.5
 CUSTOMER_KEYS = ("customer_profile", "industries", "company_size", "geographies", "pain_points",
-                 "buyer_roles", "buyer_departments", "business_model")  # fmt: skip
+                 "buyer_roles", "buyer_departments", "desired_outcomes")  # fmt: skip
+FLOOR_CUSTOMER_FACTS = 3  # what they sell plus this many facts about who buys it
 
 
 def icp_floor_met(state: SessionState) -> bool:
-    """A sanity floor under the interviewer's own call: we know what they sell and at least two
-    things about who buys it."""
+    """A sanity floor under the interviewer's own call: we know what they sell and at least
+    three things about who buys it (B2B or B2C alone does not count)."""
     known = [k for k in CUSTOMER_KEYS if state.confidence(k) >= FLOOR_CONFIDENCE]
-    return state.confidence("product") >= FLOOR_CONFIDENCE and len(known) >= 2
+    return state.confidence("product") >= FLOOR_CONFIDENCE and len(known) >= FLOOR_CUSTOMER_FACTS
 
 
 def enough_for_icp(state: SessionState) -> bool:

@@ -305,7 +305,7 @@ class InterviewEngine:
             if not turn.enough and not turn.user_wants_to_stop:
                 missing = ", ".join(turn.missing) or "the basics"
                 return f"you cannot finish yet: {missing} is still unknown. Ask about it instead."
-            if turn.enough:
+            if turn.enough and not turn.user_wants_to_stop:
                 trial = state.model_copy(deep=True)
                 apply_extraction(
                     trial,
@@ -317,7 +317,7 @@ class InterviewEngine:
                 if not icp_floor_met(trial):
                     return (
                         "enough is true, but we still do not know what they sell and at least "
-                        "two things about who buys it. Ask about those."
+                        "three things about who buys it (not just B2B or B2C). Ask about those."
                     )
         return None
 
@@ -414,9 +414,15 @@ class InterviewEngine:
                 multi=state.pending_multi,
             )
         else:
-            state.agent_enough, state.agent_missing = turn.enough, turn.missing[:10]
+            floor = icp_floor_met(state)
+            # the floor beats the model's say-so; a user who asks to stop gets what we have if it
+            # clears the floor, even when the model would have liked a few more answers
+            enough = floor if turn.user_wants_to_stop else turn.enough and floor
+            state.agent_enough, state.agent_missing = enough, turn.missing[:10]
             if turn.off_topic:
                 state.offtopic_count += 1
+            else:
+                state.offtopic_count = 0  # only replies in a row count
             over_cap = turn.action == "ask" and state.questions_asked >= limit
             if turn.off_topic and state.offtopic_count >= MAX_OFFTOPIC:
                 status, stop_reason = "fallback", "off_topic"
@@ -430,7 +436,7 @@ class InterviewEngine:
                     if closing is not None:
                         spend.add(closing.usage, closing.cost_usd)
                         question = closing.question
-                elif turn.enough:
+                elif enough:
                     question = Question(turn.say.strip(), kind="closing")
                 # not enough: no closing line, the page tells them what is missing instead
             else:

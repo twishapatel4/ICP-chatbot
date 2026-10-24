@@ -84,7 +84,8 @@ async def test_the_model_cannot_add_fields_and_unusable_rules_are_reported():
     assert "budget_range" not in doc.entries() and "nonsense" not in doc.entries()
     assert doc.scoring_model.disqualifiers == []
     text = " ".join(doc.open_questions)
-    assert "budget_range" in text and "nonsense" in text and "favourite_colour" in text
+    assert "favourite_colour" in text  # an unusable rule is reported
+    assert "budget_range" not in text and "nonsense" not in text  # internal notes stay out
 
 
 async def test_empty_cleaned_values_keep_the_original():

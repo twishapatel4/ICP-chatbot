@@ -19,13 +19,19 @@ def test_an_empty_state_has_every_core_field_missing_and_is_not_enough():
     assert not icp_floor_met(state) and not enough_for_icp(state)
 
 
-def test_the_floor_needs_the_product_and_two_customer_facts():
+def test_the_floor_needs_the_product_and_three_customer_facts():
     state = known(SessionState(), "product")
     assert not icp_floor_met(state)
     known(state, "industries")
-    assert not icp_floor_met(state)
     known(state, "buyer_roles")
+    assert not icp_floor_met(state)
+    known(state, "company_size")
     assert icp_floor_met(state)
+
+
+def test_b2b_or_b2c_alone_is_not_a_customer_fact():
+    state = known(known(known(SessionState(), "product"), "business_model"), "industries")
+    assert not icp_floor_met(state)
 
 
 def test_a_weakly_known_field_does_not_count_toward_the_floor():
@@ -53,7 +59,7 @@ def test_without_the_interviewers_call_a_third_of_the_core_fields_is_enough():
 def test_the_interviewers_call_decides_but_the_floor_still_applies():
     state = SessionState(agent_enough=True)
     assert not enough_for_icp(state)  # it said enough, but we know nothing
-    known(known(known(state, "product"), "industries"), "buyer_roles")
+    known(known(known(known(state, "product"), "industries"), "buyer_roles"), "company_size")
     assert enough_for_icp(state)
     state.agent_enough = False
     assert not enough_for_icp(state)
