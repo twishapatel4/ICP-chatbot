@@ -107,6 +107,7 @@ class AgentTurn(BaseModel):
     user meant before it writes anything else; it is stored with the turn, never shown."""
 
     heard: str = ""
+    speaker: str = ""  # who is answering, once their replies show it; empty keeps what is known
     updates: list[SlotUpdate] = Field(default_factory=list)
     domain: DomainUpdate | None = None
     summary: str = ""
@@ -135,6 +136,7 @@ def build_message(state: SessionState, text: str | None, *, limit: int) -> str:
     core_unknown = [s.key for s in missing_core_slots(state)]
     lines = [
         f"Mode: {state.mode}. Questions asked so far: {state.questions_asked} (at most {limit}).",
+        f"Talking to: {state.speaker_role or 'not known yet'}",
     ]
     if state.domain:
         lines.append(state.domain.prompt_lines())
@@ -250,7 +252,7 @@ class InterviewEngine:
         await self._repo.ensure_tenant(tenant_id, signup.company_name)
         config = await self.ensure_live_config()
 
-        state = SessionState()
+        state = SessionState(speaker_role=(signup.role or "").strip()[:100])
         if signup.website:
             state.slots["online_presence"] = SlotValue(
                 values=[signup.website],
@@ -473,6 +475,8 @@ class InterviewEngine:
                 turn_no,
                 target,
             )
+            if turn.speaker.strip():
+                state.speaker_role = turn.speaker.strip()[:100]
         for slot, old in before.items():
             now = state.slots.get(slot)
             if now and {v.lower() for v in now.values} != old:

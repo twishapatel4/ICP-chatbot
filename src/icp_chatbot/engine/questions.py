@@ -79,12 +79,27 @@ class QuestionResult:
     used_fallback: bool = False
 
 
+LEADER_WORDS = ("founder", "ceo", "owner", "president", "managing director")
+SALES_WORDS = ("sales", "revenue", "business development", "bde", "bdm", "growth", "account exec",
+               "account manager")  # fmt: skip
+
+
+def role_kind(role: str | None) -> str | None:
+    """Sorts a job title, in any wording, into "leader", "sales" or None."""
+    r = (role or "").lower()
+    if any(w in r for w in LEADER_WORDS):
+        return "leader"
+    if any(w in r for w in SALES_WORDS):
+        return "sales"
+    return None
+
+
 def pick_opener_variant(company_name: str, role: str | None) -> str:
     """A reviewed opener chosen by role, else deterministically by company name."""
-    r = (role or "").lower()
-    if any(w in r for w in ("founder", "ceo", "owner", "co-founder")):
+    kind = role_kind(role)
+    if kind == "leader":
         return FOUNDER_OPENER
-    if any(w in r for w in ("sales", "revenue", "business development", "growth")):
+    if kind == "sales":
         return SALES_OPENER
     digest = hashlib.sha256(company_name.strip().lower().encode()).digest()
     return OPENER_VARIANTS[digest[0] % len(OPENER_VARIANTS)]
@@ -141,28 +156,39 @@ def _asked_lines(asked: str) -> list[str]:
     ]
 
 
+# Most people answering are business development executives, so the default angles come from the
+# seller's seat; founders and other leaders get angles about the business as a whole.
 OPENER_ANGLES = (
     "what the company offers and the problem it solves for people",
-    "how the business started and what made them start it",
-    "what a typical week looks like for the team right now",
+    "a recent deal they worked on that closed, and what made it close",
+    "which kind of customer they would happily have ten more of",
+    "where their best leads come from these days",
+    "what prospects usually ask on a first call",
+    "the kind of company they would love more meetings with",
+    "which leads reply or book a meeting most often",
+    "what customers say when they explain why they chose this company",
+    "the first thing a new customer usually asks them",
+    "a project or deal they are excited about right now",
     "what changed in their market over the last year or two",
+    "the last time a customer came back or recommended them, and why",
     "how people usually find out about them",
+)
+LEADER_ANGLES = (
+    "how the business started and what made them start it",
     "what they are proudest of building so far",
     "the biggest thing they want to get better at this year",
     "a recent win that made the team happy, and what led to it",
     "what they would tell a newcomer to their industry about how it works",
-    "which kind of customer they would happily have ten more of",
-    "what customers say when they explain why they chose this company",
-    "the first thing a new customer usually asks them",
-    "what a good day versus a frustrating day looks like for the team",
-    "a project or deal they are excited about right now",
     "what they do differently from others in their space",
     "what they wish people understood about their line of work",
-    "the last time a customer came back or recommended them, and why",
     "where most of their time and energy goes at the moment",
-    "what almost made them give up, and what kept them going",
     "how they would explain the company to a friend at a dinner",
+    "which kind of customer they would happily have ten more of",
 )
+
+
+def pick_angle(role: str | None) -> str:
+    return random.choice(LEADER_ANGLES if role_kind(role) == "leader" else OPENER_ANGLES)
 
 
 async def generate_opener(
@@ -198,7 +224,7 @@ async def generate_opener(
                 "Their website could not be read (blocked or unavailable). Say so in one short, "
                 "friendly clause, never guess what the company does, and ask them to describe it."
             )
-        lines.append(f"Angle to open with: {angle or random.choice(OPENER_ANGLES)}")
+        lines.append(f"Angle to open with: {angle or pick_angle(signup.role)}")
     cfg = config.step("opener")
     try:
         result = await llm.generate(

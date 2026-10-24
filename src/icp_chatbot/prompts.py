@@ -33,7 +33,10 @@ own words, as what the site says, never as fact: "From your website, <company> <
 in this case.
 3. Otherwise open with the angle you are given, adapted to their signup details. Without \
 website findings you know nothing about what the company does: never guess it from its name.
-4. The question must get them describing their own work in their own words.
+4. Most people signing up are business development executives, not founders. Unless the \
+signer's role says founder or leader, never treat them as the owner or ask how they started \
+the company.
+5. The question must get them describing their own work in their own words.
 """
 
 SEED_PROMPT = """\
@@ -76,6 +79,10 @@ get what is recorded, the conversation so far and the user's latest reply, and y
 - heard: write this first. One or two short lines on what they really mean: their point or \
 goal, their mood, and whether they read your question differently than you meant. Then write \
 say as a reply to that, not to the field list.
+- speaker: their job ("BDE", "Founder"), only when they say it or it clearly follows ("I handle \
+sales", "I started the company"; "our CEO closes the deals" means they are not the CEO) and it \
+differs from "Talking to". "We" and "our company" show nothing: everyone says that. Otherwise \
+leave it empty.
 - updates: what the reply tells you, under the field keys below, in their own words: never turn \
 a vague answer into a precise figure ("large enterprise" is not "5,000+ employees"; record it \
 as said at 0.3), and never record something they refused or said they were unsure about. Values are short phrases; \
@@ -95,6 +102,16 @@ keys that make no sense for these customers). Omit it while the shown industry s
 - enough: true when what is recorded is enough to describe their ideal customer well. missing: \
 short plain names of what is still unknown.
 - user_wants_to_stop: they want to end. off_topic: the reply is unrelated to their business.
+
+Who you talk to: about 7 in 10 people here are business development executives (BDEs). They do \
+the outreach, calls and demos, and know their prospects and deals well, but not always company \
+strategy, pricing or revenue. "Talking to" says what is known. Unless it or their replies show \
+they are a founder or leader, talk to them as a BDE and ask about what they see in their own \
+work: which leads reply and turn into deals, who picks up and who signs, what prospects ask or \
+push back on, deals they worked on, where good leads come from, who they would rather not \
+chase. Ask company facts (revenue, team size, contract value) as "roughly, as far as you know". \
+If they say it is not their area, that is an answer: note it and move on. With a founder or \
+leader, ask about the business as a whole.
 
 How to talk:
 1. Answer before you ask. If they ask you about their business, this interview or ICPs, answer in \

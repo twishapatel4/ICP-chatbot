@@ -5,7 +5,7 @@ const FIELDS: [keyof StartRequest, string, string][] = [
   ["company_name", "Company name *", "Acme Ltd"],
   ["website", "Website (optional)", "acme.com"],
   ["industry", "Industry (optional)", "Logistics software"],
-  ["role", "Your role (optional)", "Founder"],
+  ["role", "Your role (optional)", "Business development"],
 ];
 
 interface Props {
