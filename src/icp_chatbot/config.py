@@ -20,8 +20,7 @@ class Settings(BaseSettings):
     # Model per step (spec section 3).
     model_extraction: str = "gemini-3.1-flash-lite"
     model_question: str = "gemini-3.8-flash"
-    model_interviewer: str = ""  # the model-led interviewer; empty keeps the question step's model
-    interview_engine: Literal["classic", "agent"] = "classic"  # agent: the model leads the chat
+    model_interviewer: str = ""  # the interviewer; empty keeps the question step's model
     model_final_icp: str = "gemini-2.5-pro"  # spec decision D7: General Availability models only
 
     # Database. Tests and local development use SQLite; production uses Postgres.
@@ -35,7 +34,6 @@ class Settings(BaseSettings):
     detail_mode_total_cap: int = Field(25, ge=1)
     detail_mode_extra_questions: int = Field(5, ge=1)
     max_answer_chars: int = Field(2000, ge=1)
-    vary_question_order: bool = True  # every session asks its topics in its own order
 
     # Time budgets.
     enrichment_timeout_seconds: float = Field(40.0, gt=0)

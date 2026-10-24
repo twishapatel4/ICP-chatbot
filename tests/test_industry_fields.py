@@ -9,7 +9,7 @@ from icp_chatbot.engine.extraction import (
     SlotUpdate,
     apply_extraction,
 )
-from icp_chatbot.engine.planner import Ask, Caps, plan_next
+from icp_chatbot.engine.planner import Caps
 from icp_chatbot.icp.builder import ICPSynthesis, build_icp
 from icp_chatbot.llm.fake import FakeLLM
 from icp_chatbot.versions import default_config
@@ -57,24 +57,6 @@ def test_an_answer_can_fill_an_industry_field_and_unknown_keys_are_still_ignored
     ]
     outcome = apply_extraction(state, ExtractionResult(updates=updates), 2)
     assert state.values("rent_band") == ["30-40k"] and outcome.ignored == ["nonsense"]
-
-
-def test_slots_the_industry_does_not_need_are_never_asked_and_its_own_fields_are():
-    domain = DomainContext(
-        industry="Flat rentals",
-        fields=[field("rent_band", importance=0.9)],
-        not_needed=["company_size", "revenue_range", "industries"],
-    )
-    state = SessionState(domain=domain, order_seed=0)
-    asked = []
-    for _ in range(12):
-        plan = plan_next(state, CAPS)
-        if not isinstance(plan, Ask):
-            break
-        asked.append(plan.slot)
-        state.slots[plan.slot] = SlotValue(values=["x"], confidence=0.9, source=SlotSource.STATED)
-    assert "rent_band" in asked
-    assert not {"company_size", "revenue_range", "industries"} & set(asked)
 
 
 async def test_the_icp_shows_the_industry_fields_and_ignores_what_is_not_needed():

@@ -4,7 +4,8 @@ import pytest
 
 from icp_chatbot.config import Settings
 from icp_chatbot.domain.state import SlotSource
-from icp_chatbot.engine.extraction import ExtractionResult, Flags, SlotUpdate
+from icp_chatbot.engine.extraction import SlotUpdate
+from icp_chatbot.engine.interview import AgentTurn
 from icp_chatbot.engine.questions import QuestionOutput
 from icp_chatbot.eval.cases import (
     REQUIRED_TAGS,
@@ -92,8 +93,8 @@ def test_score_document_handles_cases_with_nothing_expected():
 # -- replaying a case ---------------------------------------------------------------------------------
 
 
-def ext(*updates, flags=None):
-    return ExtractionResult(updates=list(updates), flags=flags or Flags())
+def ask(say, *updates):
+    return AgentTurn(say=say, action="ask", updates=list(updates))
 
 
 def up(slot, values, confidence=0.9):
@@ -107,8 +108,8 @@ async def test_replay_runs_a_case_end_to_end_and_reports_metrics():
         expected={"industries": ["banks"], "geographies": ["Europe"]},
     )
     llm = FakeLLM({
-        "opener": [QuestionOutput(question="Hi!")], "extraction": [ext(up("product", ["Payroll"])), ext(up("industries", ["Banks"]), up("geographies", ["Europe"])), ext(up("buyer_roles", ["CFO"]))],
-        "question": [QuestionOutput(question="Who are your best customers?"), QuestionOutput(question="What problems do they have?"), QuestionOutput(question="Anything else?")],
+        "opener": [QuestionOutput(question="Hi!")],
+        "interviewer": [ask("Who are your best customers?", up("product", ["Payroll"])), ask("What problems do they have?", up("industries", ["Banks"]), up("geographies", ["Europe"])), ask("Anything else?", up("buyer_roles", ["CFO"]))],
         "final_icp": [ICPSynthesis()],
     })  # fmt: skip
     result = await replay_case(c, llm, SETTINGS)
@@ -129,8 +130,8 @@ async def test_replay_with_a_detail_phase_asks_the_extra_questions():
         expected={"compliance": ["GDPR"]},
     )
     llm = FakeLLM({
-        "opener": [QuestionOutput(question="Hi!")], "extraction": [ext(), ext(), ext(up("compliance", ["GDPR"]))],
-        "question": [QuestionOutput(question="best?"), QuestionOutput(question="q1?"), QuestionOutput(question="detail q?"), QuestionOutput(question="more?")],
+        "opener": [QuestionOutput(question="Hi!")],
+        "interviewer": [ask("best?"), ask("q1?"), ask("detail q?"), ask("more?", up("compliance", ["GDPR"]))],
         "final_icp": [ICPSynthesis()],
     })  # fmt: skip
     result = await replay_case(c, llm, SETTINGS)
@@ -138,7 +139,7 @@ async def test_replay_with_a_detail_phase_asks_the_extra_questions():
 
 
 async def test_a_case_that_breaks_is_reported_without_stopping_the_run():
-    broken = case(name="broken")  # the fake has no scripted extraction, so the engine fails
+    broken = case(name="broken")  # the fake has no scripted interviewer replies, so the engine fails
     result = await replay_case(broken, FakeLLM({}), SETTINGS)
     assert result.status == "error" and result.errors and result.f1 == 0.0
 

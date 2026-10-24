@@ -27,8 +27,8 @@ def test_thinking_settings_are_valid_for_each_models_family(config):
         thinking_config(config.step(step))  # raises LLMError("config") if the combination is bad
 
 
-def test_extraction_system_prompt_includes_the_slot_catalog(config):
-    system = config.system_prompt("extraction")
+def test_interviewer_system_prompt_includes_the_slot_catalog(config):
+    system = config.system_prompt("interviewer")
     assert "- industries:" in system and "- buyer_roles:" in system
     assert config.system_prompt("question") == config.prompt("question")
 

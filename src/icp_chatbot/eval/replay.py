@@ -85,8 +85,8 @@ async def replay_case(
             await repo.publish_config(config, author="eval")
         enrichment = EnrichmentService(llm, CaseSiteFetcher(case.website_text))
         engine = InterviewEngine(
-            repo=repo, llm=llm, enrichment=enrichment, settings=settings, vary_order=False
-        )  # a fixed order keeps runs comparable
+            repo=repo, llm=llm, enrichment=enrichment, settings=settings
+        )
 
         result = await engine.start(TENANT, SignupInfo(**case.signup))
         sid = result.session_id

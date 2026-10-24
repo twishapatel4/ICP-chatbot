@@ -10,7 +10,7 @@ from icp_chatbot.domain.slots import render_slot_catalog
 from icp_chatbot.llm.types import StepConfig
 from icp_chatbot.prompts import DEFAULT_PROMPTS
 
-STEP_NAMES = ("extraction", "seed", "opener", "question", "final_icp")
+STEP_NAMES = ("seed", "opener", "question", "interviewer", "final_icp")
 
 
 class StepSettings(BaseModel):
@@ -35,9 +35,9 @@ class ConfigVersionData(BaseModel):
         return self.prompts[step]
 
     def system_prompt(self, step: str) -> str:
-        """The system prompt for a step. Extraction gets the slot catalog appended."""
+        """The system prompt for a step. The interviewer gets the slot catalog appended."""
         text = self.prompts[step]
-        if step in ("extraction", "interviewer"):
+        if step == "interviewer":
             return text + render_slot_catalog()
         return text
 
@@ -63,19 +63,13 @@ def _thinking(model: str, level: str) -> dict:
 
 
 def default_config(settings: Settings, version: int = 1) -> ConfigVersionData:
-    # Thinking levels follow spec section 5.4: minimal for extraction, low for questions,
+    # Thinking levels follow spec section 5.4: minimal for the website seed, low for the interview,
     # moderate for the final ICP. Level support for gemini-3.1-flash-lite is unconfirmed;
     # scripts/smoke_live.py checks every step against the real model.
     return ConfigVersionData(
         version=version,
         prompts=dict(DEFAULT_PROMPTS),
         steps={
-            "extraction": StepSettings(
-                model=settings.model_extraction,
-                temperature=0.0,
-                max_output_tokens=2048,
-                **_thinking(settings.model_extraction, "minimal"),
-            ),
             "seed": StepSettings(
                 model=settings.model_extraction,
                 temperature=0.0,
@@ -93,6 +87,12 @@ def default_config(settings: Settings, version: int = 1) -> ConfigVersionData:
                 temperature=0.5,
                 max_output_tokens=2048,
                 **_thinking(settings.model_question, "low"),
+            ),
+            "interviewer": StepSettings(
+                model=settings.model_interviewer or settings.model_question,
+                temperature=0.6,
+                max_output_tokens=3072,
+                **_thinking(settings.model_interviewer or settings.model_question, "low"),
             ),
             "final_icp": StepSettings(
                 model=settings.model_final_icp,

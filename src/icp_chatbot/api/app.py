@@ -26,7 +26,6 @@ from icp_chatbot.api.schemas import (
 )
 from icp_chatbot.config import Settings, get_settings
 from icp_chatbot.domain.signup import SignupInfo
-from icp_chatbot.engine.agent import AgentEngine
 from icp_chatbot.engine.fallback import apply_form, fallback_form, missing_required
 from icp_chatbot.engine.interview import (
     InterviewEngine,
@@ -75,10 +74,9 @@ def create_app(
     llm = llm or make_llm(settings)
     fetcher = fetcher or SafeFetcher(timeout_s=settings.enrichment_timeout_seconds)
     enrichment = EnrichmentService(llm, fetcher, timeout_s=settings.enrichment_timeout_seconds)
-    engine_class = AgentEngine if settings.interview_engine == "agent" else InterviewEngine
-    engine = engine_class(
+    engine = InterviewEngine(
         repo=repo, llm=llm, enrichment=enrichment, settings=settings,
-        guard=BudgetGuard(repo, settings, clock), vary_order=settings.vary_question_order,
+        guard=BudgetGuard(repo, settings, clock),
     )  # fmt: skip
     limiter = RateLimiter(settings.requests_per_minute_per_tenant)
 

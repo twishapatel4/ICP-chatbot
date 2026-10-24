@@ -2,7 +2,8 @@ import json
 
 from icp_chatbot.cli import launch_check
 from icp_chatbot.config import Settings
-from icp_chatbot.engine.extraction import ExtractionResult, SlotUpdate
+from icp_chatbot.engine.extraction import SlotUpdate
+from icp_chatbot.engine.interview import AgentTurn
 from icp_chatbot.engine.questions import QuestionOutput
 from icp_chatbot.eval.runner import run
 from icp_chatbot.icp.builder import ICPSynthesis
@@ -27,12 +28,11 @@ def scripted_llm(f1_good=True):
     industries = ["Banks"] if f1_good else ["Retail"]
     return FakeLLM({
         "opener": [QuestionOutput(question="Hi!")],
-        "extraction": [
-            ExtractionResult(updates=[SlotUpdate(slot="product", values=["Payroll"], confidence=0.9)]),
-            ExtractionResult(updates=[SlotUpdate(slot="industries", values=industries, confidence=0.9),
-                                      SlotUpdate(slot="geographies", values=["Europe"], confidence=0.9)]),
+        "interviewer": [
+            AgentTurn(say="Best customers?", updates=[SlotUpdate(slot="product", values=["Payroll"], confidence=0.9)]),
+            AgentTurn(say="Pains?", updates=[SlotUpdate(slot="industries", values=industries, confidence=0.9),
+                                             SlotUpdate(slot="geographies", values=["Europe"], confidence=0.9)]),
         ],
-        "question": [QuestionOutput(question="Best customers?"), QuestionOutput(question="Pains?")],
         "final_icp": [ICPSynthesis()],
     })  # fmt: skip
 

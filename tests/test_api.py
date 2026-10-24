@@ -3,7 +3,8 @@ import pytest
 
 from icp_chatbot.api.app import create_app
 from icp_chatbot.config import Settings
-from icp_chatbot.engine.extraction import ExtractionResult, Flags, SlotUpdate
+from icp_chatbot.engine.extraction import SlotUpdate
+from icp_chatbot.engine.interview import AgentTurn
 from icp_chatbot.engine.questions import QuestionOutput
 from icp_chatbot.enrichment.fetcher import FetchBlocked
 from icp_chatbot.icp.builder import ICPSynthesis
@@ -19,8 +20,8 @@ class NoFetcher:
         raise FetchBlocked("network", "offline in tests")
 
 
-def ext(*updates, flags=None, summary=""):
-    return ExtractionResult(updates=list(updates), flags=flags or Flags(), summary=summary)
+def ask(say, *updates, **kw):
+    return AgentTurn(say=say, action="ask", updates=list(updates), **kw)
 
 
 def up(slot, values, confidence=0.9):
@@ -56,7 +57,7 @@ async def world():
         await init_models(db)
         llm = FakeLLM({}, Usage(100, 10, 0, 0))
         app = create_app(
-            Settings(_env_file=None, vary_question_order=False, **settings),
+            Settings(_env_file=None, **settings),
             llm=llm,
             fetcher=NoFetcher(),
             db_engine=db,
@@ -76,17 +77,22 @@ async def run_to_completion(w):
     """Start, answer twice, then finish. Returns the session id."""
     started = await w.start()
     sid = started["session_id"]
-    w.llm.queue("extraction", ext(up("product", ["Payroll software"]), summary="B2B payroll"))
-    w.llm.queue("question", q("Payroll for banks, nice. Who are your happiest customers so far?"))
+    w.llm.queue(
+        "interviewer",
+        ask("Payroll for banks, nice. Who are your happiest customers so far?",
+             up("product", ["Payroll software"]), summary="B2B payroll"),
+    )  # fmt: skip
     best = await w.call(
         "POST", f"/sessions/{sid}/answers", json={"text": "We sell payroll software"}
     )
-    assert best.json()["question"]["kind"] == "best_customer"
-    w.llm.queue("extraction", ext(
-        up("industries", ["Fintech"]), up("company_size", ["50-500"]), up("geographies", ["Europe"]),
-        up("pain_points", ["manual payroll"]),
-    ))  # fmt: skip
-    w.llm.queue("question", q("Who signs off on buying this?"))
+    assert best.json()["question"]["text"].startswith("Payroll for banks")
+    w.llm.queue(
+        "interviewer",
+        ask("Who signs off on buying this?",
+             up("industries", ["Fintech"]), up("company_size", ["50-500"]),
+             up("geographies", ["Europe"]), up("pain_points", ["manual payroll"]),
+             up("buyer_roles", ["CFO"]), target_slot="buyer_roles", enough=True),
+    )  # fmt: skip
     nxt = await w.call(
         "POST", f"/sessions/{sid}/answers", json={"text": "Banks in Europe with 50 to 500 staff"}
     )
@@ -234,8 +240,7 @@ async def test_the_daily_session_cap_returns_429_and_does_not_stop_running_sessi
     w.llm.queue("opener", q("again?"))
     refused = await w.call("POST", "/sessions", json={"company_name": "B", "role": "CTO"})
     assert refused.status_code == 429 and "tenant_sessions" in refused.json()["detail"]
-    w.llm.queue("extraction", ext())
-    w.llm.queue("question", q("Could you say a little more?"))
+    w.llm.queue("interviewer", ask("Could you say a little more?"))
     ok = await w.call("POST", f"/sessions/{started['session_id']}/answers", json={"text": "hello"})
     assert ok.status_code == 200
 
@@ -284,11 +289,10 @@ async def test_detail_mode_rebuild_keeps_the_companys_earlier_edits(world):
         json={"kind": "weights", "weights": {"industry_fit": 30, "geographic_fit": 0}},
     )
 
-    w.llm.queue("question", q("Any compliance needs?"))
+    w.llm.queue("interviewer", ask("Any compliance needs?"))
     detail = await w.call("POST", f"/sessions/{sid}/detail")
     assert detail.status_code == 200 and detail.json()["mode"] == "detail"
-    w.llm.queue("extraction", ext(up("compliance", ["GDPR"])))
-    w.llm.queue("question", q("Switching costs?"))
+    w.llm.queue("interviewer", ask("Switching costs?", up("compliance", ["GDPR"]), enough=True))
     await w.call("POST", f"/sessions/{sid}/answers", json={"text": "GDPR applies"})
     await w.call("POST", f"/sessions/{sid}/finish")
 
@@ -305,8 +309,7 @@ async def test_a_returning_user_gets_the_pending_question_back(world):
     w = await world()
     started = await w.start()
     sid = started["session_id"]
-    w.llm.queue("extraction", ext())
-    w.llm.queue("question", q("Could you say a little more?"))
+    w.llm.queue("interviewer", ask("Could you say a little more?"))
     answered = (await w.call("POST", f"/sessions/{sid}/answers", json={"text": "hello"})).json()
     resumed = (await w.call("GET", f"/sessions/{sid}")).json()
     assert resumed["status"] == "active"
@@ -318,13 +321,12 @@ async def test_unicode_answers_are_stored_and_sent_to_the_model_unchanged(world)
     w = await world()
     sid = (await w.start())["session_id"]
     text = "我们卖薪资软件 💼 — для банков, ¿entiendes?"
-    w.llm.queue("extraction", ext(up("product", ["薪资软件"])))
-    w.llm.queue("question", q("Which customers have worked out best?"))
+    w.llm.queue("interviewer", ask("Which customers have worked out best?", up("product", ["薪资软件"])))
     response = await w.call("POST", f"/sessions/{sid}/answers", json={"text": text})
     assert response.status_code == 200
     [turn] = await w.repo.list_turns("tenant-1", sid)
     assert turn.answer_text == text
-    assert text in w.llm.calls_for("extraction")[0].user
+    assert text in w.llm.calls_for("interviewer")[0].user
 
 
 async def test_the_app_creates_its_tables_on_startup_when_asked_to():
@@ -342,12 +344,11 @@ async def test_the_app_creates_its_tables_on_startup_when_asked_to():
 async def test_suggested_options_are_multi_select_and_survive_a_reload(world):
     w = await world()
     sid = (await w.start())["session_id"]
-    w.llm.queue("extraction", ext(up("product", ["Payroll"])))
-    w.llm.queue("question", q("Which of your customers worked best?"))
+    w.llm.queue("interviewer", ask("Which of your customers worked best?", up("product", ["Payroll"])))
     await w.call("POST", f"/sessions/{sid}/answers", json={"text": "We sell payroll"})
-    w.llm.queue("extraction", ext(up("company_size", ["11-50"])))
     w.llm.queue(
-        "question", QuestionOutput(question="Which sectors?", options=["Fintech", "Retail"])
+        "interviewer",
+        ask("Which sectors?", up("company_size", ["11-50"]), options=["Fintech", "Retail"]),
     )
     turn = (await w.call("POST", f"/sessions/{sid}/answers", json={"text": "Small firms"})).json()[
         "question"
