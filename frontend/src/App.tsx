@@ -13,6 +13,33 @@ interface Message {
   text: string;
 }
 
+const STORAGE_KEY = "icp-chat-v1";
+
+interface Snapshot {
+  stage: Stage;
+  messages: Message[];
+  options: string[];
+  multi: boolean;
+  picked: string[];
+  sessionId: string | null;
+  form: FormField[];
+  missing: string[];
+  icp: IcpResponse | null;
+  approved: boolean;
+  revising: boolean;
+}
+
+// The page can be reloaded under us (dev-server HMR reconnect, discarded background tab),
+// so the chat is mirrored to sessionStorage and restored on mount.
+function loadSnapshot(): Snapshot | null {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as Snapshot) : null;
+  } catch {
+    return null;
+  }
+}
+
 function explain(e: unknown): string {
   if (!(e instanceof api.ApiError)) return "I cannot reach the server right now. Please check your connection and try again.";
   switch (e.status) {
@@ -28,19 +55,20 @@ function explain(e: unknown): string {
 }
 
 export default function App() {
-  const [stage, setStage] = useState<Stage>("home");
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [options, setOptions] = useState<string[]>([]);
-  const [multi, setMulti] = useState(true);
-  const [picked, setPicked] = useState<string[]>([]);
+  const [saved] = useState(loadSnapshot);
+  const [stage, setStage] = useState<Stage>(saved?.stage ?? "home");
+  const [messages, setMessages] = useState<Message[]>(saved?.messages ?? []);
+  const [options, setOptions] = useState<string[]>(saved?.options ?? []);
+  const [multi, setMulti] = useState(saved?.multi ?? true);
+  const [picked, setPicked] = useState<string[]>(saved?.picked ?? []);
   const [busy, setBusy] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [form, setForm] = useState<FormField[]>([]);
-  const [missing, setMissing] = useState<string[]>([]);
-  const [icp, setIcp] = useState<IcpResponse | null>(null);
-  const [approved, setApproved] = useState(false);
-  const [revising, setRevising] = useState(false);
-  const nextId = useRef(1);
+  const [sessionId, setSessionId] = useState<string | null>(saved?.sessionId ?? null);
+  const [form, setForm] = useState<FormField[]>(saved?.form ?? []);
+  const [missing, setMissing] = useState<string[]>(saved?.missing ?? []);
+  const [icp, setIcp] = useState<IcpResponse | null>(saved?.icp ?? null);
+  const [approved, setApproved] = useState(saved?.approved ?? false);
+  const [revising, setRevising] = useState(saved?.revising ?? false);
+  const nextId = useRef(Math.max(0, ...(saved?.messages ?? []).map((m) => m.id)) + 1);
   const endRef = useRef<HTMLDivElement>(null);
 
   const push = useCallback((role: Message["role"], text: string) => {
@@ -50,6 +78,24 @@ export default function App() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, stage, icp, options]);
+
+  useEffect(() => {
+    const snap: Snapshot = { stage, messages, options, multi, picked, sessionId, form, missing, icp, approved, revising };
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
+    } catch {
+      // storage unavailable: the chat just will not survive a reload
+    }
+  }, [stage, messages, options, multi, picked, sessionId, form, missing, icp, approved, revising]);
+
+  // A reload mid-build loses the in-flight request; ask for the ICP again.
+  const resumed = useRef(false);
+  useEffect(() => {
+    if (resumed.current || !saved || saved.stage !== "building" || !saved.sessionId) return;
+    resumed.current = true;
+    void makeIcp(saved.sessionId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function newChat() {
     setMessages([]);
