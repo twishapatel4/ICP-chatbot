@@ -2,19 +2,33 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import * as api from "./api";
 import Composer from "./components/Composer";
 import FallbackForm from "./components/FallbackForm";
+import Icon, { type IconName } from "./components/Icon";
 import IcpView from "./components/IcpView";
 import ProgressBar from "./components/ProgressBar";
-import SignupCard from "./components/SignupCard";
+import ThemeToggle from "./components/ThemeToggle";
 import type { FormField, IcpResponse, Progress, StartRequest, Turn } from "./types";
 
-type Stage = "home" | "signup" | "interview" | "fallback" | "building" | "done";
+type Stage = "home" | "interview" | "fallback" | "building" | "done";
 interface Message {
   id: number;
   role: "bot" | "me" | "note" | "error";
   text: string;
 }
 
+type IntroKey = "company_name" | "website" | "industry" | "role";
+const INTRO_EXTRAS: [IntroKey, string][] = [
+  ["website", "Website (optional)"],
+  ["industry", "Industry (optional)"],
+  ["role", "Your role (optional)"],
+];
+
 const NO_PROGRESS: Progress = { percent: 0, known: 0, total: 0 };
+
+const STEPS: { icon: IconName; title: string; text: string; tag: string }[] = [
+  { icon: "company", title: "Tell us about you", text: "Share your company name and website so I can start from what is already public.", tag: "Step 1" },
+  { icon: "chat", title: "Answer a few questions", text: "A short chat about who you sell to, what they struggle with and how they buy.", tag: "Step 2" },
+  { icon: "profile", title: "Review your ICP", text: "Get a profile and a scoring model you can edit, review and approve.", tag: "Step 3" },
+];
 
 const STORAGE_KEY = "icp-chat-v1";
 
@@ -60,7 +74,7 @@ function explain(e: unknown): string {
 
 export default function App() {
   const [saved] = useState(loadSnapshot);
-  const [stage, setStage] = useState<Stage>(saved?.stage ?? "home");
+  const [stage, setStage] = useState<Stage>((saved?.stage as string) === "signup" ? "home" : (saved?.stage ?? "home"));
   const [messages, setMessages] = useState<Message[]>(saved?.messages ?? []);
   const [options, setOptions] = useState<string[]>(saved?.options ?? []);
   const [multi, setMulti] = useState(saved?.multi ?? true);
@@ -73,6 +87,7 @@ export default function App() {
   const [approved, setApproved] = useState(saved?.approved ?? false);
   const [revising, setRevising] = useState(saved?.revising ?? false);
   const [progress, setProgress] = useState<Progress>(saved?.progress ?? NO_PROGRESS);
+  const [intro, setIntro] = useState<Record<IntroKey, string>>({ company_name: "", website: "", industry: "", role: "" });
   const nextId = useRef(Math.max(0, ...(saved?.messages ?? []).map((m) => m.id)) + 1);
 
   const push = useCallback((role: Message["role"], text: string) => {
@@ -114,8 +129,8 @@ export default function App() {
     setRevising(false);
     setProgress(NO_PROGRESS);
     setBusy(false);
-    setStage("signup");
-    push("bot", "Hi! Tell me a little about your company and we will begin.");
+    setIntro({ company_name: "", website: "", industry: "", role: "" });
+    setStage("home");
   }
 
   async function makeIcp(id: string) {
@@ -246,14 +261,72 @@ export default function App() {
   if (stage === "home") {
     return (
       <main className="app home">
-        <h1>Build your Ideal Customer Profile</h1>
-        <p>
-          A short conversation about your business. At the end you get an ICP and a scoring model
-          you can review and approve.
-        </p>
-        <button className="primary big" onClick={newChat}>
-          New chat
-        </button>
+        <header>
+          <div className="head-left" />
+          <ThemeToggle />
+        </header>
+        <div className="home-body">
+          <span className="logo">
+            <Icon name="sparkle" size={26} />
+          </span>
+          <h1>
+            Build your <span className="muted">Ideal Customer Profile</span>
+          </h1>
+          <p>A short conversation about your business. At the end you get an ICP and a scoring model you can review and approve.</p>
+          <div className="steps">
+            {STEPS.map((step) => (
+              <div className="step" key={step.title}>
+                <span className="step-icon">
+                  <Icon name={step.icon} size={22} />
+                </span>
+                <h3>{step.title}</h3>
+                <p>{step.text}</p>
+                <span className="step-tag">{step.tag}</span>
+              </div>
+            ))}
+          </div>
+          <form
+            className="home-composer"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const body: Record<string, string> = {};
+              for (const [k, v] of Object.entries(intro)) if (v.trim()) body[k] = v.trim();
+              if (!body.company_name || busy) return;
+              newChat();
+              void start(body as unknown as StartRequest);
+            }}
+          >
+            <div className="prompt-box">
+              <input
+                type="text"
+                maxLength={200}
+                autoFocus
+                placeholder="Your company name"
+                aria-label="Company name"
+                value={intro.company_name}
+                onChange={(e) => setIntro({ ...intro, company_name: e.target.value })}
+              />
+              <div className="prompt-actions">
+                <button className="send" type="submit" aria-label="Start" title="Start" disabled={!intro.company_name.trim()}>
+                  <Icon name="arrowUp" size={18} />
+                </button>
+              </div>
+            </div>
+            <div className="intro-extras">
+              {INTRO_EXTRAS.map(([k, label]) => (
+                <input
+                  key={k}
+                  type="text"
+                  maxLength={200}
+                  placeholder={label}
+                  aria-label={label}
+                  value={intro[k]}
+                  onChange={(e) => setIntro({ ...intro, [k]: e.target.value })}
+                />
+              ))}
+            </div>
+          </form>
+        </div>
       </main>
     );
   }
@@ -261,10 +334,13 @@ export default function App() {
   return (
     <main className="app">
       <header>
-        <h1>ICP Chatbot</h1>
-        <button onClick={newChat} disabled={busy}>
-          New chat
-        </button>
+        <div className="head-left">
+          <h1 className="sr-only">ICP Chatbot</h1>
+          <button onClick={newChat} disabled={busy}>
+            <Icon name="plus" size={18} /> New chat
+          </button>
+        </div>
+        <ThemeToggle />
       </header>
 
       {sessionId && (stage === "interview" || stage === "building" || stage === "done") && (
@@ -280,8 +356,6 @@ export default function App() {
             {m.text}
           </div>
         ))}
-
-        {stage === "signup" && <SignupCard disabled={busy} onStart={start} />}
 
         {options.length > 0 && (
           <div className="chips-wrap">

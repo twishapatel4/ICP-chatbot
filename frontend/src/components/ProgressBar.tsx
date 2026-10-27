@@ -18,7 +18,7 @@ export default function ProgressBar({ progress, building, done }: Props) {
 
   return (
     <div
-      className="progress"
+      className={`progress${done ? " done" : ""}`}
       role="progressbar"
       aria-label="ICP progress"
       aria-valuemin={0}
