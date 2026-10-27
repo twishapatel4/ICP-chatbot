@@ -16,12 +16,18 @@ services:
       - key: PYTHONPATH
         value: src
       - key: LLM_BACKEND
-        value: developer
+        value: vertex
+      - key: GOOGLE_CLOUD_LOCATION
+        value: global
+      # Service-account JSON: add it in Render > icp-chatbot-api > Environment > Secret Files
+      # with the filename gcp-key.json (it appears at /etc/secrets/gcp-key.json).
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /etc/secrets/gcp-key.json
       - key: AUTO_CREATE_TABLES
         value: "false"
       - key: DATABASE_URL # Neon string, prefixed postgresql+psycopg://
         sync: false
-      - key: GEMINI_API_KEY
+      - key: GOOGLE_CLOUD_PROJECT # your GCP project ID
         sync: false
 
   - type: web

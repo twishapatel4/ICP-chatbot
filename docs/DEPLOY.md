@@ -1,6 +1,6 @@
-# Deploy (free: Render + Neon + Gemini free tier)
+# Deploy: Render + Neon (free) and Vertex AI (pay per use)
 
-Backend and frontend on Render, Postgres on Neon. No cost, no card.
+Backend and frontend on Render, Postgres on Neon. Hosting is free; only Vertex AI calls cost money.
 
 ## 1. Database (Neon)
 1. neon.tech -> sign up -> new project.
@@ -8,8 +8,11 @@ Backend and frontend on Render, Postgres on Neon. No cost, no card.
 3. Change the prefix to `postgresql+psycopg://` (the app needs the driver name):
    `postgresql+psycopg://user:pass@host/db?sslmode=require`
 
-## 2. Gemini key
-aistudio.google.com -> Get API key. Free tier has rate limits.
+## 2. Vertex AI service account
+1. Google Cloud console -> pick the project -> enable the **Vertex AI API**.
+2. IAM -> Service Accounts -> create one with role **Vertex AI User**.
+3. Keys -> Add key -> JSON. Download it (keep it private, never commit it).
+4. Note the project ID.
 
 ## 3. Push code
 Push this repo (with `render.yaml`) to GitHub. `.env` stays out of git.
@@ -17,10 +20,12 @@ Push this repo (with `render.yaml`) to GitHub. `.env` stays out of git.
 ## 4. Render
 1. render.com -> New -> Blueprint -> pick the repo.
 2. Render reads `render.yaml`, creates `icp-chatbot-api` and `icp-chatbot-ui`.
-3. When asked, fill secrets for the API:
+3. When asked, fill values for the API:
    - `DATABASE_URL` = string from step 1
-   - `GEMINI_API_KEY` = key from step 2
+   - `GOOGLE_CLOUD_PROJECT` = project ID from step 2
 4. Apply. First deploy runs `alembic upgrade head`, then starts the API.
+5. Render -> `icp-chatbot-api` -> Environment -> **Secret Files** -> add file named
+   `gcp-key.json`, paste the whole JSON from step 2. Save (it redeploys).
 
 ## 5. Check
 - `https://icp-chatbot-api.onrender.com/health` -> `{"status":"ok"}`
@@ -36,7 +41,7 @@ UptimeRobot (free) -> HTTP monitor on `/health`, every 10 min.
 
 ## Limits to know
 - Free API sleeps when idle. Fine for demo, not for customers.
-- Gemini free tier: rate limited; data may be used by Google. Use paid / Vertex
-  (`LLM_BACKEND=vertex`) for real prospect data.
+- Vertex AI is billed per use (needs a billing-enabled GCP project). Set budget alerts
+  in GCP. The app's daily token/session caps (`.env.example`) limit spend.
 - Never use SQLite on Render free: disk is wiped on each deploy.
 - Change tenant id: set `VITE_TENANT_ID` in the UI service env if not `demo`.
