@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { BotAvatar } from "bot-avatars";
 import * as api from "./api";
 import Composer from "./components/Composer";
 import FallbackForm from "./components/FallbackForm";
@@ -6,6 +7,7 @@ import Icon, { type IconName } from "./components/Icon";
 import IcpView from "./components/IcpView";
 import ProgressBar from "./components/ProgressBar";
 import InView from "./components/InView";
+import Typewriter from "./components/Typewriter";
 import TextShimmer from "./components/TextShimmer";
 import TextEffect from "./components/TextEffect";
 import ThemeToggle from "./components/ThemeToggle";
@@ -24,6 +26,8 @@ const INTRO_EXTRAS: [IntroKey, string][] = [
   ["industry", "Industry (optional)"],
   ["role", "Your role (optional)"],
 ];
+
+const BUILD_NOTE = "Building your ICP. This can take a minute...";
 
 const NO_PROGRESS: Progress = { percent: 0, known: 0, total: 0 };
 
@@ -45,6 +49,7 @@ interface Snapshot {
   form: FormField[];
   missing: string[];
   icp: IcpResponse | null;
+  icpAfter?: number | null; // id of the message the profile was built after: the card sits there
   approved: boolean;
   revising: boolean;
   progress?: Progress;
@@ -55,7 +60,11 @@ interface Snapshot {
 function loadSnapshot(): Snapshot | null {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as Snapshot) : null;
+    if (!raw) return null;
+    const snap = JSON.parse(raw) as Snapshot;
+    // a "building" note left in a chat that is no longer building is stale (saved before it was cleaned up)
+    if (snap.stage !== "building") snap.messages = snap.messages.filter((m) => !(m.role === "note" && m.text === BUILD_NOTE));
+    return snap;
   } catch {
     return null;
   }
@@ -87,11 +96,13 @@ export default function App() {
   const [form, setForm] = useState<FormField[]>(saved?.form ?? []);
   const [missing, setMissing] = useState<string[]>(saved?.missing ?? []);
   const [icp, setIcp] = useState<IcpResponse | null>(saved?.icp ?? null);
+  const [icpAfter, setIcpAfter] = useState<number | null>(saved?.icpAfter ?? null);
   const [approved, setApproved] = useState(saved?.approved ?? false);
   const [revising, setRevising] = useState(saved?.revising ?? false);
   const [progress, setProgress] = useState<Progress>(saved?.progress ?? NO_PROGRESS);
   const [intro, setIntro] = useState<Record<IntroKey, string>>({ company_name: "", website: "", industry: "", role: "" });
   const nextId = useRef(Math.max(0, ...(saved?.messages ?? []).map((m) => m.id)) + 1);
+  const firstNewId = useRef(nextId.current); // messages restored after a reload show at once, not typed out
 
   const push = useCallback((role: Message["role"], text: string) => {
     setMessages((m) => [...m, { id: nextId.current++, role, text }]);
@@ -103,13 +114,13 @@ export default function App() {
   }, [messages, stage, icp, options]);
 
   useEffect(() => {
-    const snap: Snapshot = { stage, messages, options, multi, picked, sessionId, form, missing, icp, approved, revising, progress };
+    const snap: Snapshot = { stage, messages, options, multi, picked, sessionId, form, missing, icp, icpAfter, approved, revising, progress };
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
     } catch {
       // storage unavailable: the chat just will not survive a reload
     }
-  }, [stage, messages, options, multi, picked, sessionId, form, missing, icp, approved, revising, progress]);
+  }, [stage, messages, options, multi, picked, sessionId, form, missing, icp, icpAfter, approved, revising, progress]);
 
   // A reload mid-build loses the in-flight request; ask for the ICP again.
   const resumed = useRef(false);
@@ -128,6 +139,7 @@ export default function App() {
     setForm([]);
     setMissing([]);
     setIcp(null);
+    setIcpAfter(null);
     setApproved(false);
     setRevising(false);
     setProgress(NO_PROGRESS);
@@ -138,9 +150,12 @@ export default function App() {
 
   async function makeIcp(id: string) {
     setStage("building");
-    push("note", "Building your ICP. This can take a minute...");
+    // the card goes after the last real message; the "building" note is removed once it is ready
+    const lastMessage = nextId.current - 1;
+    push("note", BUILD_NOTE);
     try {
       setIcp(await api.buildIcp(id));
+      setIcpAfter(lastMessage);
       setStage("done");
     } catch (e) {
       const missing = (e instanceof api.ApiError && (e.detail as { not_enough_info?: string[] })?.not_enough_info) || null;
@@ -155,6 +170,9 @@ export default function App() {
       }
       push("error", explain(e));
       setStage("done");
+    } finally {
+      // the build is over, either way: the "this can take a minute" note no longer applies
+      setMessages((m) => m.filter((x) => !(x.role === "note" && x.text === BUILD_NOTE)));
     }
   }
 
@@ -339,6 +357,26 @@ export default function App() {
     );
   }
 
+  // The profile card sits in the conversation, after the message it was built after, so anything
+  // typed later appears below it, at the bottom, and the page never has to be scrolled to find it.
+  const profile = icp ? (
+    stage === "done" ? (
+      <IcpView
+        icp={icp}
+        approved={approved}
+        busy={busy}
+        onApprove={approve}
+        onImprove={improve}
+        onNewChat={newChat}
+      />
+    ) : (
+      <details className="previous">
+        <summary>Show the current profile (being updated)</summary>
+        <IcpView icp={icp} approved={approved} busy readOnly onApprove={approve} onImprove={improve} onNewChat={newChat} />
+      </details>
+    )
+  ) : null;
+
   return (
     <main className="app">
       <header>
@@ -357,17 +395,20 @@ export default function App() {
 
       <div className="log" aria-live="polite">
         {messages.map((m, i) => (
-          <InView
-            key={m.id}
-            className={`msg ${m.role}`}
-          >
-            {m.role === "note" && stage === "building" && i === messages.length - 1 ? (
-              <TextShimmer>{m.text}</TextShimmer>
-            ) : (
-              m.text
-            )}
-          </InView>
+          <Fragment key={m.id}>
+            <InView className={`msg ${m.role}`}>
+              {m.role === "note" && stage === "building" && i === messages.length - 1 ? (
+                <TextShimmer>{m.text}</TextShimmer>
+              ) : m.role === "bot" && m.id >= firstNewId.current ? (
+                <Typewriter text={m.text} />
+              ) : (
+                m.text
+              )}
+            </InView>
+            {icpAfter === m.id && profile}
+          </Fragment>
         ))}
+        {!messages.some((m) => m.id === icpAfter) && profile}
 
         {options.length > 0 && (
           <div className="chips-wrap">
@@ -389,7 +430,8 @@ export default function App() {
           </div>
         )}
 
-        {busy && stage !== "building" && <div className="msg note">
+        {busy && stage !== "building" && <div className="msg note thinking">
+            <BotAvatar type="star" state="working" size={34} aria-hidden="true" />
             <TextShimmer>Thinking...</TextShimmer>
           </div>}
 
@@ -397,22 +439,6 @@ export default function App() {
           <FallbackForm fields={form} disabled={busy} missing={missing} onSubmit={submitForm} />
         )}
 
-        {icp && stage === "done" && (
-          <IcpView
-            icp={icp}
-            approved={approved}
-            busy={busy}
-            onApprove={approve}
-            onImprove={improve}
-            onNewChat={newChat}
-          />
-        )}
-        {icp && stage !== "done" && (
-          <details className="previous">
-            <summary>Show the current profile (being updated)</summary>
-            <IcpView icp={icp} approved={approved} busy readOnly onApprove={approve} onImprove={improve} onNewChat={newChat} />
-          </details>
-        )}
       </div>
 
       {stage === "interview" && <Composer disabled={busy} sessionId={sessionId} hasPicks={picked.length > 0} onSend={send} />}

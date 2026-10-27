@@ -89,6 +89,8 @@ button:disabled { opacity: .5; cursor: default; }
 .msg.me { background: var(--user-grad); color: var(--user-text); align-self: flex-end;
   border-bottom-right-radius: 8px; box-shadow: var(--soft); }
 .msg.note { align-self: center; color: var(--muted); font-size: 12px; padding: 0; }
+/* the bot is working: on the bot's side of the chat, lined up with its message text, and easy to see */
+.msg.note.thinking { align-self: flex-start; display: flex; align-items: center; gap: 8px; font-size: 16px; padding: 0; }
 .msg.error { align-self: center; color: var(--warn); font-size: 13px; padding: 0; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 28px;
   padding: 22px 24px; align-self: stretch; box-shadow: var(--soft); }
@@ -158,7 +160,8 @@ button.link:disabled { opacity: 0.4; cursor: default; }
 .ok { color: #4ade80; } .bad { color: #f87171; }
 .icp .hint { color: var(--muted); font-size: 12px; }
 .previous { margin: 8px 0; }
-.previous > summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.previous > summary { cursor: pointer; color: var(--text); font-size: 16px; font-weight: 500; padding: 6px 0; }
+.previous > summary:hover { color: var(--muted); }
 /* generating: a light band sweeps across the status text (TextShimmer) */
 .text-shimmer { --base-color: var(--muted); --base-gradient-color: var(--text);
   display: inline-block; color: transparent; -webkit-text-fill-color: transparent;
@@ -202,3 +205,9 @@ button.link:disabled { opacity: 0.4; cursor: default; }
 ::view-transition-old(root) { z-index: 1; }
 ::view-transition-new(root) { z-index: 2; animation: theme-wipe .8s cubic-bezier(.65, 0, .35, 1); }
 @keyframes theme-wipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+
+/* typewriter cursor: takes no room, so the bubble never reflows while it types */
+.type-cursor { display: inline-block; width: 2px; height: 1.05em; margin: 0 -2px 0 1px; vertical-align: text-bottom;
+  background: currentColor; animation: cursor-blink 1s steps(1) infinite; }
+@keyframes cursor-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .type-cursor { animation: none; } }
