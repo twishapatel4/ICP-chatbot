@@ -1,4 +1,0 @@
-- main [ref=e3]:
-  - heading "Build your Ideal Customer Profile" [level=1] [ref=e4]
-  - paragraph [ref=e5]: A short conversation about your business. At the end you get an ICP and a scoring model you can review and approve.
-  - button "New chat" [ref=e6] [cursor=pointer]
