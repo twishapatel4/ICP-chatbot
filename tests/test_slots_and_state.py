@@ -48,7 +48,7 @@ def test_catalog_lists_every_slot_and_choices():
     catalog = render_slot_catalog()
     for slot in SLOT_LIST:
         assert f"- {slot.key}:" in catalog
-    assert "Choices: 1-10; 11-50" in catalog
+    assert "Choices: B2B; B2C; Both" in catalog
 
 
 def test_slot_value_normalizes_values():
@@ -90,4 +90,14 @@ def test_a_pick_list_slot_is_offered_as_examples_so_specific_answers_are_kept():
     catalog = render_slot_catalog()
     line = next(x for x in catalog.splitlines() if x.startswith("- geographies:"))
     assert "not a closed list" in line and "never widened" in line and "Choices:" not in line
-    assert "Choices: 1-10; 11-50" in catalog  # closed bands stay choices
+    assert "Choices: B2B; B2C; Both" in catalog  # a truly closed list stays choices
+
+
+def test_size_and_revenue_bands_are_examples_so_the_users_exact_range_is_kept():
+    from icp_chatbot.domain.slots import render_slot_catalog
+
+    lines = render_slot_catalog().splitlines()
+    for key in ("company_size", "revenue_range"):
+        line = next(x for x in lines if x.startswith(f"- {key}:"))
+        assert "not a closed list" in line and "100-300 stays 100-300" in line
+        assert "Choices:" not in line

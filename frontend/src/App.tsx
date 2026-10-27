@@ -227,8 +227,8 @@ export default function App() {
       setApproved(true);
     });
 
+  // The current profile stays on the page (collapsed) while they explain what to change.
   function improve() {
-    setIcp(null);
     setRevising(true);
     push("bot", "Sorry about that. What should be changed or added?");
     setStage("interview");
@@ -296,7 +296,7 @@ export default function App() {
           <FallbackForm fields={form} disabled={busy} missing={missing} onSubmit={submitForm} />
         )}
 
-        {icp && (
+        {icp && stage === "done" && (
           <IcpView
             icp={icp}
             approved={approved}
@@ -305,6 +305,12 @@ export default function App() {
             onImprove={improve}
             onNewChat={newChat}
           />
+        )}
+        {icp && stage !== "done" && (
+          <details className="previous">
+            <summary>Show the current profile (being updated)</summary>
+            <IcpView icp={icp} approved={approved} busy readOnly onApprove={approve} onImprove={improve} onNewChat={newChat} />
+          </details>
         )}
         <div ref={endRef} />
       </div>

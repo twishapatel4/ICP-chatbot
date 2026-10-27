@@ -103,6 +103,34 @@ def _only_reworded(values: list[str], current: FieldEntry) -> bool:
     return all(w[:4] in stems for v in values for w in _WORD.findall(v.lower()))
 
 
+# words too common to tie a question to an exclusion
+_COMMON = {"buye", "comp", "cust", "clie", "peop", "that", "with", "they", "thei", "them", "whic",
+           "what", "have", "from", "only", "more", "than", "will", "woul", "does", "excl"}  # fmt: skip
+
+
+def _repeats_exclusion(question: str, exclusions: list[str]) -> bool:
+    """True when the question only restates an exclusion the user already gave (QA 2026-10-27:
+    "Buyers asking for credit terms" came back as "Will the buyer accept a Letter of Credit?")."""
+    asked = {w[:4] for w in _WORD.findall(question.lower())}
+    for exclusion in exclusions:
+        stems = {w[:4] for w in _WORD.findall(exclusion.lower())} - _COMMON
+        if stems and len(stems & asked) >= max(1, (len(stems) + 1) // 2):
+            return True
+    return False
+
+
+def _keep_questions(questions: list[str], exclusions: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out = []
+    for question in questions:
+        text = question.strip()
+        key = " ".join(_WORD.findall(text.lower()))
+        if text and key not in seen and not _repeats_exclusion(text, exclusions):
+            seen.add(key)
+            out.append(text)
+    return out
+
+
 async def build_icp(
     llm: LLM,
     config: ConfigVersionData,
@@ -155,7 +183,8 @@ async def build_icp(
                 open_questions.append(
                     f"Could not turn this exclusion into a rule: {draft.field} {draft.operator} {draft.values}"
                 )
-        open_questions.extend(q for q in synthesis.open_questions if q.strip())
+        exclusions = entries["disqualifiers"].values if "disqualifiers" in entries else []
+        open_questions.extend(_keep_questions(synthesis.open_questions, exclusions))
 
     shell = ICPDocument(
         sections={},

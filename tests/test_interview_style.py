@@ -202,3 +202,40 @@ async def test_older_messages_are_not_compared(world):
     llm.queue("interviewer", AgentTurn(say="Right. Since you're doing outbound, how long to close?"))
     result = await engine.answer(T, sid, "a month")
     assert result.question.text == "Right. Since you're doing outbound, how long to close?"
+
+
+# QA 2026-10-27: phrases the v2 prompt bans that live replies still used
+@pytest.mark.parametrize(
+    "say",
+    [
+        "Fair enough. Who signs the contract?",
+        "Since we know you sell to schools, who signs the contract?",
+        "Given that you export, who signs the contract?",
+        "That is crystal clear now. Who signs the contract?",
+        "I have everything I need. Who signs the contract?",
+    ],
+)
+def test_the_v2_stock_lines_and_lead_ins_are_caught(say):
+    assert style_problem(say, []) is not None
+
+
+def test_a_figure_the_user_never_gave_is_caught():
+    say = "Surat has about 6-8 lakh power looms. Which cluster do you sell to first?"
+    assert "figure" in style_problem(say, [], "we sell yarn to weavers in Surat")
+
+
+def test_a_figure_from_the_user_or_offered_as_a_question_passes():
+    assert style_problem("So 10 lakh a month in orders. Who signs off?", [], "about 10 lakh a month") is None
+    assert style_problem("Is that roughly 5 crore a year in revenue?", []) is None
+
+
+def test_answering_their_question_may_run_longer():
+    say = " ".join(["word"] * 60) + "?"
+    assert style_problem(say, [], answering=True) is None
+    assert "words" in style_problem(say, [])
+
+
+def test_a_plain_large_number_the_user_never_gave_is_caught():
+    say = "Surat has roughly 600,000 to 800,000 power looms. Which cluster first?"
+    assert "figure" in style_problem(say, [], "we sell yarn in Surat")
+    assert style_problem("Founded in 2015, so who signs off?", [], "") is None

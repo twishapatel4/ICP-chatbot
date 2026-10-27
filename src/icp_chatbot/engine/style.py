@@ -4,7 +4,8 @@ averaged 43 words, 44% opened with a stock line), so the code sends a slip back 
 
 import re
 
-MAX_WORDS = 45  # a short reaction plus one question; answering their question fits too
+MAX_WORDS = 45  # a short reaction plus one question
+ANSWER_WORDS = 70  # when they asked something: a real answer of up to three sentences, then one question
 RECENT = 3  # bot messages compared for repeated openings and phrases
 PHRASE_WORDS = 4  # a run of this many words repeated from a recent message counts as repetition
 
@@ -17,12 +18,27 @@ STOCK_OPENERS = (
     "i appreciate",
     "great question",
     "absolutely",
+    "fair enough",
+    "it makes sense",
+    "since we",
+    "since you",
+    "given that",
+    "to refine",
 )
 PRAISE = re.compile(
     r"\b(brilliant|fantastic|excellent|impressive|amazing|awesome|wonderful|spot on|sweet spot|"
-    r"powerful|value add|great (insight|point|question|distinction)|love (that|it))\b",
+    r"powerful|value add|great (insight|point|question|distinction)|love (that|it)|crystal clear|"
+    r"clearly|a distinct shift|i have everything i need)\b",
     re.IGNORECASE,
 )
+# a count, size or share stated as fact: the model has no live data, so it is made up (QA 2026-10-27:
+# "Surat has 6-8 lakh power looms"). Offered back as a question it is fine; see FIGURE_SENTENCE.
+FIGURE = re.compile(
+    r"\d[\d,.]*(?:\s*(?:-|–|to)\s*\d[\d,.]*)?\s*(?:%|(?:lakh|crore|million|billion|thousand|percent)\b)|"
+    r"\b\d{1,3}(?:,\d{2,3})+\b",  # 600,000 or 6,00,000: a year like 2015 has no comma
+    re.IGNORECASE,
+)
+FIGURE_SENTENCE = re.compile(r"(?:[^.!?]|\.(?=\d))+[.!?]?")  # a decimal point does not end it
 QUOTED = re.compile(r"(?<![\w'])['\"‘“]([^'\"‘’“”?]{2,30})['\"’”](?![\w'])")
 WORD = re.compile(r"[\w']+")
 SENTENCE = re.compile(r"[^.!?;:]+")
@@ -59,18 +75,40 @@ def recent_openings(recent: list[str]) -> list[str]:
     return seen
 
 
-def style_problem(say: str, recent: list[str], user_text: str = "") -> str | None:
+def _made_up_figure(say: str, user_text: str) -> str | None:
+    """A figure stated as fact that the user never gave, or None."""
+    told = user_text.lower()
+    for sentence in FIGURE_SENTENCE.findall(say):
+        if sentence.strip().endswith("?"):
+            continue
+        for match in FIGURE.finditer(sentence):
+            number = re.match(r"\d[\d,.]*", match.group(0)).group(0).rstrip(".,")
+            if number not in told:
+                return match.group(0).strip()
+    return None
+
+
+def style_problem(
+    say: str, recent: list[str], user_text: str = "", *, answering: bool = False
+) -> str | None:
     """What makes the message sound robotic, in words for the model, or None if it reads fine.
-    recent holds the bot's last messages; user_text is what the user wrote, which may be quoted."""
+    recent holds the bot's last messages; user_text is what the user wrote, which may be quoted.
+    answering is true when their latest message asked something, which earns a longer reply."""
     words = _words(say)
     opening = " ".join(words[:5])
-    if len(words) > MAX_WORDS:
-        return f"it has {len(words)} words. Keep it under {MAX_WORDS}: a few words back, then one short question."
+    limit = ANSWER_WORDS if answering else MAX_WORDS
+    if len(words) > limit:
+        return f"it has {len(words)} words. Keep it under {limit}: a few words back, then one short question."
     if say.count("?") > 1:
         return "it asks more than one question. Ask one question only."
     for stock in STOCK_OPENERS:
         if opening == stock or opening.startswith(stock + " "):
             return f'it opens with the stock line "{stock}". Open by reacting to what they actually said.'
+    if figure := _made_up_figure(say, user_text):
+        return (
+            f'it states a figure ("{figure}") the user never gave. You have no live data: leave '
+            "counts, prices and market sizes out and say where they can find them."
+        )
     if match := PRAISE.search(say):
         return f'it uses praise or an idiom ("{match.group(0)}"). Say it plainly, without judging.'
     for quoted in QUOTED.findall(say):

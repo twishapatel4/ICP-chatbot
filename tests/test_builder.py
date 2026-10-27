@@ -165,3 +165,30 @@ async def test_added_wording_is_rejected_and_the_recorded_values_are_kept():
     synthesis = ICPSynthesis(fields=[FieldDraft(slot="industries", values=["Banks for actuarial rating"])])
     result = await build_icp(FakeLLM({"final_icp": [synthesis]}), CONFIG, state, today=TODAY)
     assert result.document.entries()["industries"].values == before
+
+
+async def test_a_shown_but_unconfirmed_field_asks_to_confirm_instead_of_saying_unknown():
+    # QA 2026-10-27: about half of all cards said "Not yet known: pain points" right under the
+    # pain points they listed, because the value sat below the known confidence
+    state = SessionState()
+    state.slots["pain_points"] = slot(["price sensitivity"], 0.6)
+    result = await build_icp(FakeLLM({"final_icp": [ICPSynthesis()]}), CONFIG, state, today=TODAY)
+    notes = result.document.open_questions
+    assert not any(n.lower().startswith("not yet known: pain points") for n in notes)
+    assert any("pain points" in n.lower() and "price sensitivity" in n for n in notes)
+
+
+async def test_open_questions_that_repeat_a_disqualifier_or_each_other_are_dropped():
+    state = make_state()
+    state.slots["disqualifiers"] = slot(["Buyers asking for credit terms", "wholesale buyers"])
+    synthesis = ICPSynthesis(
+        open_questions=[
+            "Will the buyer accept Letter of Credit rather than requesting credit terms?",
+            "How do we identify and exclude wholesale buyers?",
+            "Which port do they ship from?",
+            "which port do they ship from? ",
+        ]
+    )
+    result = await build_icp(FakeLLM({"final_icp": [synthesis]}), CONFIG, state, today=TODAY)
+    model_notes = [n for n in result.document.open_questions if not n.startswith(("Not yet", "Please confirm"))]
+    assert model_notes == ["Which port do they ship from?"]

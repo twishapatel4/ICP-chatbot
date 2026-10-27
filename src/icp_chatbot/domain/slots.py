@@ -57,6 +57,7 @@ class SlotDef:
     choices: tuple[str, ...] = ()
     single_choice: bool = False  # one answer only: the user picks one option, not several
     open_ended: bool = False  # described in the user's own words: never offer suggested answers
+    exact_range: bool = False  # the choices are example bands: the user's own range is kept
     blocks_completion: bool | None = None  # default: tier A blocks, others do not
     skip_if: tuple[
         tuple[str, str], ...
@@ -189,6 +190,7 @@ SLOT_LIST: tuple[SlotDef, ...] = (
         0.9,
         choices=SIZE_BANDS,
         single_choice=True,
+        exact_range=True,
         skip_if=_B2C,
     ),
     _s(
@@ -200,6 +202,7 @@ SLOT_LIST: tuple[SlotDef, ...] = (
         0.6,
         choices=REVENUE_BANDS,
         single_choice=True,
+        exact_range=True,
         skip_if=_B2C,
     ),
     _s(
@@ -552,7 +555,12 @@ def render_slot_catalog() -> str:
     lines = []
     for s in SLOT_LIST:
         line = f"- {s.key}: {s.label}. {s.description}."
-        if s.choices and s.single_choice:
+        if s.choices and s.exact_range:  # QA 2026-10-27: "100-300" was snapped to "51-200"
+            line += (
+                " Common bands, not a closed list: " + "; ".join(s.choices) + ". Record the "
+                "user's own range and currency as said (100-300 stays 100-300, rupees stay rupees)."
+            )
+        elif s.choices and s.single_choice:
             line += " Choices: " + "; ".join(s.choices) + "."
         elif s.choices:  # a pick-list in the chat, but the user may be more specific
             line += (

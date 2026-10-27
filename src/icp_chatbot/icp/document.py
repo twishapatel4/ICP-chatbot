@@ -43,6 +43,7 @@ class ICPDocument(BaseModel):
     built_at_turn: int = 0  # answers received when the bot built this version
     custom_fields: list[CustomField] = Field(default_factory=list)  # this industry's own fields
     not_needed: list[str] = Field(default_factory=list)  # standard fields this industry skips
+    partial: bool = False  # built before the basics were known, because the user stopped early
 
     def slot_defs(self) -> list[SlotDef]:
         return with_custom(self.custom_fields)
@@ -102,7 +103,17 @@ def missing_slots(
         if s.tier in (Tier.A, Tier.B) and _applicable(s, entries) and not _is_known(s, entries)
     ]
     gaps.sort(key=lambda s: (s.tier != Tier.A, -s.importance))
-    return [f"Not yet known: {s.label.lower()}. {s.description.rstrip('.')}." for s in gaps[:limit]]
+    return [_gap_note(s, entries) for s in gaps[:limit]]
+
+
+def _gap_note(slot: SlotDef, entries: dict[str, FieldEntry]) -> str:
+    """A field the card already shows is only unconfirmed, not unknown: saying "Not yet known"
+    under its values reads as a contradiction."""
+    entry = entries.get(slot.key)
+    shown = real_values(slot.key, entry.values) if entry else []
+    if shown:
+        return f"Please confirm: {slot.label.lower()} ({', '.join(shown)}) is only a guess so far."
+    return f"Not yet known: {slot.label.lower()}. {slot.description.rstrip('.')}."
 
 
 def compute_completeness(

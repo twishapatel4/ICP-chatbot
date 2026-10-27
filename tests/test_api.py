@@ -392,11 +392,14 @@ def test_the_turn_response_carries_the_notice():
     assert TurnResponse.of(result).notice == "try again"
 
 
-async def test_building_with_too_little_information_is_refused_and_names_what_is_missing(world):
+async def test_stopping_early_still_builds_a_partial_profile_that_names_what_is_missing(world):
+    # QA 2026-10-27: a user who said stop got "Building your ICP" and then no profile at all
     w = await world()
-    started = await w.start()
-    sid = started["session_id"]
+    sid = (await w.start())["session_id"]
     await w.call("POST", f"/sessions/{sid}/finish")
+    w.llm.queue("final_icp", ICPSynthesis())
     built = await w.call("POST", f"/sessions/{sid}/icp")
-    assert built.status_code == 422
-    assert "Pain points" in built.json()["detail"]["not_enough_info"]
+    assert built.status_code == 200
+    doc = built.json()["document"]
+    assert doc["partial"] is True
+    assert any(q.startswith("Not yet known:") for q in doc["open_questions"])

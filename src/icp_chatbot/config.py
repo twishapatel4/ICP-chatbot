@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     model_extraction: str = "gemini-3.1-flash-lite"
     model_question: str = "gemini-3.8-flash"
     model_interviewer: str = ""  # the interviewer; empty keeps the question step's model
+    # tried once when the interviewer's model times out or fails, so the user does not have to
+    # send the answer again; a separate model has its own quota. Empty turns the backup off.
+    model_interviewer_backup: str = "gemini-3.1-flash-lite"
     model_final_icp: str = "gemini-2.5-pro"  # spec decision D7: General Availability models only
 
     # Database. Tests and local development use SQLite; production uses Postgres.
