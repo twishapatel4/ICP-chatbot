@@ -630,3 +630,33 @@ async def test_an_unreadable_website_is_said_so_in_the_opener(world):
     llm.queue("opener", q("I could not read your website. What does Acme do?"))
     await started(world, website="blocked.test")
     assert "could not be read" in llm.calls_for("opener")[0].user
+
+
+async def test_the_models_own_options_win_over_a_fields_fixed_list(world):
+    # QA 2026-10-27: every question on size, revenue or regions showed the fixed list (nine
+    # regions, dollar bands for an Indian exporter) instead of the options the model wrote
+    engine, repo, llm, _ = world
+    sid = await preset(repo)
+    llm.queue(
+        "interviewer",
+        ask("Which markets first?", target_slot="geographies", options=["Bangladesh", "Sri Lanka", "UAE"]),
+    )  # fmt: skip
+    result = await engine.answer(T, sid, "we export onions")
+    assert result.question.options == ("Bangladesh", "Sri Lanka", "UAE")
+
+
+async def test_a_fixed_list_is_the_fallback_when_the_model_gives_no_options(world):
+    engine, repo, llm, _ = world
+    sid = await preset(repo)
+    llm.queue("interviewer", ask("Who do you sell to?", target_slot="business_model"))
+    result = await engine.answer(T, sid, "hello")
+    assert result.question.options == ("B2B", "B2C", "Both")
+
+
+async def test_an_open_pick_list_is_not_used_as_a_fallback(world):
+    # QA 2026-10-27: with no options from the model, "which markets?" showed all nine regions
+    engine, repo, llm, _ = world
+    sid = await preset(repo)
+    llm.queue("interviewer", ask("Which markets do you ship to?", target_slot="geographies"))
+    result = await engine.answer(T, sid, "we export onions")
+    assert result.question.options == ()

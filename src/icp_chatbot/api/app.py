@@ -33,7 +33,7 @@ from icp_chatbot.engine.interview import (
     InvalidTransition,
     SessionClosed,
 )
-from icp_chatbot.engine.planner import enough_for_icp, missing_core_slots
+from icp_chatbot.engine.planner import enough_for_icp
 from icp_chatbot.engine.questions import Question
 from icp_chatbot.enrichment.fetcher import SafeFetcher
 from icp_chatbot.enrichment.service import EnrichmentService
@@ -218,14 +218,9 @@ def create_app(
         record = await ct.repo.get_session(tenant_id, session_id)
         if record.status != "completed":
             raise HTTPException(409, "not_ready")
-        if not enough_for_icp(record.state):
-            raise HTTPException(
-                422,
-                {
-                    "not_enough_info": record.state.agent_missing
-                    or [s.label for s in missing_core_slots(record.state)]
-                },
-            )
+        # too little to go on still gets a profile: the user asked to stop, so show what they gave
+        # and let the gap notes say what is missing (QA 2026-10-27: a refusal showed nothing)
+        partial = not enough_for_icp(record.state)
         latest = await ct.repo.latest_icp(tenant_id, session_id)
         bot = await ct.repo.latest_icp(tenant_id, session_id, author="bot")
         if bot and bot.document.get("built_at_turn") == record.state.answers_received:
@@ -240,7 +235,7 @@ def create_app(
         today = ct.clock().date()
         built = await build_icp(ct.llm, config, record.state, today=today, labels=labels)
         document = built.document.model_copy(
-            update={"built_at_turn": record.state.answers_received}
+            update={"built_at_turn": record.state.answers_received, "partial": partial}
         )
         if latest:  # a rebuild (for example after detail mode) must not discard the company's edits
             document = carry_over_edits(document, ICPDocument.model_validate(latest.document))

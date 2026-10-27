@@ -77,3 +77,5 @@ button.link:disabled { opacity: 0.4; cursor: default; }
 .feedback textarea { width: 100%; resize: vertical; }
 .ok { color: #4ade80; } .bad { color: #f87171; }
 .icp .hint { color: var(--muted); font-size: 13px; }
+.previous { margin: 8px 0; }
+.previous > summary { cursor: pointer; color: var(--muted); font-size: 13px; }

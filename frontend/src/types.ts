@@ -74,6 +74,7 @@ export interface IcpDocument {
   summary: string;
   completeness: { tier_a: number; tier_b: number };
   open_questions: string[];
+  partial?: boolean; // built before the basics were known, because the user stopped early
 }
 
 export interface IcpResponse {

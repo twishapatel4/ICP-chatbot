@@ -408,7 +408,7 @@ class InterviewEngine:
             if not problem:
                 if usable:
                     return result.parsed  # style is asked for once, never worth a failed turn
-                style = style_problem(result.parsed.say, recent, users)
+                style = style_problem(result.parsed.say, recent, users, answering="?" in (text or ""))
                 if not style:
                     return result.parsed
                 usable, problem = result.parsed, style
@@ -527,12 +527,14 @@ class InterviewEngine:
                 # not enough: no closing line, the page tells them what is missing instead
             else:
                 slot = state.slot_def(turn.target_slot) if turn.target_slot else None
+                # the model's options answer the question it actually wrote (countries, not
+                # regions; rupees, not dollars), so a pick-one field's list is only the fallback;
+                # an open list such as the nine regions is never forced on them
                 if slot and slot.open_ended:
                     options = ()
-                elif slot and slot.choices:
-                    options = slot.choices
                 else:
-                    options = clean_options(turn.options)
+                    fallback = slot.choices if slot and slot.single_choice else ()
+                    options = clean_options(turn.options) or fallback
                 question = Question(
                     turn.say.strip(),
                     kind="slot" if slot else "agent",
