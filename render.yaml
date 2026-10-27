@@ -1,0 +1,41 @@
+# Render Blueprint: backend (free web service) + frontend (free static site).
+# Postgres lives on Neon (free, no expiry), not on Render. See docs/DEPLOY.md.
+services:
+  - type: web
+    name: icp-chatbot-api
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: pip install -r requirements.txt
+    # Free plan has no pre-deploy hook, so migrate on start (safe to repeat).
+    startCommand: alembic upgrade head && uvicorn icp_chatbot.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: PYTHONPATH
+        value: src
+      - key: LLM_BACKEND
+        value: developer
+      - key: AUTO_CREATE_TABLES
+        value: "false"
+      - key: DATABASE_URL # Neon string, prefixed postgresql+psycopg://
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+
+  - type: web
+    name: icp-chatbot-ui
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    routes:
+      # Frontend calls /api/*; forward to the backend (no CORS needed).
+      # If the API URL differs (name taken), edit it here.
+      - type: rewrite
+        source: /api/*
+        destination: https://icp-chatbot-api.onrender.com/*
+      - type: rewrite
+        source: /*
+        destination: /index.html
