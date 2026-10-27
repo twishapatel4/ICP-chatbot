@@ -1,0 +1,24 @@
+- main [ref=f1e3]:
+  - generic [ref=f1e7]:
+    - heading "ICP Chatbot" [level=1] [ref=f1e8]
+    - button "New chat" [ref=f1e9] [cursor=pointer]
+  - generic [ref=f1e10]:
+    - generic [ref=f1e11]: Hi! Tell me a little about your company and we will begin.
+    - generic [ref=f1e12]:
+      - generic [ref=f1e13]:
+        - text: Company name *
+        - textbox "Company name *" [active] [ref=f1e14]:
+          - /placeholder: Acme Ltd
+      - generic [ref=f1e15]:
+        - text: Website (optional)
+        - textbox "Website (optional)" [ref=f1e16]:
+          - /placeholder: acme.com
+      - generic [ref=f1e17]:
+        - text: Industry (optional)
+        - textbox "Industry (optional)" [ref=f1e18]:
+          - /placeholder: Logistics software
+      - generic [ref=f1e19]:
+        - text: Your role (optional)
+        - textbox "Your role (optional)" [ref=f1e20]:
+          - /placeholder: Business development
+      - button "Start" [disabled] [ref=f1e22]

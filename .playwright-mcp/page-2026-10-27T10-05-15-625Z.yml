@@ -1,0 +1,15 @@
+- main [ref=f1e3]:
+  - generic [ref=f1e7]:
+    - heading "ICP Chatbot" [level=1] [ref=f1e8]
+    - button "New chat" [ref=f1e9] [cursor=pointer]
+  - generic [ref=f1e10]:
+    - generic [ref=f1e11]: Hi! Tell me a little about your company and we will begin.
+    - generic [ref=f1e23]: Zomato (https://www.zomato.com/)
+    - generic [ref=f1e25]: Welcome, Zomato! I couldn't quite load your website to learn more, so could you tell me a bit about what you do? Also, I'd love to hear about a recent deal you closed—what was the key factor that finally got it over the line?
+    - generic [ref=f1e29]: We run an online food ordering and delivery platform in India, and we also sell restaurant software and ad products to restaurants. Our last big deal was a multi-city restaurant chain that signed up for our ads and POS bundle because of the order volume we could send them.
+    - generic [ref=f1e30]: That's a clear B2B win. To help define your ideal restaurant partner for these software and ad bundles, do you find that multi-city chains are your best fit, or do you also see strong, high-value deals with independent, high-volume restaurants?
+    - generic [ref=f1e31]: Mostly mid-size and large chains with 10 or more outlets. Independents are lots of small deals and churn quickly, so they are not our focus.
+    - generic [ref=f1e33]: Chasing high-churn accounts often drains resources, so prioritizing scale is a strategic move. When you are pitching these larger groups, who is the primary person you deal with to get the contract signed?
+  - generic [ref=f1e26]:
+    - textbox "Type your answer" [active] [ref=f1e27]
+    - button "Send" [disabled] [ref=f1e28]

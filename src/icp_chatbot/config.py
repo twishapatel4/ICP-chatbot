@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # tried once when the interviewer's model times out or fails, so the user does not have to
     # send the answer again; a separate model has its own quota. Empty turns the backup off.
     model_interviewer_backup: str = "gemini-3.1-flash-lite"
+    model_transcribe: str = "gemini-3.1-flash-lite"  # voice answers: audio in, text out
     model_final_icp: str = "gemini-2.5-pro"  # spec decision D7: General Availability models only
 
     # Database. Tests and local development use SQLite; production uses Postgres.
@@ -37,6 +38,7 @@ class Settings(BaseSettings):
     detail_mode_total_cap: int = Field(25, ge=1)
     detail_mode_extra_questions: int = Field(5, ge=1)
     max_answer_chars: int = Field(2000, ge=1)
+    max_audio_bytes: int = Field(2_500_000, ge=1)  # about 75 s of 16 kHz mono WAV
 
     # Time budgets.
     enrichment_timeout_seconds: float = Field(40.0, gt=0)

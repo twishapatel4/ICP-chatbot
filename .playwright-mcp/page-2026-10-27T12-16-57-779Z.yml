@@ -1,0 +1,18 @@
+- main [ref=e3]:
+  - generic [ref=e7]:
+    - heading "ICP Chatbot" [level=1] [ref=e8]
+    - button "New chat" [ref=e9] [cursor=pointer]
+  - generic [ref=e10]:
+    - generic [ref=e11]: Hi! Tell me a little about your company and we will begin.
+    - generic [ref=e23]: Acme Ltd
+    - generic [ref=e24]: Welcome, Acme Ltd! If you could snap your fingers and fill your calendar with meetings tomorrow, what specific type of company would you be sitting down with?
+  - generic [ref=e25]:
+    - generic [ref=e26]:
+      - textbox "Type your answer" [active] [ref=e27]
+      - generic [ref=e28]:
+        - button "Speak your answer" [ref=e29] [cursor=pointer]
+        - button "Send" [disabled] [ref=e32]
+    - status [ref=e35]:
+      - generic [ref=e36] [cursor=pointer]:
+        - checkbox "Auto-send voice answers" [ref=e37]
+        - text: Auto-send voice answers

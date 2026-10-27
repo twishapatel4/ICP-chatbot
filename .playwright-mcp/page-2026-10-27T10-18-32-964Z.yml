@@ -1,0 +1,27 @@
+- main [ref=f1e3]:
+  - generic [ref=f1e7]:
+    - heading "ICP Chatbot" [level=1] [ref=f1e8]
+    - button "New chat" [ref=f1e9] [cursor=pointer]
+  - generic [ref=f1e10]:
+    - generic [ref=f1e11]: Hi! Tell me a little about your company and we will begin.
+    - generic [ref=f1e23]: Zomato (https://www.zomato.com/)
+    - generic [ref=f1e25]: Welcome, Zomato! I couldn't quite load your website to learn more, so could you tell me a bit about what you do? Also, I'd love to hear about a recent deal you closed—what was the key factor that finally got it over the line?
+    - generic [ref=f1e29]: We run an online food ordering and delivery platform in India, and we also sell restaurant software and ad products to restaurants. Our last big deal was a multi-city restaurant chain that signed up for our ads and POS bundle because of the order volume we could send them.
+    - generic [ref=f1e30]: That's a clear B2B win. To help define your ideal restaurant partner for these software and ad bundles, do you find that multi-city chains are your best fit, or do you also see strong, high-value deals with independent, high-volume restaurants?
+    - generic [ref=f1e31]: Mostly mid-size and large chains with 10 or more outlets. Independents are lots of small deals and churn quickly, so they are not our focus.
+    - generic [ref=f1e33]: Chasing high-churn accounts often drains resources, so prioritizing scale is a strategic move. When you are pitching these larger groups, who is the primary person you deal with to get the contract signed?
+    - generic [ref=f1e34]: Usually the head of marketing or the operations head of the chain. For the POS part, the CTO or an IT manager also gets involved, and the founder signs off for smaller chains.
+    - generic [ref=f1e36]: Managing different stakeholders for ads versus software is a smart way to align your pitch with their specific priorities. When these chains finally decide to switch to your POS or buy your ad packages, what is the single biggest problem they are trying to solve?
+    - generic [ref=f1e37]: For ads, they want more orders and visibility without paying huge commissions. For POS, the pain is juggling many order channels and billing errors across outlets.
+    - generic [ref=f1e38]: Do you typically look for restaurant chains with a specific annual revenue range, or is the number of outlets the primary indicator of a good fit for you?
+    - generic [ref=f1e46]: Outlet count matters more. Chains with 10 to 50 outlets, roughly 20 to 100 crore rupees a year in revenue.
+    - generic [ref=f1e47]: Targeting 10-50 outlets is a smart middle ground. Do you focus your sales efforts on specific major cities across India, or is your team spread evenly across the country?
+    - generic [ref=f1e48]: "Mainly the big metros first: Delhi NCR, Mumbai, Bengaluru, Hyderabad, Pune. Then tier-2 cities where chains are expanding."
+    - generic [ref=f1e49]: When these chains commit to your platform and software, what is the primary business outcome they are looking to achieve within their first year?
+    - generic [ref=f1e50]: Higher order volume and repeat customers from our app, with one dashboard for billing and orders across all outlets. Most expect a visible lift in orders within three to six months.
+    - generic [ref=f1e52]: Getting that visible lift in 3-6 months is a strong, measurable promise that likely helps you close deals faster. Since you are balancing ads and software, how long does it typically take to go from that first meeting to a signed contract with these chains?
+    - generic [ref=f1e53]: About two to three months for ads alone. The POS bundle takes four to six months because IT and the founder both review it.
+    - generic [ref=f1e54]: With those longer cycles for POS, what is the most common objection or barrier you face from the IT team or founders during those four to six months?
+  - generic [ref=f1e26]:
+    - textbox "Type your answer" [active] [ref=f1e27]
+    - button "Send" [disabled] [ref=f1e28]

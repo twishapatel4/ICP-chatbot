@@ -69,14 +69,14 @@ export default function App() {
   const [approved, setApproved] = useState(saved?.approved ?? false);
   const [revising, setRevising] = useState(saved?.revising ?? false);
   const nextId = useRef(Math.max(0, ...(saved?.messages ?? []).map((m) => m.id)) + 1);
-  const endRef = useRef<HTMLDivElement>(null);
 
   const push = useCallback((role: Message["role"], text: string) => {
     setMessages((m) => [...m, { id: nextId.current++, role, text }]);
   }, []);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    // the bottom of the page, not of the log: the composer is sticky and would cover the last message
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
   }, [messages, stage, icp, options]);
 
   useEffect(() => {
@@ -259,8 +259,11 @@ export default function App() {
       </header>
 
       <div className="log" aria-live="polite">
-        {messages.map((m) => (
-          <div key={m.id} className={`msg ${m.role}`}>
+        {messages.map((m, i) => (
+          <div
+            key={m.id}
+            className={`msg ${m.role}${stage === "building" && m.role === "note" && i === messages.length - 1 ? " gen" : ""}`}
+          >
             {m.text}
           </div>
         ))}
@@ -290,7 +293,7 @@ export default function App() {
           </div>
         )}
 
-        {busy && stage !== "building" && <div className="msg note">Thinking...</div>}
+        {busy && stage !== "building" && <div className="msg note gen">Thinking...</div>}
 
         {stage === "fallback" && (
           <FallbackForm fields={form} disabled={busy} missing={missing} onSubmit={submitForm} />
@@ -312,10 +315,9 @@ export default function App() {
             <IcpView icp={icp} approved={approved} busy readOnly onApprove={approve} onImprove={improve} onNewChat={newChat} />
           </details>
         )}
-        <div ref={endRef} />
       </div>
 
-      {stage === "interview" && <Composer disabled={busy} hasPicks={picked.length > 0} onSend={send} />}
+      {stage === "interview" && <Composer disabled={busy} sessionId={sessionId} hasPicks={picked.length > 0} onSend={send} />}
     </main>
   );
 }

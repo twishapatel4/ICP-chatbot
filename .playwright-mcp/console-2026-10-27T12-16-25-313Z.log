@@ -1,0 +1,45 @@
+[      87ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:21548
+[     117ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/favicon.ico:0
+[  206282ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:21548
+[  206289ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/favicon.ico:0
+[  207396ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:21548
+[  207402ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/favicon.ico:0
+[  397292ms] ReferenceError: endRef is not defined
+    at App (http://localhost:5173/src/App.tsx?t=1793103782553:352:44)
+    at renderWithHooks (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:11546:26)
+    at mountIndeterminateComponent (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:14924:21)
+    at beginWork (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:15912:22)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:3672:22)
+    at Object.invokeGuardedCallbackDev (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:3697:24)
+    at invokeGuardedCallback (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:3731:39)
+    at beginWork$1 (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:19763:15)
+    at performUnitOfWork (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:19196:20)
+    at workLoopSync (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:19135:13)
+[  397293ms] ReferenceError: endRef is not defined
+    at App (http://localhost:5173/src/App.tsx?t=1793103782553:352:44)
+    at renderWithHooks (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:11546:26)
+    at mountIndeterminateComponent (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:14924:21)
+    at beginWork (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:15912:22)
+    at HTMLUnknownElement.callCallback2 (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:3672:22)
+    at Object.invokeGuardedCallbackDev (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:3697:24)
+    at invokeGuardedCallback (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:3731:39)
+    at beginWork$1 (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:19763:15)
+    at performUnitOfWork (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:19196:20)
+    at workLoopSync (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:19135:13)
+[  397294ms] [ERROR] The above error occurred in the <App> component:
+
+    at App (http://localhost:5173/src/App.tsx?t=1793103782553:48:19)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:14029
+[  397294ms] ReferenceError: endRef is not defined
+    at App (http://localhost:5173/src/App.tsx?t=1793103782553:352:44)
+    at renderWithHooks (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:11546:26)
+    at mountIndeterminateComponent (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:14924:21)
+    at beginWork (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:15912:22)
+    at beginWork$1 (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:19751:22)
+    at performUnitOfWork (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:19196:20)
+    at workLoopSync (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:19135:13)
+    at renderRootSync (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:19114:15)
+    at recoverFromConcurrentError (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:18734:28)
+    at performSyncWorkOnRoot (http://localhost:5173/node_modules/.vite/deps/chunk-373CG7ZK.js?v=e90ac45c:18877:28)

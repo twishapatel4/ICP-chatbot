@@ -48,10 +48,29 @@ button:disabled { opacity: .5; cursor: default; }
 .chips button { border-radius: 999px; padding: 5px 12px; font-size: 14px; }
 .chips .hint { flex-basis: 100%; font-size: 12px; color: var(--muted); }
 .chips button.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
-.composer { position: sticky; bottom: 0; background: var(--bg); padding: 10px 0 16px;
-  display: flex; gap: 8px; align-items: flex-end; }
-.composer textarea { flex: 1; resize: none; min-height: 44px; font: inherit; padding: 10px 12px;
-  border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+.composer { position: sticky; bottom: 0; background: var(--bg); padding: 10px 0 16px; }
+.prompt-box { background: var(--panel); border: 1px solid var(--line); border-radius: 24px;
+  padding: 8px 10px 8px 14px; box-shadow: 0 4px 18px rgba(0, 0, 0, .12);
+  transition: border-color .15s, box-shadow .15s; }
+.prompt-box:focus-within { border-color: var(--accent); box-shadow: 0 4px 22px rgba(0, 0, 0, .18); }
+.prompt-box textarea { display: block; width: 100%; resize: none; min-height: 40px; max-height: 160px;
+  font: inherit; padding: 8px 2px; border: 0; outline: 0; background: transparent; color: var(--text); }
+.prompt-box textarea::placeholder { color: var(--muted); }
+.prompt-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.prompt-actions button { width: 36px; height: 36px; padding: 0; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center; }
+.prompt-actions button.mic { background: transparent; border-color: transparent; color: var(--muted); }
+.prompt-actions button.mic:hover:not(:disabled) { background: var(--bot); color: var(--text); }
+.prompt-actions button.mic.on { background: #c0392b; color: #fff; border-color: #c0392b;
+  animation: pulse 1.4s ease-in-out infinite; }
+.prompt-actions button.send { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.prompt-actions button.send:disabled { background: var(--bot); color: var(--muted); border-color: var(--line); opacity: 1; }
+@keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(192, 57, 43, .5); } 50% { box-shadow: 0 0 0 7px rgba(192, 57, 43, 0); } }
+@media (prefers-reduced-motion: reduce) { .prompt-actions button.mic.on { animation: none; } }
+.composer .voice-row { display: flex; padding: 6px 14px 0; align-items: center; gap: 12px; font-size: 12px;
+  color: var(--muted, inherit); min-height: 18px; }
+.composer .voice-row .mic-error { color: #c0392b; }
+.composer .auto-send { margin-left: auto; display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
 .row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0;
   border-bottom: 1px solid var(--line); }
@@ -79,3 +98,11 @@ button.link:disabled { opacity: 0.4; cursor: default; }
 .icp .hint { color: var(--muted); font-size: 13px; }
 .previous { margin: 8px 0; }
 .previous > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+/* generating: the status text shimmers while the bot works (no spinner) */
+.msg.gen { background: linear-gradient(110deg, var(--muted) 35%, var(--text) 50%, var(--muted) 65%);
+  background-size: 200% 100%; -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; animation: shimmer 3s linear infinite; }
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .msg.gen { animation: none; background: none; -webkit-text-fill-color: var(--muted); }
+}

@@ -259,3 +259,16 @@ def test_vertex_with_a_missing_service_account_file_is_a_config_error(tmp_path):
     with pytest.raises(LLMError) as err:
         factory.make_client(settings)
     assert err.value.kind == "config"
+
+
+async def test_audio_is_sent_ahead_of_the_user_text():
+    client, models = client_with(reply(parsed=Answer(text="hi")))
+    llm = GeminiLLM(client)
+    await llm.generate(
+        step="transcribe", cfg=StepConfig(model="gemini-3.1-flash-lite"), system="s", user="go",
+        schema=Answer, audio=(b"RIFF", "audio/wav"),
+    )  # fmt: skip
+    audio_part, text = models.calls[0].contents
+    assert audio_part.inline_data.data == b"RIFF"
+    assert audio_part.inline_data.mime_type == "audio/wav"
+    assert text == "go"

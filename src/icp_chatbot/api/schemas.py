@@ -22,6 +22,10 @@ class AnswerRequest(BaseModel):
     text: str  # length is checked by the engine against MAX_ANSWER_CHARS
 
 
+class TranscribeResponse(BaseModel):
+    text: str  # empty when nothing intelligible was said
+
+
 class VerdictRequest(BaseModel):
     correct: bool  # does the company think the ICP describes its best customers?
     comment: str = Field(default="", max_length=2000)

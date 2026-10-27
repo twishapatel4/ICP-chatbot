@@ -21,6 +21,7 @@ from icp_chatbot.api.schemas import (
     QuestionOut,
     SessionView,
     StartRequest,
+    TranscribeResponse,
     TurnResponse,
     VerdictRequest,
 )
@@ -35,6 +36,7 @@ from icp_chatbot.engine.interview import (
 )
 from icp_chatbot.engine.planner import enough_for_icp
 from icp_chatbot.engine.questions import Question
+from icp_chatbot.engine.transcribe import normalize_mime, transcribe
 from icp_chatbot.enrichment.fetcher import SafeFetcher
 from icp_chatbot.enrichment.service import EnrichmentService
 from icp_chatbot.icp.builder import build_icp
@@ -42,7 +44,7 @@ from icp_chatbot.icp.document import ICPDocument
 from icp_chatbot.icp.review import Edit, apply_edit, approve, carry_over_edits
 from icp_chatbot.limits import BudgetExceeded, BudgetGuard, RateLimiter
 from icp_chatbot.llm.factory import make_llm
-from icp_chatbot.llm.types import LLM
+from icp_chatbot.llm.types import LLM, LLMError
 from icp_chatbot.store.db import init_models, make_engine, make_session_factory
 from icp_chatbot.store.models import utcnow
 from icp_chatbot.store.repo import Conflict, NotFound, Repo
@@ -137,6 +139,37 @@ def create_app(
         ct: Container = Depends(c),
     ):
         return TurnResponse.of(await ct.engine.answer(tenant_id, session_id, body.text))
+
+    @app.post("/sessions/{session_id}/transcribe", response_model=TranscribeResponse)
+    async def transcribe_answer(
+        session_id: str,
+        request: Request,
+        tenant_id: str = Depends(tenant),
+        ct: Container = Depends(c),
+    ):
+        """Voice answer, step 1: the raw audio is the request body. Returns the text only; the
+        client sends it to /answers (after the user has looked at it, or at once)."""
+        mime = normalize_mime(request.headers.get("content-type"))
+        if mime is None:
+            raise HTTPException(415, "unsupported_audio_type")
+        limit = ct.settings.max_audio_bytes
+        if int(request.headers.get("content-length") or 0) > limit:
+            raise HTTPException(413, "audio_too_large")
+        audio = bytearray()
+        async for chunk in request.stream():  # content-length can lie: count what arrives
+            audio += chunk
+            if len(audio) > limit:
+                raise HTTPException(413, "audio_too_large")
+        if not audio:
+            raise HTTPException(422, "empty_audio")
+        record = await ct.repo.get_session(tenant_id, session_id)  # 404 for another tenant's
+        if record.status != "active":
+            raise SessionClosed()
+        try:
+            text = await transcribe(ct.llm, ct.settings, bytes(audio), mime)
+        except LLMError:
+            raise HTTPException(502, "transcription_failed") from None
+        return TranscribeResponse(text=text)
 
     @app.post("/sessions/{session_id}/detail", response_model=TurnResponse)
     async def detail(session_id: str, tenant_id: str = Depends(tenant), ct: Container = Depends(c)):
