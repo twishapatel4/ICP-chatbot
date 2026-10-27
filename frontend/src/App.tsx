@@ -5,6 +5,9 @@ import FallbackForm from "./components/FallbackForm";
 import Icon, { type IconName } from "./components/Icon";
 import IcpView from "./components/IcpView";
 import ProgressBar from "./components/ProgressBar";
+import InView from "./components/InView";
+import TextShimmer from "./components/TextShimmer";
+import TextEffect from "./components/TextEffect";
 import ThemeToggle from "./components/ThemeToggle";
 import type { FormField, IcpResponse, Progress, StartRequest, Turn } from "./types";
 
@@ -219,9 +222,13 @@ export default function App() {
     return guarded(async () => handleTurn(await call(sessionId, text)));
   };
 
-  const choose = (o: string) => {
+  const choose = (o: string, byPointer = false) => {
     if (!multi) return send(o);
     setPicked((p) => (p.includes(o) ? p.filter((x) => x !== o) : [...p, o]));
+    // The clicked option keeps keyboard focus, so Enter would press it again and un-select it.
+    // After a mouse or touch pick, focus goes back to the answer box, where Enter sends.
+    // A keyboard pick keeps its focus so the next option can be reached with Tab.
+    if (byPointer) document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
   };
 
   const submitForm = (answers: Record<string, string[]>) =>
@@ -270,7 +277,8 @@ export default function App() {
             <Icon name="sparkle" size={26} />
           </span>
           <h1>
-            Build your <span className="muted">Ideal Customer Profile</span>
+            <TextEffect preset="fade-in-blur" speedReveal={1.4}>Build your</TextEffect>{" "}
+            <TextEffect preset="fade-in-blur" speedReveal={1.4} delay={0.25} className="muted">Ideal Customer Profile</TextEffect>
           </h1>
           <p>A short conversation about your business. At the end you get an ICP and a scoring model you can review and approve.</p>
           <div className="steps">
@@ -349,12 +357,16 @@ export default function App() {
 
       <div className="log" aria-live="polite">
         {messages.map((m, i) => (
-          <div
+          <InView
             key={m.id}
-            className={`msg ${m.role}${stage === "building" && m.role === "note" && i === messages.length - 1 ? " gen" : ""}`}
+            className={`msg ${m.role}`}
           >
-            {m.text}
-          </div>
+            {m.role === "note" && stage === "building" && i === messages.length - 1 ? (
+              <TextShimmer>{m.text}</TextShimmer>
+            ) : (
+              m.text
+            )}
+          </InView>
         ))}
 
         {options.length > 0 && (
@@ -366,7 +378,7 @@ export default function App() {
                   className={picked.includes(o) ? "on" : ""}
                   aria-pressed={multi ? picked.includes(o) : undefined}
                   disabled={busy}
-                  onClick={() => choose(o)}
+                  onClick={(e) => choose(o, e.detail > 0)}
                 >
                   {multi && picked.includes(o) ? "\u2713 " : ""}
                   {o}
@@ -377,7 +389,9 @@ export default function App() {
           </div>
         )}
 
-        {busy && stage !== "building" && <div className="msg note gen">Thinking...</div>}
+        {busy && stage !== "building" && <div className="msg note">
+            <TextShimmer>Thinking...</TextShimmer>
+          </div>}
 
         {stage === "fallback" && (
           <FallbackForm fields={form} disabled={busy} missing={missing} onSubmit={submitForm} />
