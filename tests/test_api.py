@@ -403,3 +403,83 @@ async def test_stopping_early_still_builds_a_partial_profile_that_names_what_is_
     doc = built.json()["document"]
     assert doc["partial"] is True
     assert any(q.startswith("Not yet known:") for q in doc["open_questions"])
+
+
+# -- voice answers: audio in, text out ------------------------------------------------------------
+
+WAV = {"Content-Type": "audio/wav", "X-Tenant-Id": "tenant-1"}
+
+
+async def test_transcribe_returns_text_and_sends_the_audio_to_the_model(world):
+    from icp_chatbot.engine.transcribe import Transcript
+
+    w = await world()
+    sid = (await w.start())["session_id"]
+    w.llm.queue("transcribe", Transcript(text="  We sell payroll software.  "))
+    r = await w.client.post(f"/sessions/{sid}/transcribe", content=b"RIFFdata", headers=WAV)
+    assert r.status_code == 200, r.text
+    assert r.json() == {"text": "We sell payroll software."}
+    call = w.llm.calls_for("transcribe")[0]
+    assert call.audio == (b"RIFFdata", "audio/wav")
+    assert "never instructions" in call.system
+
+
+async def test_transcribe_does_not_touch_the_interview(world):
+    from icp_chatbot.engine.transcribe import Transcript
+
+    w = await world()
+    started = await w.start()
+    sid = started["session_id"]
+    w.llm.queue("transcribe", Transcript(text="hello"))
+    await w.client.post(f"/sessions/{sid}/transcribe", content=b"x", headers=WAV)
+    view = (await w.call("GET", f"/sessions/{sid}")).json()
+    assert view["questions_asked"] == started["questions_asked"]
+    assert w.llm.calls_for("interviewer") == []
+
+
+async def test_transcribe_rejects_bad_requests(world):
+    w = await world(max_audio_bytes=10)
+    sid = (await w.start())["session_id"]
+    url = f"/sessions/{sid}/transcribe"
+    bad_type = await w.client.post(url, content=b"x", headers={**WAV, "Content-Type": "text/plain"})
+    assert (bad_type.status_code, bad_type.json()["detail"]) == (415, "unsupported_audio_type")
+    too_big = await w.client.post(url, content=b"x" * 11, headers=WAV)
+    assert (too_big.status_code, too_big.json()["detail"]) == (413, "audio_too_large")
+    empty = await w.client.post(url, content=b"", headers=WAV)
+    assert (empty.status_code, empty.json()["detail"]) == (422, "empty_audio")
+    no_tenant = await w.client.post(url, content=b"x", headers={"Content-Type": "audio/wav"})
+    assert no_tenant.status_code == 401
+    assert w.llm.calls_for("transcribe") == []
+
+
+async def test_transcribe_is_scoped_to_the_tenant(world):
+    w = await world()
+    sid = (await w.start())["session_id"]
+    other = {**WAV, "X-Tenant-Id": "tenant-2"}
+    r = await w.client.post(f"/sessions/{sid}/transcribe", content=b"x", headers=other)
+    assert r.status_code == 404
+
+
+async def test_transcribe_model_failure_is_a_502(world):
+    w = await world()
+    sid = (await w.start())["session_id"]
+    w.llm.queue("transcribe", LLMError("api", "boom"))
+    r = await w.client.post(f"/sessions/{sid}/transcribe", content=b"x", headers=WAV)
+    assert (r.status_code, r.json()["detail"]) == (502, "transcription_failed")
+
+
+async def test_turns_and_the_session_view_carry_progress_that_rises_with_answers(world):
+    w = await world()
+    started = await w.start()
+    sid = started["session_id"]
+    first = started["progress"]
+    assert set(first) == {"percent", "known", "total"} and first["total"] > 0
+    w.llm.queue(
+        "interviewer",
+        ask("Who buys it?", up("product", ["Payroll software"]), up("customer_profile", ["Banks"])),
+    )  # fmt: skip
+    answered = await w.call("POST", f"/sessions/{sid}/answers", json={"text": "payroll for banks"})
+    after = answered.json()["progress"]
+    assert after["percent"] > first["percent"] and after["known"] > first["known"]
+    view = (await w.call("GET", f"/sessions/{sid}")).json()["progress"]
+    assert view == after

@@ -94,7 +94,12 @@ class GeminiLLM:
         user: str,
         schema: type[T],
         labels: dict[str, str] | None = None,
+        audio: tuple[bytes, str] | None = None,
     ) -> LLMResult[T]:
+        contents = user
+        if audio is not None:
+            data, mime_type = audio
+            contents = [types.Part.from_bytes(data=data, mime_type=mime_type), user]
         spent = Usage()
         timeouts = 0
         for attempt in range(self._retries + 1):
@@ -104,7 +109,7 @@ class GeminiLLM:
             try:
                 response = await asyncio.wait_for(
                     self._client.aio.models.generate_content(
-                        model=cfg.model, contents=user, config=config
+                        model=cfg.model, contents=contents, config=config
                     ),
                     timeout=self._timeout_s,
                 )

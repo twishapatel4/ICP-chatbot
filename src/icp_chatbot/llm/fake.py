@@ -16,6 +16,7 @@ class FakeCall:
     user: str
     schema: type
     labels: dict[str, str] | None
+    audio: tuple[bytes, str] | None = None
 
 
 class FakeLLM:
@@ -45,8 +46,9 @@ class FakeLLM:
         user: str,
         schema: type[T],
         labels: dict[str, str] | None = None,
+        audio: tuple[bytes, str] | None = None,
     ) -> LLMResult[T]:
-        self.calls.append(FakeCall(step, cfg, system, user, schema, labels))
+        self.calls.append(FakeCall(step, cfg, system, user, schema, labels, audio))
         queue = self.script.get(step)
         if not queue:
             raise AssertionError(f"FakeLLM has no scripted response left for step {step!r}")

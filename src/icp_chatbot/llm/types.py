@@ -83,4 +83,5 @@ class LLM(Protocol):
         user: str,
         schema: type[T],
         labels: dict[str, str] | None = None,
+        audio: tuple[bytes, str] | None = None,  # (data, mime type) sent before the user text
     ) -> LLMResult[T]: ...

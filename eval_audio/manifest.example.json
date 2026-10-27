@@ -1,0 +1,8 @@
+[
+  {"file": "en_us_calm_1.wav", "text": "We sell payroll software to mid-size banks in Europe.",
+   "lang": "en", "accent": "us", "tone": "calm"},
+  {"file": "en_in_fast_1.wav", "text": "We sell payroll software to mid-size banks in Europe.",
+   "lang": "en", "accent": "indian", "tone": "fast"},
+  {"file": "hi_in_calm_1.wav", "text": "हम यूरोप के बैंकों को पेरोल सॉफ्टवेयर बेचते हैं",
+   "lang": "hi", "accent": "indian", "tone": "calm"}
+]

@@ -44,3 +44,20 @@ export const sendVerdict = (id: string, correct: boolean, comment = "") =>
   call<null>("POST", `/sessions/${id}/verdict`, { correct, comment });
 export const reviseIcp = (id: string, text: string) =>
   call<Turn>("POST", `/sessions/${id}/revise`, { text });
+
+// Voice answer, step 1: audio in, text out. The text then goes to sendAnswer like typed text.
+export async function transcribe(id: string, audio: Blob): Promise<string> {
+  const res = await fetch(`/api/sessions/${id}/transcribe`, {
+    method: "POST",
+    headers: { "Content-Type": audio.type || "audio/wav", "X-Tenant-Id": TENANT },
+    body: audio,
+  });
+  let data: { text?: string; detail?: unknown } | null = null;
+  try {
+    data = await res.json();
+  } catch {
+    // keep null
+  }
+  if (!res.ok) throw new ApiError(res.status, data?.detail ?? res.statusText);
+  return data?.text ?? "";
+}

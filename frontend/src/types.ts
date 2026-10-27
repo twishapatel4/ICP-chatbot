@@ -18,6 +18,12 @@ export interface Question {
   multi: boolean;
 }
 
+export interface Progress {
+  percent: number; // 0 to 100: how much of the ICP is gathered
+  known: number; // must-ask fields settled so far
+  total: number; // must-ask fields that apply to this company
+}
+
 export interface Turn {
   session_id: string;
   status: "active" | "completed" | "fallback";
@@ -28,6 +34,7 @@ export interface Turn {
   icp_ready: boolean;
   fallback_form: boolean;
   notice: string | null;
+  progress?: Progress;
 }
 
 export interface FormField {
