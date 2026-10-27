@@ -1,4 +1,3 @@
-frontend
 .venv
 .playwright-mcp
 tests
