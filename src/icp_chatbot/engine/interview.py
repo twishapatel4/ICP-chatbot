@@ -380,6 +380,20 @@ class InterviewEngine:
                 return f"they changed {slot} more than twice. Ask them to pick one before you finish."
         return ""
 
+    async def _generate(self, cfg: StepConfig, config, user: str, labels):
+        """One interviewer call. A timeout or service error is tried once on the backup model
+        (QA 2026-10-27: about one turn in forty failed under load and the user had to resend)."""
+        call = dict(step="interviewer", system=config.system_prompt("interviewer"), user=user,
+                    schema=AgentTurn, labels=labels)  # fmt: skip
+        try:
+            return await self._llm.generate(cfg=cfg, **call)
+        except LLMError as exc:
+            backup = self._settings.model_interviewer_backup
+            if exc.kind not in ("timeout", "api") or not backup or backup == cfg.model:
+                raise
+            log.warning("interviewer %s failed (%s), trying %s", cfg.model, exc.kind, backup)
+            return await self._llm.generate(cfg=dataclasses.replace(cfg, model=backup), **call)
+
     async def _turn(
         self, state: SessionState, config, text: str | None, limit: int, labels, spend: _Spend
     ) -> AgentTurn:
@@ -391,14 +405,7 @@ class InterviewEngine:
         usable: AgentTurn | None = None  # a reply that only sounded robotic, kept in case
         declines = dict(state.declines)
         for _ in range(MAX_ATTEMPTS):
-            result = await self._llm.generate(
-                step="interviewer",
-                cfg=cfg,
-                system=config.system_prompt("interviewer"),
-                user=base + note,
-                schema=AgentTurn,
-                labels=labels,
-            )
+            result = await self._generate(cfg, config, base + note, labels)
             spend.add(result.usage, result.cost_usd, result.latency_ms)
             spend.models["interviewer"] = result.model
             problem = self._problem(state, result.parsed) or self._unsettled(state, result.parsed)

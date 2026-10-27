@@ -331,11 +331,12 @@ async def test_the_question_cap_ends_the_interview_even_if_the_model_keeps_askin
 async def test_two_failed_model_calls_fall_back_to_the_form(world):
     engine, repo, llm, _ = world
     sid = await preset(repo)
-    llm.queue("interviewer", LLMError("api", "down"))
+    down = [LLMError("api", "down")] * 2  # the main model and its backup
+    llm.queue("interviewer", *down)
     first = await engine.answer(T, sid, "hello")
     assert first.status == "active" and first.notice is not None
     assert first.question.text == "What do you sell?"  # the same question again
-    llm.queue("interviewer", LLMError("api", "down"), LLMError("api", "down"))
+    llm.queue("interviewer", *down, *down)
     second = await engine.answer(T, sid, "hello again")
     assert second.status == "active"  # three failures in a row, not two
     third = await engine.answer(T, sid, "one more time")
@@ -345,7 +346,8 @@ async def test_two_failed_model_calls_fall_back_to_the_form(world):
 async def test_a_success_resets_the_failure_count(world):
     engine, repo, llm, _ = world
     sid = await preset(repo)
-    llm.queue("interviewer", LLMError("api", "x"), ask("Who buys it?"), LLMError("api", "z"))
+    down = [LLMError("api", "down")] * 2  # the main model and its backup
+    llm.queue("interviewer", *down, ask("Who buys it?"), *down)
     await engine.answer(T, sid, "one")
     await engine.answer(T, sid, "two")
     third = await engine.answer(T, sid, "three")
@@ -465,7 +467,7 @@ async def test_detail_mode_ends_after_five_more_questions(world):
 async def test_detail_mode_failing_leaves_the_session_completed(world):
     engine, repo, llm, _ = world
     sid = await completed_session(repo)
-    llm.queue("interviewer", LLMError("api", "down"))
+    llm.queue("interviewer", LLMError("api", "down"), LLMError("api", "down"))
     with pytest.raises(InvalidTransition):
         await engine.request_detail(T, sid)
     assert (await repo.get_session(T, sid)).status == "completed"
@@ -660,3 +662,23 @@ async def test_an_open_pick_list_is_not_used_as_a_fallback(world):
     llm.queue("interviewer", ask("Which markets do you ship to?", target_slot="geographies"))
     result = await engine.answer(T, sid, "we export onions")
     assert result.question.options == ()
+
+
+async def test_a_failed_interviewer_call_is_tried_once_on_the_backup_model(world):
+    # QA 2026-10-27: about one turn in forty showed "my AI service is not responding" and the
+    # same question again, because the main model timed out under load
+    engine, repo, llm, _ = world
+    sid = await preset(repo)
+    llm.queue("interviewer", LLMError("timeout", "slow"), ask("Who buys it?"))
+    result = await engine.answer(T, sid, "We sell payroll software")
+    assert result.question.text == "Who buys it?" and result.notice is None
+    calls = llm.calls_for("interviewer")
+    assert [c.cfg.model for c in calls] == ["gemini-3.8-flash", "gemini-3.1-flash-lite"]
+
+
+async def test_a_rejected_reply_is_not_sent_to_the_backup_model(world):
+    engine, repo, llm, _ = world
+    sid = await preset(repo)
+    llm.queue("interviewer", LLMError("invalid_output", "bad json"))
+    result = await engine.answer(T, sid, "hello")
+    assert result.notice is not None and len(llm.calls_for("interviewer")) == 1
