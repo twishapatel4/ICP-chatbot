@@ -1,47 +1,49 @@
-# Deploy: Render + Neon (free) and Vertex AI (pay per use)
+# Deploy: Vercel (backend + frontend) + Neon + Vertex AI
 
-Backend and frontend on Render, Postgres on Neon. Hosting is free; only Vertex AI calls cost money.
+Two Vercel projects from this one repo, Postgres on Neon, models on Vertex AI.
+Hosting is free (Hobby); only Vertex AI calls cost money.
 
 ## 1. Database (Neon)
-1. neon.tech -> sign up -> new project.
-2. Copy the connection string. It looks like `postgresql://user:pass@host/db?sslmode=require`.
-3. Change the prefix to `postgresql+psycopg://` (the app needs the driver name):
-   `postgresql+psycopg://user:pass@host/db?sslmode=require`
+1. neon.tech -> new project. Connect -> branch `production`, **Pooled connection** on.
+2. Copy the string and change its prefix to `postgresql+psycopg://`:
+   `postgresql+psycopg://user:pass@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=require`
+3. Create the tables once, from your machine (Vercel does not run migrations):
+   ```bash
+   DATABASE_URL='<string above>' PYTHONPATH=src .venv/bin/alembic upgrade head
+   ```
+   Repeat after any new migration.
 
 ## 2. Vertex AI service account
-1. Google Cloud console -> pick the project -> enable the **Vertex AI API**.
+1. Google Cloud -> enable **Vertex AI API** (billing on).
 2. IAM -> Service Accounts -> create one with role **Vertex AI User**.
-3. Keys -> Add key -> JSON. Download it (keep it private, never commit it).
-4. Note the project ID.
+3. Keys -> Add key -> JSON. Keep the file private; never commit it.
 
-## 3. Push code
-Push this repo (with `render.yaml`) to GitHub. `.env` stays out of git.
+## 3. Backend (Vercel project 1)
+1. vercel.com -> Add New -> Project -> import the repo, branch `staging`.
+2. **Root Directory** = repo root (leave blank). Framework preset: Other.
+3. Environment variables:
+   - `LLM_BACKEND` = `vertex`
+   - `GOOGLE_CLOUD_PROJECT` = your project ID
+   - `GOOGLE_CLOUD_LOCATION` = `global`
+   - `GOOGLE_CREDENTIALS_JSON` = the whole contents of the JSON key
+   - `DATABASE_URL` = Neon string from step 1
+   - `AUTO_CREATE_TABLES` = `false`
+4. Deploy. Check `https://<project>.vercel.app/health` -> `{"status":"ok"}`.
+5. Name the project `icp-chatbot-api` for the URL below, or edit `frontend/vercel.json`.
 
-## 4. Render
-1. render.com -> New -> Blueprint -> pick the repo.
-2. Render reads `render.yaml`, creates `icp-chatbot-api` and `icp-chatbot-ui`.
-3. When asked, fill values for the API:
-   - `DATABASE_URL` = string from step 1
-   - `GOOGLE_CLOUD_PROJECT` = project ID from step 2
-4. Apply. First deploy runs `alembic upgrade head`, then starts the API.
-5. Render -> `icp-chatbot-api` -> Environment -> **Secret Files** -> add file named
-   `gcp-key.json`, paste the whole JSON from step 2. Save (it redeploys).
-
-## 5. Check
-- `https://icp-chatbot-api.onrender.com/health` -> `{"status":"ok"}`
-- Open the `icp-chatbot-ui` URL, run an interview.
-
-If Render gave the API a different URL (name was taken), edit `destination` in
-`render.yaml` under `/api/*`, push again.
-
-## 6. Keep it awake (optional)
-Free API sleeps after ~15 min idle; first request then takes 30-60 s.
-UptimeRobot (free) -> HTTP monitor on `/health`, every 10 min.
-(Free Render hours: ~750/month, enough for one always-on service.)
+## 4. Frontend (Vercel project 2)
+1. Add New -> Project -> same repo, **Root Directory** = `frontend` (Vite is auto-detected).
+2. `frontend/vercel.json` forwards `/api/*` to the backend URL (no CORS needed).
+   If the backend URL is not `https://icp-chatbot-api.vercel.app`, edit it and push.
+3. Optional env var `VITE_TENANT_ID` if not `demo`.
+4. Deploy, open the URL, run an interview.
 
 ## Limits to know
-- Free API sleeps when idle. Fine for demo, not for customers.
-- Vertex AI is billed per use (needs a billing-enabled GCP project). Set budget alerts
-  in GCP. The app's daily token/session caps (`.env.example`) limit spend.
-- Never use SQLite on Render free: disk is wiped on each deploy.
-- Change tenant id: set `VITE_TENANT_ID` in the UI service env if not `demo`.
+- Hobby plan is non-commercial only. Customer-facing use needs Vercel Pro.
+- Function time limit is set to 60 s (`vercel.json`). Website enrichment can take up to
+  40 s, so a slow site plus a slow model call could time out.
+- The per-minute rate limit is in memory, so it applies per function instance, not globally.
+  The daily DB-backed session/token caps still hold.
+- Vertex AI is billed per use. Set budget alerts in GCP.
+- Never use SQLite on Vercel: the filesystem is read-only/ephemeral.
+- Render alternative: `render.yaml` still describes a Render web service for the API.

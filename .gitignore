@@ -18,3 +18,4 @@ service-account*.json
 .idea/
 .vscode/
 .DS_Store
+.playwright-mcp
