@@ -3,8 +3,6 @@ import * as api from "../api";
 import { canRecord, MAX_RECORD_SECONDS, startRecording, type Recording } from "../audio";
 
 const MAX_CHARS = 2000;
-const AUTO_SEND_DELAY_MS = 2000; // time to cancel a wrong transcript
-const AUTO_SEND_KEY = "icp.voice.autoSend";
 
 const Icon = ({ d }: { d: string }) => (
   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2"
@@ -39,14 +37,6 @@ export default function Composer({ disabled, sessionId, hasPicks = false, onSend
   const [text, setText] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [voiceMsg, setVoiceMsg] = useState("");
-  const [pendingSend, setPendingSend] = useState(false);
-  const [autoSend, setAutoSend] = useState(() => {
-    try {
-      return localStorage.getItem(AUTO_SEND_KEY) === "1";
-    } catch {
-      return false;
-    }
-  });
   const ref = useRef<HTMLTextAreaElement>(null);
   const recording = useRef<Recording | null>(null);
   const limitTimer = useRef<number>();
@@ -71,29 +61,11 @@ export default function Composer({ disabled, sessionId, hasPicks = false, onSend
     [],
   );
 
-  // auto-send: a short pause after the transcript lands, so a wrong one can be cancelled or edited
-  useEffect(() => {
-    if (!pendingSend || disabled) return;
-    const t = window.setTimeout(send, AUTO_SEND_DELAY_MS);
-    return () => window.clearTimeout(t);
-  });
-
   function send() {
     const t = text.trim();
-    setPendingSend(false);
     if ((!t && !hasPicks) || disabled) return;
     setText("");
     onSend(t);
-  }
-
-  function changeAutoSend(on: boolean) {
-    setAutoSend(on);
-    if (!on) setPendingSend(false);
-    try {
-      localStorage.setItem(AUTO_SEND_KEY, on ? "1" : "0");
-    } catch {
-      // the choice just is not remembered
-    }
   }
 
   async function finishRecording() {
@@ -108,7 +80,6 @@ export default function Composer({ disabled, sessionId, hasPicks = false, onSend
         setVoiceMsg("I didn't catch that. Try again or type your answer.");
       } else {
         setText((prev) => (prev.trim() ? `${prev.trimEnd()} ${spoken}` : spoken).slice(0, MAX_CHARS));
-        setPendingSend(autoSend);
       }
     } catch (e) {
       setVoiceMsg(voiceError(e));
@@ -121,7 +92,6 @@ export default function Composer({ disabled, sessionId, hasPicks = false, onSend
     if (phase === "recording") return void finishRecording();
     if (phase !== "idle" || !sessionId) return;
     setVoiceMsg("");
-    setPendingSend(false);
     try {
       recording.current = await startRecording();
     } catch (e) {
@@ -139,9 +109,7 @@ export default function Composer({ disabled, sessionId, hasPicks = false, onSend
       ? "Listening... tap the square to stop."
       : phase === "transcribing"
         ? "Transcribing..."
-        : pendingSend
-          ? "Sending in a moment..."
-          : voiceMsg;
+        : voiceMsg;
 
   return (
     <form
@@ -159,10 +127,7 @@ export default function Composer({ disabled, sessionId, hasPicks = false, onSend
           placeholder={hasPicks ? "Add anything else (optional)" : "Type your answer"}
           disabled={disabled}
           value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            setPendingSend(false);
-          }}
+          onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
@@ -195,22 +160,11 @@ export default function Composer({ disabled, sessionId, hasPicks = false, onSend
           </button>
         </div>
       </div>
-      {(canRecord() && sessionId) || status ? (
+      {status && (
         <div className="voice-row" role="status">
-          <span className={voiceMsg && phase === "idle" && !pendingSend ? "mic-error" : ""}>{status}</span>
-          {pendingSend && (
-            <button type="button" className="link" onClick={() => setPendingSend(false)}>
-              Cancel
-            </button>
-          )}
-          {canRecord() && sessionId && (
-            <label className="auto-send">
-              <input type="checkbox" checked={autoSend} onChange={(e) => changeAutoSend(e.target.checked)} />
-              Auto-send voice answers
-            </label>
-          )}
+          <span className={phase === "idle" ? "mic-error" : ""}>{status}</span>
         </div>
-      ) : null}
+      )}
     </form>
   );
 }

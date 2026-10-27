@@ -3,8 +3,9 @@ import * as api from "./api";
 import Composer from "./components/Composer";
 import FallbackForm from "./components/FallbackForm";
 import IcpView from "./components/IcpView";
+import ProgressBar from "./components/ProgressBar";
 import SignupCard from "./components/SignupCard";
-import type { FormField, IcpResponse, StartRequest, Turn } from "./types";
+import type { FormField, IcpResponse, Progress, StartRequest, Turn } from "./types";
 
 type Stage = "home" | "signup" | "interview" | "fallback" | "building" | "done";
 interface Message {
@@ -12,6 +13,8 @@ interface Message {
   role: "bot" | "me" | "note" | "error";
   text: string;
 }
+
+const NO_PROGRESS: Progress = { percent: 0, known: 0, total: 0 };
 
 const STORAGE_KEY = "icp-chat-v1";
 
@@ -27,6 +30,7 @@ interface Snapshot {
   icp: IcpResponse | null;
   approved: boolean;
   revising: boolean;
+  progress?: Progress;
 }
 
 // The page can be reloaded under us (dev-server HMR reconnect, discarded background tab),
@@ -68,6 +72,7 @@ export default function App() {
   const [icp, setIcp] = useState<IcpResponse | null>(saved?.icp ?? null);
   const [approved, setApproved] = useState(saved?.approved ?? false);
   const [revising, setRevising] = useState(saved?.revising ?? false);
+  const [progress, setProgress] = useState<Progress>(saved?.progress ?? NO_PROGRESS);
   const nextId = useRef(Math.max(0, ...(saved?.messages ?? []).map((m) => m.id)) + 1);
 
   const push = useCallback((role: Message["role"], text: string) => {
@@ -80,13 +85,13 @@ export default function App() {
   }, [messages, stage, icp, options]);
 
   useEffect(() => {
-    const snap: Snapshot = { stage, messages, options, multi, picked, sessionId, form, missing, icp, approved, revising };
+    const snap: Snapshot = { stage, messages, options, multi, picked, sessionId, form, missing, icp, approved, revising, progress };
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
     } catch {
       // storage unavailable: the chat just will not survive a reload
     }
-  }, [stage, messages, options, multi, picked, sessionId, form, missing, icp, approved, revising]);
+  }, [stage, messages, options, multi, picked, sessionId, form, missing, icp, approved, revising, progress]);
 
   // A reload mid-build loses the in-flight request; ask for the ICP again.
   const resumed = useRef(false);
@@ -107,6 +112,7 @@ export default function App() {
     setIcp(null);
     setApproved(false);
     setRevising(false);
+    setProgress(NO_PROGRESS);
     setBusy(false);
     setStage("signup");
     push("bot", "Hi! Tell me a little about your company and we will begin.");
@@ -152,6 +158,9 @@ export default function App() {
 
   async function handleTurn(turn: Turn) {
     setSessionId(turn.session_id);
+    // the bar only moves forward: a corrected answer can lower the score, but never the bar
+    const next = turn.progress;
+    if (next) setProgress((p) => ({ percent: Math.max(p.percent, next.percent), known: Math.max(p.known, next.known), total: next.total }));
     if (turn.status === "fallback" || turn.fallback_form) return showFallback(turn.stop_reason);
     if (turn.notice) push("error", turn.notice);
     if (turn.question) {
@@ -258,6 +267,10 @@ export default function App() {
         </button>
       </header>
 
+      {sessionId && (stage === "interview" || stage === "building" || stage === "done") && (
+        <ProgressBar progress={progress} building={stage === "building"} done={stage === "done"} />
+      )}
+
       <div className="log" aria-live="polite">
         {messages.map((m, i) => (
           <div
@@ -271,25 +284,22 @@ export default function App() {
         {stage === "signup" && <SignupCard disabled={busy} onStart={start} />}
 
         {options.length > 0 && (
-          <div className="chips" role="group" aria-label={multi ? "Select all that apply" : "Pick one"}>
-            {options.map((o) => (
-              <button
-                key={o}
-                className={picked.includes(o) ? "on" : ""}
-                aria-pressed={multi ? picked.includes(o) : undefined}
-                disabled={busy}
-                onClick={() => choose(o)}
-              >
-                {multi && picked.includes(o) ? "\u2713 " : ""}
-                {o}
-              </button>
-            ))}
-            {multi && picked.length > 0 && (
-              <button className="primary confirm" disabled={busy} onClick={() => send("")}>
-                {"\u2713"} Confirm {picked.length} selected
-              </button>
-            )}
-            {multi && <span className="hint">Select all that apply, then tick Confirm. You can also type your own below.</span>}
+          <div className="chips-wrap">
+            <div className="chips" role="group" aria-label={multi ? "Select all that apply" : "Pick one"}>
+              {options.map((o) => (
+                <button
+                  key={o}
+                  className={picked.includes(o) ? "on" : ""}
+                  aria-pressed={multi ? picked.includes(o) : undefined}
+                  disabled={busy}
+                  onClick={() => choose(o)}
+                >
+                  {multi && picked.includes(o) ? "\u2713 " : ""}
+                  {o}
+                </button>
+              ))}
+            </div>
+            {multi && <span className="hint">Select all that apply, then press Send. You can also type your own below.</span>}
           </div>
         )}
 

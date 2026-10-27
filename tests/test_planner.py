@@ -1,7 +1,9 @@
 from icp_chatbot.domain.state import SessionState, SlotSource, SlotValue
 from icp_chatbot.engine.planner import (
+    PROGRESS_CAP,
     enough_for_icp,
     icp_floor_met,
+    interview_progress,
     missing_core_slots,
 )
 
@@ -75,3 +77,57 @@ def test_the_product_described_on_their_website_counts_once_they_have_seen_it():
     assert icp_floor_met(state)
     state.slots["industries"] = SlotValue(values=["x"], confidence=0.5, source=SlotSource.INFERRED)
     assert not icp_floor_met(state)  # a guessed customer fact still never counts
+
+
+# the progress bar
+
+
+def test_an_empty_session_has_no_progress():
+    progress = interview_progress(SessionState())
+    assert progress.percent == 0 and progress.known == 0 and progress.total > 0
+
+
+def test_progress_rises_as_must_ask_fields_become_known():
+    state = SessionState()
+    known(state, "product")
+    first = interview_progress(state)
+    known(state, "customer_profile")
+    known(state, "pain_points")
+    second = interview_progress(state)
+    assert 0 < first.percent < second.percent
+    assert (first.known, second.known) == (1, 3)
+
+
+def test_a_guess_counts_part_way_and_a_confirmed_answer_counts_fully():
+    guessed = known(SessionState(), "product", confidence=0.35)
+    confirmed = known(SessionState(), "product", confidence=0.9)
+    assert 0 < interview_progress(guessed).percent < interview_progress(confirmed).percent
+    assert interview_progress(guessed).known == 0
+
+
+def test_a_declined_field_counts_as_settled():
+    state = SessionState()
+    before = interview_progress(state)
+    state.skipped.append("pain_points")
+    after = interview_progress(state)
+    assert after.percent > before.percent and after.known == before.known + 1
+
+
+def test_progress_waits_below_the_cap_until_the_interview_is_enough():
+    state = SessionState()
+    for slot in state.slot_defs():
+        if state.is_applicable(slot):
+            known(state, slot.key)
+    state.agent_enough = False
+    assert interview_progress(state).percent == PROGRESS_CAP
+    state.agent_enough = True
+    assert interview_progress(state).percent == 100
+
+
+def test_a_finished_interview_that_is_enough_never_reads_below_the_cap():
+    state = SessionState()
+    for key in ("product", "industries", "buyer_roles", "company_size"):
+        known(state, key)
+    state.agent_enough, state.finished = True, True
+    assert icp_floor_met(state)
+    assert interview_progress(state).percent >= PROGRESS_CAP

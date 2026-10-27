@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 from icp_chatbot.engine.fallback import FormField
 from icp_chatbot.engine.interview import TurnResult
+from icp_chatbot.engine.planner import Progress
 from icp_chatbot.engine.questions import Question
 from icp_chatbot.icp.document import ICPDocument
 
@@ -35,6 +36,16 @@ class FormRequest(BaseModel):
     answers: dict[str, list[str]]
 
 
+class ProgressOut(BaseModel):
+    percent: int  # 0 to 100: how much of the ICP is gathered
+    known: int  # must-ask fields settled so far
+    total: int  # must-ask fields that apply to this company
+
+    @classmethod
+    def of(cls, p: Progress) -> "ProgressOut":
+        return cls(percent=p.percent, known=p.known, total=p.total)
+
+
 class QuestionOut(BaseModel):
     text: str
     kind: str
@@ -61,6 +72,7 @@ class TurnResponse(BaseModel):
     icp_ready: bool = False
     fallback_form: bool = False
     notice: str | None = None  # a model step failed: tell the user it is not their fault
+    progress: ProgressOut = ProgressOut(percent=0, known=0, total=0)
 
     @classmethod
     def of(cls, r: TurnResult) -> "TurnResponse":
@@ -74,6 +86,7 @@ class TurnResponse(BaseModel):
             icp_ready=r.icp_ready,
             fallback_form=r.fallback_form,
             notice=r.notice,
+            progress=ProgressOut.of(r.progress),
         )
 
 
@@ -85,6 +98,7 @@ class SessionView(BaseModel):
     question: QuestionOut | None = None
     stop_reason: str | None = None
     has_icp: bool = False
+    progress: ProgressOut = ProgressOut(percent=0, known=0, total=0)
 
 
 class FormFieldOut(BaseModel):

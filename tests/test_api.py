@@ -466,3 +466,20 @@ async def test_transcribe_model_failure_is_a_502(world):
     w.llm.queue("transcribe", LLMError("api", "boom"))
     r = await w.client.post(f"/sessions/{sid}/transcribe", content=b"x", headers=WAV)
     assert (r.status_code, r.json()["detail"]) == (502, "transcription_failed")
+
+
+async def test_turns_and_the_session_view_carry_progress_that_rises_with_answers(world):
+    w = await world()
+    started = await w.start()
+    sid = started["session_id"]
+    first = started["progress"]
+    assert set(first) == {"percent", "known", "total"} and first["total"] > 0
+    w.llm.queue(
+        "interviewer",
+        ask("Who buys it?", up("product", ["Payroll software"]), up("customer_profile", ["Banks"])),
+    )  # fmt: skip
+    answered = await w.call("POST", f"/sessions/{sid}/answers", json={"text": "payroll for banks"})
+    after = answered.json()["progress"]
+    assert after["percent"] > first["percent"] and after["known"] > first["known"]
+    view = (await w.call("GET", f"/sessions/{sid}")).json()["progress"]
+    assert view == after

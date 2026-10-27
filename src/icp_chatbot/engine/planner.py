@@ -5,7 +5,7 @@ holds the caps and the floor under that decision."""
 
 from dataclasses import dataclass
 
-from icp_chatbot.domain.slots import SlotDef
+from icp_chatbot.domain.slots import SlotDef, Tier
 from icp_chatbot.domain.state import SessionState, SlotSource
 
 COMPLETION_CONFIDENCE = 0.7  # a slot at or above this counts as known
@@ -64,3 +64,46 @@ def enough_for_icp(state: SessionState) -> bool:
     if not core:
         return True
     return 1 - len(missing_core_slots(state)) / len(core) >= MIN_KNOWN_SHARE
+
+
+TIER_A_WEIGHT = 0.7  # the must-ask fields drive the bar; the optional ones fill the rest
+PROGRESS_CAP = 90  # the bar waits here until the interview is enough; the last stretch is the build
+
+
+@dataclass(frozen=True)
+class Progress:
+    percent: int
+    known: int  # must-ask fields settled so far
+    total: int  # must-ask fields that apply to this company
+
+
+def _credit(state: SessionState, slot: SlotDef) -> float:
+    """How far along a field is: a declined one is settled (it will not be asked again), a guess
+    from the website counts part-way, a confirmed answer counts fully."""
+    if slot.key in state.skipped:
+        return 1.0
+    return min(state.confidence(slot.key) / COMPLETION_CONFIDENCE, 1.0)
+
+
+def interview_progress(state: SessionState) -> Progress:
+    """How much of the ICP is gathered, for the progress bar. Importance-weighted, must-ask fields
+    count 70% and optional ones 30%; held at PROGRESS_CAP until enough_for_icp says the interview
+    could stop, so the bar never reads 100% while the bot is still asking."""
+
+    def share(slots: list[SlotDef]) -> float:
+        total = sum(s.importance for s in slots)
+        if not total:
+            return 1.0
+        return sum(s.importance * _credit(state, s) for s in slots) / total
+
+    applicable = [s for s in state.slot_defs() if state.is_applicable(s)]
+    tier_a = [s for s in applicable if s.tier == Tier.A and s.blocks]
+    tier_b = [s for s in applicable if s.tier == Tier.B]
+    raw = TIER_A_WEIGHT * share(tier_a) + (1 - TIER_A_WEIGHT) * share(tier_b)
+    percent = round(raw * 100)
+    if not enough_for_icp(state):
+        percent = min(percent, PROGRESS_CAP)
+    elif state.finished:
+        percent = max(percent, PROGRESS_CAP)
+    known = sum(1 for s in tier_a if _credit(state, s) >= 1.0)
+    return Progress(percent=min(percent, 100), known=known, total=len(tier_a))

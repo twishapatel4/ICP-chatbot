@@ -18,6 +18,7 @@ from icp_chatbot.api.schemas import (
     FormFieldOut,
     FormRequest,
     ICPResponse,
+    ProgressOut,
     QuestionOut,
     SessionView,
     StartRequest,
@@ -34,7 +35,7 @@ from icp_chatbot.engine.interview import (
     InvalidTransition,
     SessionClosed,
 )
-from icp_chatbot.engine.planner import enough_for_icp
+from icp_chatbot.engine.planner import enough_for_icp, interview_progress
 from icp_chatbot.engine.questions import Question
 from icp_chatbot.engine.transcribe import normalize_mime, transcribe
 from icp_chatbot.enrichment.fetcher import SafeFetcher
@@ -211,6 +212,7 @@ def create_app(
             question=pending,
             stop_reason=state.stop_reason,
             has_icp=await ct.repo.latest_icp(tenant_id, session_id) is not None,
+            progress=ProgressOut.of(interview_progress(state)),
         )
 
     @app.get("/fallback-form", response_model=list[FormFieldOut])

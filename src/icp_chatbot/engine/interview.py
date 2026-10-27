@@ -28,7 +28,13 @@ from icp_chatbot.engine.extraction import (
     SlotUpdate,
     apply_extraction,
 )
-from icp_chatbot.engine.planner import Caps, icp_floor_met, missing_core_slots
+from icp_chatbot.engine.planner import (
+    Caps,
+    Progress,
+    icp_floor_met,
+    interview_progress,
+    missing_core_slots,
+)
 from icp_chatbot.engine.questions import (
     Question,
     clean_options,
@@ -100,6 +106,7 @@ class TurnResult:
     mode: str
     questions_asked: int
     notice: str | None = None  # a plain-words note when a model step failed: not the user's fault
+    progress: Progress = Progress(0, 0, 0)  # how much of the ICP is gathered, for the progress bar
 
 
 class AgentTurn(BaseModel):
@@ -674,4 +681,5 @@ class InterviewEngine:
             mode=state.mode,
             questions_asked=state.questions_asked,
             notice=RETRY_NOTICE if retry else DEGRADED_NOTICE if notice else None,
+            progress=interview_progress(state),
         )
