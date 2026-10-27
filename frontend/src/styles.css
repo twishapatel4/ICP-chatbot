@@ -178,12 +178,13 @@ button.link:disabled { opacity: 0.4; cursor: default; }
 .progress-pct { padding: 2px 11px; border-radius: 999px; background: var(--bot-grad); border: 1px solid var(--line);
   font-size: 12px; font-variant-numeric: tabular-nums; box-shadow: var(--soft); }
 .progress-track { height: 10px; border-radius: 999px; background: var(--card);
-  box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; }
+  box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; container-type: inline-size; }
+/* the gradient spans the whole track, so the fill reveals more colour as it grows (100cqw = track width) */
 .progress-fill { position: relative; height: 100%; border-radius: 999px; overflow: hidden;
-  background: linear-gradient(90deg, #8b9bff 0%, #b58cff 60%, #ff9ec7 100%);
+  background: linear-gradient(90deg, #8b9bff 0%, #b58cff 60%, #ff9ec7 100%) 0 0 / 100cqw 100% no-repeat;
   box-shadow: 0 0 14px rgba(139, 155, 255, .55);
-  transition: background .4s; }
-.progress.done .progress-fill { background: linear-gradient(90deg, #34d399, #22c55e); box-shadow: 0 0 14px rgba(52, 211, 153, .5); }
+  transition: box-shadow .4s; }
+.progress.done .progress-fill { background: linear-gradient(90deg, #34d399, #22c55e) 0 0 / 100cqw 100% no-repeat; box-shadow: 0 0 14px rgba(52, 211, 153, .5); }
 /* a light sweep while the profile is being written */
 .progress-fill.working::after { content: ""; position: absolute; inset: 0;
   background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, .6) 50%, transparent 70%);
@@ -211,3 +212,7 @@ button.link:disabled { opacity: 0.4; cursor: default; }
   background: currentColor; animation: cursor-blink 1s steps(1) infinite; }
 @keyframes cursor-blink { 50% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .type-cursor { animation: none; } }
+
+/* how far down the chat is scrolled: a hairline across the very top of the viewport */
+.scroll-progress { position: fixed; top: 0; left: 0; right: 0; height: 4px; z-index: 20; transform-origin: 0 50%;
+  background: linear-gradient(90deg, #8b9bff 0%, #b58cff 60%, #ff9ec7 100%); }

@@ -8,6 +8,7 @@ import IcpView from "./components/IcpView";
 import ProgressBar from "./components/ProgressBar";
 import InView from "./components/InView";
 import Typewriter from "./components/Typewriter";
+import ScrollProgress from "./components/ScrollProgress";
 import TextShimmer from "./components/TextShimmer";
 import TextEffect from "./components/TextEffect";
 import ThemeToggle from "./components/ThemeToggle";
@@ -379,6 +380,7 @@ export default function App() {
 
   return (
     <main className="app">
+      <ScrollProgress />
       <header>
         <div className="head-left">
           <h1 className="sr-only">ICP Chatbot</h1>
