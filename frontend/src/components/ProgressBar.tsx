@@ -10,7 +10,8 @@ interface Props {
 }
 
 export default function ProgressBar({ progress, building, done }: Props) {
-  const percent = done ? 100 : building ? Math.max(progress.percent, 95) : progress.percent;
+  // the fill shows how much of the ICP is gathered; building or finishing never moves it
+  const percent = progress.percent;
   // the fill springs to its value, like the scroll-progress bar from motion-primitives
   const spring = useSpring(percent, { stiffness: 200, damping: 50, restDelta: 0.01 });
   const width = useTransform(spring, (v) => `${v}%`);
