@@ -1,0 +1,72 @@
+[
+ {
+  "id": "up",
+  "label": "Unpaid",
+  "match": [
+   "1"
+  ]
+ },
+ {
+  "id": "tr",
+  "label": "Training",
+  "match": [
+   "2"
+  ]
+ },
+ {
+  "id": "en",
+  "label": "Entry-level",
+  "match": [
+   "3"
+  ]
+ },
+ {
+  "id": "ic",
+  "label": "Senior",
+  "match": [
+   "4"
+  ]
+ },
+ {
+  "id": "m",
+  "label": "Manager",
+  "match": [
+   "5"
+  ]
+ },
+ {
+  "id": "d",
+  "label": "Director",
+  "match": [
+   "6"
+  ]
+ },
+ {
+  "id": "vp",
+  "label": "Vice President (VP)",
+  "match": [
+   "7"
+  ]
+ },
+ {
+  "id": "c",
+  "label": "Chief X Officer (CxO)",
+  "match": [
+   "8"
+  ]
+ },
+ {
+  "id": "p",
+  "label": "Partner",
+  "match": [
+   "9"
+  ]
+ },
+ {
+  "id": "o",
+  "label": "Owner",
+  "match": [
+   "10"
+  ]
+ }
+]
