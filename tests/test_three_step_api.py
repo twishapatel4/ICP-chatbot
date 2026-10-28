@@ -526,3 +526,28 @@ async def test_begin_chat_rejects_invalid_answers_and_keeps_them(eng):
     await engine.begin_chat(T, sid, answers)
     with pytest.raises(InvalidTransition):
         await engine.begin_chat(T, sid, answers)
+
+
+async def test_engine_uses_hr_prompts_for_hr_session(world):
+    from icp_chatbot.domain.slots import render_slot_catalog
+    from icp_chatbot.prompts import prompts_for
+
+    w = await world()
+    sid = (await w.create(track="hr", role=None))["session_id"]
+    w.llm.queue("opener", q("Which tools should they know?"))
+    started = await w.call("POST", f"/sessions/{sid}/profile", json={"answers": HR_FRESHER})
+    assert started.status_code == 200, started.text
+    assert w.llm.calls_for("opener")[0].system == prompts_for("hr")["opener"]
+    w.llm.queue("interviewer", ask("Got it. Which city?", up("required_skills", ["Python"])))
+    reply = await w.call("POST", f"/sessions/{sid}/answers", json={"text": "Python mostly"})
+    assert reply.status_code == 200, reply.text
+    system = w.llm.calls_for("interviewer")[0].system
+    assert system == prompts_for("hr")["interviewer"] + render_slot_catalog("hr")
+    assert "ICP" not in system
+
+    sales = await w.start()
+    w.llm.queue("interviewer", ask("Who buys?", up("product", ["Payroll"])))
+    await w.call("POST", f"/sessions/{sales['session_id']}/answers", json={"text": "payroll"})
+    assert w.llm.calls_for("interviewer")[-1].system == (
+        prompts_for("sales")["interviewer"] + render_slot_catalog("sales")
+    )

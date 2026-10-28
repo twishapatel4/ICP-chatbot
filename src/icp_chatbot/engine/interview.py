@@ -352,6 +352,8 @@ class InterviewEngine:
             enrichment.seed,
             labels=labels,
             site_unread=bool(website_for(signup)) and not enrichment.seed,
+            track=state.track,
+            state=state,
         )
         spend.add(opener.usage, opener.cost_usd, fallback=opener.used_fallback)
         state.step = "chat"
@@ -547,10 +549,10 @@ class InterviewEngine:
                 return f"they changed {slot} more than twice. Ask them to pick one before you finish."
         return ""
 
-    async def _generate(self, cfg: StepConfig, config, user: str, labels):
+    async def _generate(self, cfg: StepConfig, config, user: str, labels, track: Track = "sales"):
         """One interviewer call. A timeout or service error is tried once on the backup model
         (QA 2026-10-27: about one turn in forty failed under load and the user had to resend)."""
-        call = dict(step="interviewer", system=config.system_prompt("interviewer"), user=user,
+        call = dict(step="interviewer", system=config.system_prompt("interviewer", track), user=user,
                     schema=AgentTurn, labels=labels)  # fmt: skip
         try:
             return await self._llm.generate(cfg=cfg, **call)
@@ -572,7 +574,7 @@ class InterviewEngine:
         usable: AgentTurn | None = None  # a reply that only sounded robotic, kept in case
         declines = dict(state.declines)
         for _ in range(MAX_ATTEMPTS):
-            result = await self._generate(cfg, config, base + note, labels)
+            result = await self._generate(cfg, config, base + note, labels, state.track)
             spend.add(result.usage, result.cost_usd, result.latency_ms)
             spend.models["interviewer"] = result.model
             problem = self._problem(state, result.parsed) or self._unsettled(state, result.parsed)

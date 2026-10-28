@@ -6,9 +6,9 @@ Sessions are pinned to the version that was live when they started.
 from pydantic import BaseModel
 
 from icp_chatbot.config import Settings
-from icp_chatbot.domain.slots import render_slot_catalog
+from icp_chatbot.domain.slots import Track, render_slot_catalog
 from icp_chatbot.llm.types import StepConfig
-from icp_chatbot.prompts import DEFAULT_PROMPTS
+from icp_chatbot.prompts import DEFAULT_PROMPTS, prompts_for
 
 STEP_NAMES = ("seed", "opener", "question", "interviewer", "final_icp")
 
@@ -26,19 +26,23 @@ class ConfigVersionData(BaseModel):
     prompts: dict[str, str]
     steps: dict[str, StepSettings]
 
-    def with_code_prompts(self) -> "ConfigVersionData":
+    def with_code_prompts(self, track: Track = "sales") -> "ConfigVersionData":
         """The prompts always come from prompts.py, so editing that file is all it takes. The
-        stored version still decides the models and settings, and what a session is pinned to."""
-        return self.model_copy(update={"prompts": {**self.prompts, **DEFAULT_PROMPTS}})
+        stored version still decides the models and settings, and what a session is pinned to.
+        The track picks the Sales or the hiring wording."""
+        return self.model_copy(update={"prompts": {**self.prompts, **prompts_for(track)}})
 
     def prompt(self, step: str) -> str:
         return self.prompts[step]
 
-    def system_prompt(self, step: str) -> str:
-        """The system prompt for a step. The interviewer gets the slot catalog appended."""
-        text = self.prompts[step]
+    def system_prompt(self, step: str, track: Track = "sales") -> str:
+        """The system prompt for a step. The interviewer gets the slot catalog of the track
+        appended. A hiring session takes the hiring wording; Sales uses the stored prompts."""
+        text = self.prompts[step] if track == "sales" else prompts_for(track).get(
+            step, self.prompts[step]
+        )
         if step == "interviewer":
-            return text + render_slot_catalog()
+            return text + render_slot_catalog(track)
         return text
 
     def step(self, name: str) -> StepConfig:

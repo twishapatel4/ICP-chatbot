@@ -552,8 +552,42 @@ def slots_in_tier(tier: Tier) -> list[SlotDef]:
     return [s for s in SLOT_LIST if s.tier == tier]
 
 
-def render_slot_catalog(slots: Iterable[SlotDef] = SLOT_LIST) -> str:
-    """Slot list for the extraction prompt: key, label, description, fixed choices."""
+FACET_LIST_LIMIT = 40  # a facet with more options than this is not listed in full
+_FACET_NOTES = {
+    "industry": "Use the exact LinkedIn industry label (the top-level groups are {groups}); "
+                "the profile maps a close wording to the matching label.",
+    "country": "Use the English country name.",
+}  # fmt: skip
+
+
+def _facet_note(facet: str) -> str:
+    """What the extraction prompt says about a slot tied to a LinkedIn option list: every label
+    for a short list, the top-level groups for industries, nothing for a list with no catalog."""
+    from icp_chatbot.linkedin.catalog import default_catalog  # the catalog needs none of this
+
+    catalog = default_catalog()
+    options = catalog.options(facet)
+    if not options:
+        return ""
+    if facet == "industry":
+        groups = "; ".join(o.label for o in options if o.level == 1)
+        return " " + _FACET_NOTES["industry"].format(groups=groups)
+    if facet in _FACET_NOTES:
+        return " " + _FACET_NOTES[facet]
+    if len(options) <= FACET_LIST_LIMIT:
+        return " LinkedIn options: " + "; ".join(o.label for o in options) + "."
+    return ""
+
+
+def render_slot_catalog(slots: Iterable[SlotDef] | Track = SLOT_LIST) -> str:
+    """Slot list for the extraction prompt: key, label, description, fixed choices. Given a
+    track, it lists that track's slots and adds the LinkedIn options of the slots that have them."""
+    facets: dict[str, str] = {}
+    if isinstance(slots, str):
+        from icp_chatbot.linkedin.catalog import SLOT_FACETS
+
+        facets = SLOT_FACETS
+        slots = registry(slots)
     lines = []
     for s in slots:
         line = f"- {s.key}: {s.label}. {s.description}."
@@ -569,5 +603,7 @@ def render_slot_catalog(slots: Iterable[SlotDef] = SLOT_LIST) -> str:
                 " Common values, not a closed list: " + "; ".join(s.choices) + ". Record what the "
                 "user says in full names (a country as a country, never widened to a region)."
             )
+        if s.key in facets:
+            line += _facet_note(facets[s.key])
         lines.append(line)
     return "\n".join(lines)

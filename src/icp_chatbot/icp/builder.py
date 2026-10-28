@@ -148,7 +148,7 @@ async def build_icp(
         result = await llm.generate(
             step="final_icp",
             cfg=config.step("final_icp"),
-            system=config.system_prompt("final_icp"),
+            system=config.system_prompt("final_icp", state.track),
             user=_user_message(entries, state),
             schema=ICPSynthesis,
             labels=labels,

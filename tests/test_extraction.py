@@ -252,3 +252,25 @@ def test_the_interviewer_prompt_states_the_rules_the_code_cannot():
         "never ask for personal data".lower(),
     ):
         assert needle.lower() in INTERVIEWER_PROMPT.lower(), needle
+
+
+def test_extraction_resolves_chat_industry_to_catalog_label():
+    from icp_chatbot.linkedin.catalog import default_catalog
+
+    label = default_catalog().resolve("industry", "software development").label
+    state = SessionState()
+    apply_extraction(state, result(up("industries", ["software development", "Underwater"])), 1)
+    value = state.slots["industries"]
+    assert label in value.values and value.refs[0].facet == "industry"
+    assert value.unmapped == ["Underwater"]
+
+
+def test_hr_session_accepts_hr_slot_updates_and_resolves_them():
+    state = SessionState(track="hr")
+    outcome = apply_extraction(
+        state,
+        result(up("current_industries", ["software development"]), up("product", ["x"])),
+        1,
+    )
+    assert outcome.applied == ["current_industries"] and outcome.ignored == ["product"]
+    assert state.slots["current_industries"].refs[0].facet == "industry"
