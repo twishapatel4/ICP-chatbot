@@ -50,10 +50,12 @@ def test_known_core_fields_are_no_longer_missing():
     assert {s.key for s in missing_core_slots(state)} == before - {"product"}
 
 
-def test_without_the_interviewers_call_a_third_of_the_core_fields_is_enough():
+def test_without_the_interviewers_call_a_third_of_the_core_fields_and_the_floor_are_enough():
     state = SessionState()
-    for key in [s.key for s in missing_core_slots(state)][:4]:
-        known(state, key)
+    for key in ("business_model", "industries", "company_size", "lead_geographies"):
+        known(state, key)  # what the step 2 cards give: well over a third of the core fields
+    assert not enough_for_icp(state)  # but not what they sell
+    known(state, "product")
     assert enough_for_icp(state)
     assert not enough_for_icp(SessionState())
 

@@ -76,7 +76,10 @@ def enough_for_icp(state: SessionState) -> bool:
     core = [s for s in state.slot_defs() if s.blocks and state.is_applicable(s)]
     if not core:
         return True
-    return 1 - len(missing_core_slots(state)) / len(core) >= MIN_KNOWN_SHARE
+    # the floor holds here too: the step 2 cards alone clear the share, but say nothing about
+    # what is sold (or, for HR, little beyond the role)
+    share = 1 - len(missing_core_slots(state)) / len(core)
+    return share >= MIN_KNOWN_SHARE and icp_floor_met(state)
 
 
 TIER_A_WEIGHT = 0.7  # the must-ask fields drive the bar; the optional ones fill the rest
