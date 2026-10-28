@@ -71,14 +71,14 @@ def test_check_launch_set_reports_every_kind_of_gap():
 
 def test_score_document_measures_precision_recall_and_forbidden_values():
     c = case(
-        expected={"industries": ["banks"], "geographies": ["Europe"]},
+        expected={"industries": ["banks"], "lead_geographies": ["Europe"]},
         forbidden={"product": ["pwned"]},
     )
     perfect = score_document(
-        c, doc(industries=["Banks"], geographies=["Europe"], buyer_roles=["CFO"])
+        c, doc(industries=["Banks"], lead_geographies=["Europe"], buyer_roles=["CFO"])
     )
     assert perfect == (1.0, 1.0, 1.0, 0)  # the extra buyer_roles field is not penalized
-    half = score_document(c, doc(industries=["Banks", "Retail"], geographies=["Asia"]))
+    half = score_document(c, doc(industries=["Banks", "Retail"], lead_geographies=["Asia"]))
     precision, recall, f1, violations = half
     assert (precision, recall) == (1 / 3, 1 / 2) and violations == 0
     assert f1 == pytest.approx(2 * (1 / 3) * (1 / 2) / (1 / 3 + 1 / 2))
@@ -105,11 +105,11 @@ async def test_replay_runs_a_case_end_to_end_and_reports_metrics():
     c = case(
         name="mechanics",
         answers=["We sell payroll to banks", "Banks in Europe", "CFOs"],
-        expected={"industries": ["banks"], "geographies": ["Europe"]},
+        expected={"industries": ["banks"], "lead_geographies": ["Europe"]},
     )
     llm = FakeLLM({
         "opener": [QuestionOutput(question="Hi!")],
-        "interviewer": [ask("Who are your best customers?", up("product", ["Payroll"])), ask("What problems do they have?", up("industries", ["Banks"]), up("geographies", ["Europe"])), ask("Anything else?", up("buyer_roles", ["CFO"]))],
+        "interviewer": [ask("Who are your best customers?", up("product", ["Payroll"])), ask("What problems do they have?", up("industries", ["Banks"]), up("lead_geographies", ["Europe"])), ask("Anything else?", up("buyer_roles", ["CFO"]))],
         "final_icp": [ICPSynthesis()],
     })  # fmt: skip
     result = await replay_case(c, llm, SETTINGS)

@@ -30,11 +30,11 @@ def test_the_industry_fields_are_kept_cleaned_and_never_clash_with_standard_slot
     state = SessionState()
     update = domain_update(
         fields=[field("Preferred Localities!"), field("company_size"), field("bhk_type")],
-        not_needed=["company_size", "geographies", "product", "made_up"],
+        not_needed=["company_size", "lead_geographies", "product", "made_up"],
     )
     apply_extraction(state, update, 1)
     assert [f.key for f in state.domain.fields] == ["preferred_localities", "bhk_type"]
-    assert state.domain.not_needed == ["company_size", "geographies"]  # product is protected
+    assert state.domain.not_needed == ["company_size", "lead_geographies"]  # product is protected
 
 
 def test_later_updates_add_fields_but_do_not_replace_the_ones_already_asked():

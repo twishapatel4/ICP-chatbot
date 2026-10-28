@@ -28,7 +28,7 @@ def make_state():
         {
             "industries": slot(["fintech", "banks"], evidence="we sell to banks"),
             "company_size": slot(["50-500"]),
-            "geographies": slot(["Europe"], 0.5, SlotSource.INFERRED),
+            "lead_geographies": slot(["Europe"], 0.5, SlotSource.INFERRED),
             "buyer_roles": slot(["CFO"], 0.6, SlotSource.CONFIRMED),
             "disqualifiers": slot(["no government, nothing under 50 people"]),
         }
@@ -40,7 +40,7 @@ def test_last_verified_is_set_only_for_values_the_user_stated_or_confirmed():
     entries = entries_from_state(make_state(), TODAY)
     assert entries["industries"].last_verified == "2026-10-15"
     assert entries["buyer_roles"].last_verified == "2026-10-15"
-    assert entries["geographies"].last_verified is None  # inferred
+    assert entries["lead_geographies"].last_verified is None  # inferred
 
 
 async def test_synthesis_cleans_values_but_keeps_source_and_confidence():
@@ -110,7 +110,7 @@ async def test_summary_and_completeness_follow_the_final_fields():
     )
     doc = result.document
     assert "Target industries: fintech, banks" in doc.summary
-    assert "geographies: Europe (inferred)" in doc.summary
+    assert "based in: Europe (inferred)" in doc.summary
     assert 0.0 < doc.completeness.tier_a < 1.0
     industry = next(c for c in doc.scoring_model.criteria if c.key == "industry_fit")
     assert industry.applicable and industry.rules["industries"].primary == ["fintech", "banks"]

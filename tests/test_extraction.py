@@ -233,8 +233,8 @@ def test_nothing_is_reported_for_an_inferred_value_the_same_value_or_an_unflagge
         values=["Banks"], confidence=0.5, source=SlotSource.INFERRED
     )
     assert apply_extraction(state, _flagged(up("industries", ["Insurers"])), 2).changed == {}
-    state.slots["geographies"] = SlotValue(values=["UK"], confidence=0.9, source=SlotSource.STATED)
-    same = _flagged(up("geographies", ["uk"]), slots=("geographies",))
+    state.slots["lead_geographies"] = SlotValue(values=["UK"], confidence=0.9, source=SlotSource.STATED)
+    same = _flagged(up("lead_geographies", ["uk"]), slots=("lead_geographies",))
     assert apply_extraction(state, same, 3).changed == {}
     state.slots["company_size"] = SlotValue(values=["10"], confidence=0.9, source=SlotSource.STATED)
     assert apply_extraction(state, result(up("company_size", ["500"])), 4).changed == {}

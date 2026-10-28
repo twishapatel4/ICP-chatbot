@@ -2,15 +2,16 @@
 
 import re
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from icp_chatbot.domain.slots import (
-    SLOT_LIST,
-    SLOTS,
     CustomField,
     SlotDef,
+    Track,
+    registry,
+    slot_map,
     with_custom,
 )
 
@@ -118,7 +119,46 @@ class DomainContext(BaseModel):
         return lines
 
 
+# Slots renamed since sessions were first saved: old key -> new key. Geography was split into
+# where the people are (lead_geographies) and where their companies are headquartered; a saved
+# `geographies` answer said the first, so the HQ slot stays unknown.
+LEGACY_SLOT_KEYS = {"geographies": "lead_geographies"}
+_KEYED_BY_SLOT = ("slots", "seed", "asked_slots", "probes", "probe_conf", "stalls", "declines",
+                  "flips")  # fmt: skip
+_SLOT_LISTS = ("skipped", "clarified", "contradictions")
+_SLOT_NAMES = ("pending_slot", "thread_slot")
+
+
+def _renamed(key: Any) -> Any:
+    return LEGACY_SLOT_KEYS.get(key, key) if isinstance(key, str) else key
+
+
+def _rename_keys(mapping: dict) -> dict:
+    """Old slot keys renamed; where both the old and the new key are present, the new one wins."""
+    if not any(key in LEGACY_SLOT_KEYS for key in mapping):
+        return mapping
+    out = {}
+    for key, value in mapping.items():
+        new = _renamed(key)
+        if new != key and new in mapping:
+            continue
+        out[new] = value
+    return out
+
+
+def _rename_items(items: list) -> list:
+    if not any(_renamed(item) != item for item in items):
+        return items
+    out: list = []
+    for item in items:
+        if (new := _renamed(item)) not in out:
+            out.append(new)
+    return out
+
+
 class SessionState(BaseModel):
+    track: Track = "sales"  # sessions saved before tracks existed are Sales sessions
+    step: Literal["profile", "chat"] = "chat"  # older sessions were already in the chat
     mode: Literal["quick", "detail"] = "quick"
     domain: DomainContext | None = None
     slots: dict[str, SlotValue] = Field(default_factory=dict)
@@ -162,6 +202,27 @@ class SessionState(BaseModel):
     finished: bool = False
     stop_reason: str | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def _rename_legacy_slots(cls, data: Any) -> Any:
+        """Saved sessions may name slots by their old keys (see LEGACY_SLOT_KEYS)."""
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        for name in _KEYED_BY_SLOT:
+            if isinstance(data.get(name), dict):
+                data[name] = _rename_keys(data[name])
+        for name in _SLOT_LISTS:
+            if isinstance(data.get(name), list):
+                data[name] = _rename_items(data[name])
+        for name in _SLOT_NAMES:
+            if name in data:
+                data[name] = _renamed(data[name])
+        domain = data.get("domain")
+        if isinstance(domain, dict) and isinstance(domain.get("not_needed"), list):
+            data["domain"] = {**domain, "not_needed": _rename_items(domain["not_needed"])}
+        return data
+
     def confidence(self, key: str) -> float:
         value = self.slots.get(key)
         return value.confidence if value else 0.0
@@ -171,11 +232,14 @@ class SessionState(BaseModel):
         return list(value.values) if value else []
 
     def slot_defs(self) -> list[SlotDef]:
-        return with_custom(self.domain.fields) if self.domain else list(SLOT_LIST)
+        if self.domain:
+            return with_custom(self.domain.fields, self.track)
+        return list(registry(self.track))
 
     def slot_def(self, key: str) -> SlotDef | None:
-        if key in SLOTS:
-            return SLOTS[key]
+        standard = slot_map(self.track)
+        if key in standard:
+            return standard[key]
         return next((s for s in self.slot_defs() if s.key == key), None)
 
     def is_applicable(self, slot: SlotDef) -> bool:

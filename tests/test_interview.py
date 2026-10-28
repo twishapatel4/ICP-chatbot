@@ -564,7 +564,7 @@ async def test_finishing_is_held_back_once_to_confirm_what_was_guessed_from_the_
     engine, repo, llm, _ = world
     state = known(
         pending(SessionState(questions_asked=6), "Who decides?"),
-        product=["Payroll"], buyer_roles=["CFO"], company_size=["50-500"], geographies=["EU"],
+        product=["Payroll"], buyer_roles=["CFO"], company_size=["50-500"], lead_geographies=["EU"],
     )  # fmt: skip
     guessed(state, industries=["Banks", "Aerospace", "Retail"])
     sid = await preset(repo, state)
@@ -600,20 +600,20 @@ async def test_an_answer_changed_over_and_over_is_raised_once_before_finishing(w
     state = known(
         pending(SessionState(questions_asked=6), "Where?"),
         product=["Payroll"], industries=["Banks"], buyer_roles=["CFO"], company_size=["50"],
-        geographies=["US"],
+        lead_geographies=["US"],
     )  # fmt: skip
     sid = await preset(repo, state)
     regions = ["Canada", "Brazil", "Japan"]
     says = ["Noted. Is that the one?", "Okay, is that the main region?", "Got it. So where do most clients sit?"]
-    llm.queue("interviewer", *[ask(s, up("geographies", [r])) for s, r in zip(says, regions, strict=True)])
+    llm.queue("interviewer", *[ask(s, up("lead_geographies", [r])) for s, r in zip(says, regions, strict=True)])
     for r in regions:
         await engine.answer(T, sid, f"sorry, {r}")
     record = await repo.get_session(T, sid)
-    assert record.state.flips["geographies"] == 3
+    assert record.state.flips["lead_geographies"] == 3
     llm.queue("interviewer", AgentTurn(say="Done!", action="finish", enough=True), ask("You changed the region a few times. Which one is it?"))
     result = await engine.answer(T, sid, "ok")
     assert result.status == "active" and "Which one is it" in result.question.text
-    assert "changed geographies more than twice" in llm.calls_for("interviewer")[-1].user
+    assert "changed lead_geographies more than twice" in llm.calls_for("interviewer")[-1].user
 
 
 async def test_missing_fields_are_shown_in_plain_words(world):
@@ -641,7 +641,7 @@ async def test_the_models_own_options_win_over_a_fields_fixed_list(world):
     sid = await preset(repo)
     llm.queue(
         "interviewer",
-        ask("Which markets first?", target_slot="geographies", options=["Bangladesh", "Sri Lanka", "UAE"]),
+        ask("Which markets first?", target_slot="lead_geographies", options=["Bangladesh", "Sri Lanka", "UAE"]),
     )  # fmt: skip
     result = await engine.answer(T, sid, "we export onions")
     assert result.question.options == ("Bangladesh", "Sri Lanka", "UAE")
@@ -659,7 +659,7 @@ async def test_an_open_pick_list_is_not_used_as_a_fallback(world):
     # QA 2026-10-27: with no options from the model, "which markets?" showed all nine regions
     engine, repo, llm, _ = world
     sid = await preset(repo)
-    llm.queue("interviewer", ask("Which markets do you ship to?", target_slot="geographies"))
+    llm.queue("interviewer", ask("Which markets do you ship to?", target_slot="lead_geographies"))
     result = await engine.answer(T, sid, "we export onions")
     assert result.question.options == ()
 

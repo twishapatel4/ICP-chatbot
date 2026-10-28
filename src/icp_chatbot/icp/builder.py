@@ -13,7 +13,7 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
-from icp_chatbot.domain.slots import SLOTS
+from icp_chatbot.domain.slots import slot_map
 from icp_chatbot.domain.state import SessionState, SlotSource, normalize_values
 from icp_chatbot.icp.document import (
     FieldEntry,
@@ -63,9 +63,10 @@ class BuildResult:
 
 def entries_from_state(state: SessionState, today: date) -> dict[str, FieldEntry]:
     entries = {}
+    standard = slot_map(state.track)
     custom = {f.key for f in state.domain.fields} if state.domain else set()
     for key, value in state.slots.items():
-        if (key not in SLOTS and key not in custom) or not value.values:
+        if (key not in standard and key not in custom) or not value.values:
             continue
         said_by_user = value.source in (SlotSource.STATED, SlotSource.CONFIRMED)
         entries[key] = FieldEntry(

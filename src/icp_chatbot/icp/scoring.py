@@ -23,7 +23,7 @@ CRITERIA_DEFS: tuple[tuple[str, str, float, tuple[str, ...]], ...] = (
     ("industry_fit", "Industry fit", 35.0, ("industries", "customer_segments")),
     ("company_size", "Company size", 25.0, ("company_size",)),
     ("buying_signals", "Buying signals", 15.0, ("buying_triggers",)),
-    ("geographic_fit", "Geographic fit", 25.0, ("geographies",)),
+    ("geographic_fit", "Geographic fit", 25.0, ("lead_geographies", "company_hq_geographies")),
 )
 WEIGHT_TOTAL = 100.0
 EPSILON = 1e-6
@@ -225,7 +225,8 @@ def set_requirement(model: ScoringModel, key: str, requirement: str) -> ScoringM
 
 DISQUALIFIER_FIELDS = frozenset(
     {
-        "industries", "geographies", "company_size", "company_type",
+        "industries", "lead_geographies", "company_hq_geographies", "company_size",
+        "company_type",
     }
 )  # fmt: skip
 

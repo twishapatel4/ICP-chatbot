@@ -1,9 +1,16 @@
-"""The ICP slot registry: every field the interview can fill (spec sections 5.5 and 6.1)."""
+"""The ICP slot registries, one per track: every field the interview can fill (spec sections
+5.5 and 6.1)."""
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, Field
+
+from icp_chatbot.linkedin.catalog import default_catalog
+
+Track = Literal["sales", "hr"]  # who the profile is for: sales leads or job candidates
 
 
 class Tier(StrEnum):
@@ -22,18 +29,8 @@ SECTION_ORDER = (
     "industry_specifics",  # fields that only this company's industry needs
 )
 
-SIZE_BANDS = ("1-10", "11-50", "51-200", "201-1,000", "1,001-5,000", "5,000+")
-REGIONS = (
-    "North America",
-    "Europe",
-    "Middle East",
-    "South Asia",
-    "Southeast Asia",
-    "East Asia",
-    "Latin America",
-    "Africa",
-    "Oceania",
-)
+# LinkedIn's nine company headcount bands (codes A to I), as the option catalog labels them
+COMPANY_SIZES: tuple[str, ...] = tuple(o.label for o in default_catalog().options("company_size"))
 BUSINESS_MODELS = ("B2B", "B2C", "Both")
 
 
@@ -86,11 +83,12 @@ def custom_slot_def(field: CustomField, important: bool) -> SlotDef:
 CUSTOM_BLOCKING = 3  # how many of an industry's own fields must be known before we can stop
 
 
-def with_custom(fields: list[CustomField]) -> list[SlotDef]:
-    """The standard slots plus the fields this industry needs (the strongest ones block)."""
+def with_custom(fields: list[CustomField], track: Track = "sales") -> list[SlotDef]:
+    """The track's standard slots plus the fields this industry needs (the strongest ones
+    block)."""
     ranked = sorted(fields, key=lambda f: -f.importance)
     important = {f.key for f in ranked[:CUSTOM_BLOCKING]}
-    return [*SLOT_LIST, *(custom_slot_def(f, f.key in important) for f in fields)]
+    return [*registry(track), *(custom_slot_def(f, f.key in important) for f in fields)]
 
 
 def _s(key, section, label, description, tier, importance=0.5, **kw) -> SlotDef:
@@ -179,19 +177,28 @@ SLOT_LIST: tuple[SlotDef, ...] = (
         "Employee count of target companies",
         "A",
         0.9,
-        choices=SIZE_BANDS,
+        choices=COMPANY_SIZES,
         single_choice=True,
         exact_range=True,
         skip_if=_B2C,
     ),
+    # geography has two levels, country then city: the pickers come from the country catalog
     _s(
-        "geographies",
+        "lead_geographies",
         "target_firmographics",
-        "Target geographies",
-        "Regions or countries to sell in",
+        "Where the customers are",
+        "Countries, and cities if any, where the people they sell to are based",
         "A",
         0.9,
-        choices=REGIONS,
+    ),
+    _s(
+        "company_hq_geographies",
+        "target_firmographics",
+        "Where target companies are headquartered",
+        "Countries, and cities if any, where the companies they sell to have their head office",
+        "A",
+        0.9,
+        skip_if=_B2C,
     ),
     _s(
         "company_type",
@@ -238,6 +245,15 @@ SLOT_LIST: tuple[SlotDef, ...] = (
         0.6,
         skip_if=_B2C,
     ),
+    _s(
+        "buyer_seniority",
+        "buying_structure",
+        "Buyer seniority",
+        "How senior the buyers are (for example manager, director, VP, owner)",
+        "A",
+        0.8,
+        skip_if=_B2C,
+    ),
     # 5. Intent and timing
     _s(
         "buying_triggers",
@@ -261,6 +277,25 @@ SLOT_LIST: tuple[SlotDef, ...] = (
 SLOTS: dict[str, SlotDef] = {s.key: s for s in SLOT_LIST}
 assert len(SLOTS) == len(SLOT_LIST), "duplicate slot keys"
 
+HR_SLOT_LIST: tuple[SlotDef, ...] = ()  # the HR registry: empty until its slots are defined
+
+_REGISTRIES: dict[str, tuple[SlotDef, ...]] = {"sales": SLOT_LIST, "hr": HR_SLOT_LIST}
+_SLOT_MAPS: dict[str, dict[str, SlotDef]] = {
+    "sales": SLOTS,
+    "hr": {s.key: s for s in HR_SLOT_LIST},
+}
+assert all(len(_SLOT_MAPS[t]) == len(slots) for t, slots in _REGISTRIES.items()), "duplicate keys"
+
+
+def registry(track: Track) -> tuple[SlotDef, ...]:
+    """Every standard slot of this track, in interview order."""
+    return _REGISTRIES[track]
+
+
+def slot_map(track: Track) -> dict[str, SlotDef]:
+    """This track's standard slots by key."""
+    return _SLOT_MAPS[track]
+
 
 def get_slot(key: str) -> SlotDef:
     return SLOTS[key]
@@ -270,10 +305,10 @@ def slots_in_tier(tier: Tier) -> list[SlotDef]:
     return [s for s in SLOT_LIST if s.tier == tier]
 
 
-def render_slot_catalog() -> str:
+def render_slot_catalog(slots: Iterable[SlotDef] = SLOT_LIST) -> str:
     """Slot list for the extraction prompt: key, label, description, fixed choices."""
     lines = []
-    for s in SLOT_LIST:
+    for s in slots:
         line = f"- {s.key}: {s.label}. {s.description}."
         if s.choices and s.exact_range:  # QA 2026-10-27: "100-300" was snapped to "51-200"
             line += (

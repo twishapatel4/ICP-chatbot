@@ -16,25 +16,25 @@ def entry(values, confidence=0.9, source=SlotSource.STATED):
 def test_entries_are_grouped_by_section_in_registry_order_and_empty_ones_dropped():
     entries = {
         "buyer_roles": entry(["CFO"]), "industries": entry(["Fintech"]),
-        "product": entry(["Payroll"]), "geographies": entry([]),
+        "product": entry(["Payroll"]), "lead_geographies": entry([]),
     }  # fmt: skip
     grouped = group_by_section(entries)
     assert list(grouped) == ["seller_context", "target_firmographics", "buying_structure"]
-    assert list(grouped["target_firmographics"]) == ["industries"]  # empty geographies dropped
+    assert list(grouped["target_firmographics"]) == ["industries"]  # empty lead_geographies dropped
 
 
 def test_completeness_counts_known_slots_and_skips_inapplicable_ones():
     nothing = compute_completeness({})
     assert nothing.tier_a == 0.0 and nothing.tier_b == 0.0
     tier_a = [
-        "industries", "company_size", "geographies", "buyer_roles", "buyer_departments",
-        "disqualifiers", "product",
+        "industries", "company_size", "lead_geographies", "company_hq_geographies", "buyer_roles",
+        "buyer_departments", "buyer_seniority", "disqualifiers", "product",
     ]  # fmt: skip
     entries = {k: entry(["x"]) for k in tier_a}
     entries["business_model"] = entry(["B2B"])
     assert compute_completeness(entries).tier_a == 1.0
     entries["industries"] = entry(["x"], confidence=0.5)  # below the 0.7 bar
-    assert compute_completeness(entries).tier_a == round(7 / 8, 4)
+    assert compute_completeness(entries).tier_a == round(9 / 10, 4)
     b2c = {k: entry(["x"]) for k in tier_a if not k.startswith("buyer_")}
     b2c["business_model"] = entry(["B2C"])
     b2c["customer_profile"] = entry(["x"])
@@ -44,14 +44,16 @@ def test_completeness_counts_known_slots_and_skips_inapplicable_ones():
 def test_summary_is_built_only_from_the_fields_and_marks_inferences():
     entries = {
         "industries": entry(["Fintech"]),
-        "geographies": entry(["Europe"], source=SlotSource.INFERRED, confidence=0.5),
+        "lead_geographies": entry(["Europe"], source=SlotSource.INFERRED, confidence=0.5),
+        "company_hq_geographies": entry(["United States"]),
         "buyer_departments": entry(["Finance"]),
         "buyer_roles": entry(["CFO", "COO"]),
+        "buyer_seniority": entry(["Director"]),
     }
     summary = render_summary(entries)
     assert "Target industries: Fintech" in summary
-    assert "geographies: Europe (inferred)" in summary
-    assert "Buyers: CFO, COO; Finance." in summary
+    assert "based in: Europe (inferred); headquartered in: United States." in summary
+    assert "Buyers: CFO, COO; Director; Finance." in summary
     assert "pain points" not in summary.lower()  # nothing is invented for missing fields
     assert render_summary({}) == ""
 

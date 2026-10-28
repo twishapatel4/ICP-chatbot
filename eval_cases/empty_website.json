@@ -16,7 +16,7 @@
     "Content directors."
   ],
   "expected": {
-    "geographies": [
+    "lead_geographies": [
       "US"
     ]
   },

@@ -90,7 +90,7 @@ async def run_to_completion(w):
         "interviewer",
         ask("Who signs off on buying this?",
              up("industries", ["Fintech"]), up("company_size", ["50-500"]),
-             up("geographies", ["Europe"]), up("buying_triggers", ["manual payroll"]),
+             up("lead_geographies", ["Europe"]), up("buying_triggers", ["manual payroll"]),
              up("buyer_roles", ["CFO"]), target_slot="buyer_roles", enough=True),
     )  # fmt: skip
     nxt = await w.call(

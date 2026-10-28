@@ -28,6 +28,10 @@ from icp_chatbot.icp.scoring import (
         ("<$1M", (None, 1e6)), (">$1B", (1e9, None)), ("under 100", (None, 100)),
         ("at least 50 employees", (50, None)), ("250", (250, 250)), ("5 million", (5e6, 5e6)),
         ("up to 2 million", (None, 2e6)), ("500 marketing staff", (500, 500)),
+        # LinkedIn's company size bands, as labelled and as the LinkedIn DB stores them
+        ("1-10", (1, 10)), ("2-10", (2, 10)), ("201-500", (201, 500)), ("1001-5000", (1001, 5000)),
+        ("5001-10,000", (5001, 10000)), ("5001-10000", (5001, 10000)),
+        ("10,001+", (10001, None)), ("10001+", (10001, None)), ("Self-employed", None),
     ],
 )  # fmt: skip
 def test_parse_range(text, expected):
@@ -58,6 +62,28 @@ def test_list_match_is_case_insensitive_and_loose():
     )  # too short to match loosely
 
 
+def test_build_rule_reads_linkedin_size_bands():
+    assert build_rule("company_size", ["1-10", "5001-10,000"]) == MatchRule(
+        kind="range", min=1, max=10000
+    )
+    assert build_rule("company_size", ["201-500", "10,001+"]) == MatchRule(
+        kind="range", min=201, max=None
+    )
+
+
+def test_geographic_fit_reads_lead_and_hq_geographies():
+    geo = next(d for d in CRITERIA_DEFS if d[0] == "geographic_fit")
+    assert geo[2] == 25.0 and geo[3] == ("lead_geographies", "company_hq_geographies")
+    model = default_scoring_model(
+        {"lead_geographies": ["India"], "company_hq_geographies": ["United States"]}
+    )
+    criterion = next(c for c in model.criteria if c.key == "geographic_fit")
+    assert set(criterion.rules) == {"lead_geographies", "company_hq_geographies"}
+    assert criterion.applicable and validate_model(model) == []
+    lead = {"lead_geographies": ["India"], "company_hq_geographies": ["Germany"]}
+    assert score_lead(model, lead).breakdown["geographic_fit"] == 0.5  # one of two fits
+
+
 def test_build_rule_uses_ranges_for_size_and_lists_for_the_rest():
     assert build_rule("company_size", ["51-200", "201-1,000"]) == MatchRule(
         kind="range", min=51, max=1000
@@ -70,11 +96,11 @@ def test_build_rule_uses_ranges_for_size_and_lists_for_the_rest():
 
 FULL = {
     "industries": ["Fintech"], "customer_segments": ["SMB"], "company_size": ["50-500"],
-    "buying_triggers": ["new funding"], "geographies": ["Europe"],
+    "buying_triggers": ["new funding"], "lead_geographies": ["Europe"],
 }  # fmt: skip
 PERFECT_LEAD = {
     "industries": ["Fintech"], "customer_segments": ["SMB"], "company_size": ["120"],
-    "buying_triggers": ["New funding round"], "geographies": ["Europe"],
+    "buying_triggers": ["New funding round"], "lead_geographies": ["Europe"],
 }  # fmt: skip
 
 
@@ -97,17 +123,17 @@ def test_a_perfect_lead_scores_100_and_a_poor_one_scores_low():
     model = default_scoring_model(FULL)
     perfect = score_lead(model, PERFECT_LEAD)
     assert perfect.score == 100.0 and perfect.qualified and perfect.completeness == 1.0
-    poor = score_lead(model, {**PERFECT_LEAD, "industries": ["Retail"], "geographies": ["Asia"]})
+    poor = score_lead(model, {**PERFECT_LEAD, "industries": ["Retail"], "lead_geographies": ["Asia"]})
     assert poor.score == pytest.approx(100 - 35 / 2 - 25)  # segments still fit: half of industry_fit
 
 
 def test_unknown_lead_data_drops_the_criterion_and_renormalizes():
     model = default_scoring_model(FULL)
-    lead = {"industries": ["Fintech"], "geographies": ["Europe"]}  # only 35 + 25 weight is known
+    lead = {"industries": ["Fintech"], "lead_geographies": ["Europe"]}  # only 35 + 25 weight is known
     result = score_lead(model, lead)
     assert result.score == 100.0
     assert result.completeness == pytest.approx(2 / 4)
-    half = score_lead(model, {"industries": ["Fintech"], "geographies": ["Asia"]})
+    half = score_lead(model, {"industries": ["Fintech"], "lead_geographies": ["Asia"]})
     assert half.score == pytest.approx(100 * 35 / 60)
 
 
@@ -125,10 +151,10 @@ def test_a_lead_with_no_readable_data_scores_zero():
 
 def test_required_criteria_decide_qualification_not_the_score():
     model = set_requirement(default_scoring_model(FULL), "geographic_fit", "required")
-    wrong_place = score_lead(model, {**PERFECT_LEAD, "geographies": ["Asia"]})
+    wrong_place = score_lead(model, {**PERFECT_LEAD, "lead_geographies": ["Asia"]})
     assert not wrong_place.qualified and wrong_place.failed_required == ["geographic_fit"]
     assert wrong_place.score == pytest.approx(75.0)  # still scored, but not qualified
-    unknown_place = {k: v for k, v in PERFECT_LEAD.items() if k != "geographies"}
+    unknown_place = {k: v for k, v in PERFECT_LEAD.items() if k != "lead_geographies"}
     assert score_lead(model, unknown_place).failed_required == ["geographic_fit"]
     assert score_lead(model, PERFECT_LEAD).qualified
 
@@ -137,13 +163,13 @@ def test_disqualifiers_exclude_a_lead_outright():
     model = default_scoring_model(FULL)
     model = model.model_copy(update={"disqualifiers": [
         Disqualifier(field="industries", operator="in", values=["Government"]),
-        Disqualifier(field="geographies", operator="not_in", values=["Europe", "North America"]),
+        Disqualifier(field="lead_geographies", operator="not_in", values=["Europe", "North America"]),
         Disqualifier(field="company_size", operator="lt", values=["50"]),
     ]})  # fmt: skip
     assert score_lead(model, PERFECT_LEAD).qualified
     for bad in (
         {**PERFECT_LEAD, "industries": ["Government services"]},
-        {**PERFECT_LEAD, "geographies": ["Asia"]},
+        {**PERFECT_LEAD, "lead_geographies": ["Asia"]},
         {**PERFECT_LEAD, "company_size": ["30"]},
     ):
         result = score_lead(model, bad)
@@ -153,7 +179,7 @@ def test_disqualifiers_exclude_a_lead_outright():
 def test_unknown_lead_data_never_disqualifies():
     model = ScoringModel(
         criteria=default_scoring_model(FULL).criteria,
-        disqualifiers=[Disqualifier(field="geographies", operator="not_in", values=["Europe"])],
+        disqualifiers=[Disqualifier(field="lead_geographies", operator="not_in", values=["Europe"])],
     )
     assert score_lead(model, {"industries": ["Fintech"]}).disqualified_by is None
 
@@ -175,7 +201,7 @@ def test_validate_model_reports_every_kind_of_problem():
         Criterion(key="x", label="x", weight=0, reads=["nope"], rules={
             "industries": MatchRule(kind="list"),
             "company_size": MatchRule(kind="range"),
-            "geographies": MatchRule(kind="range", min=5, max=1),
+            "lead_geographies": MatchRule(kind="range", min=5, max=1),
         }),
     ], "disqualifiers": [Disqualifier(field="nope", operator="in", values=[])]})  # fmt: skip
     text = " | ".join(validate_model(broken))

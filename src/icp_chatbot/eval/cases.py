@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from icp_chatbot.domain.slots import SLOTS
+from icp_chatbot.domain.slots import Track, slot_map
 
 MIN_LAUNCH_CASES = 30
 
@@ -24,6 +24,7 @@ REQUIRED_TAGS = frozenset(
 class EvalCase(BaseModel):
     name: str
     origin: Literal["handwritten", "simulated", "real"] = "handwritten"
+    track: Track = "sales"  # whose profile the conversation builds: its slots come from this track
     tags: list[str]
     signup: dict[str, str]
     website_text: str | None = None  # what the company's website says, for enrichment
@@ -47,8 +48,9 @@ def case_problems(case: EvalCase) -> list[str]:
     problems = []
     if not case.answers:
         problems.append("no answers")
+    known = slot_map(case.track)
     for slot in [*case.expected, *case.forbidden]:
-        if slot not in SLOTS:
+        if slot not in known:
             problems.append(f"unknown slot {slot}")
     return problems
 

@@ -16,7 +16,7 @@
     "We avoid industrial sites."
   ],
   "expected": {
-    "geographies": [
+    "lead_geographies": [
       "Texas"
     ],
     "disqualifiers": [

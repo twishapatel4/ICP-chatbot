@@ -29,7 +29,7 @@ def make_doc():
     entries = {
         "industries": FieldEntry(values=["Fintech"], confidence=0.9, source=SlotSource.STATED),
         "company_size": FieldEntry(values=["50-500"], confidence=0.9, source=SlotSource.STATED),
-        "geographies": FieldEntry(values=["Europe"], confidence=0.5, source=SlotSource.INFERRED),
+        "lead_geographies": FieldEntry(values=["Europe"], confidence=0.5, source=SlotSource.INFERRED),
         "buyer_roles": FieldEntry(
             values=["CFO"], confidence=0.9, source=SlotSource.STATED
         ),
@@ -100,14 +100,14 @@ def test_a_requirement_toggle_updates_the_criterion_and_the_fields_it_reads():
     doc, specs = apply_edit(
         make_doc(), RequirementEdit(criterion="geographic_fit", requirement="required"), TODAY
     )
-    assert doc.entries()["geographies"].requirement == "required"
+    assert doc.entries()["lead_geographies"].requirement == "required"
     assert doc.entries()["industries"].requirement == "preferred"
     assert (specs[0].type, specs[0].old, specs[0].new) == (
         "requirement_toggle",
         "preferred",
         "required",
     )
-    lead = {"industries": ["Fintech"], "geographies": ["Asia"]}
+    lead = {"industries": ["Fintech"], "lead_geographies": ["Asia"]}
     assert not score_lead(doc.scoring_model, lead).qualified
 
 

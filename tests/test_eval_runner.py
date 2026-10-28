@@ -20,7 +20,7 @@ def write_case(tmp_path, name="mini"):
     (directory / f"{name}.json").write_text(json.dumps({
         "name": name, "tags": ["clear_website"], "signup": {"company_name": "Acme"},
         "answers": ["We sell payroll to banks", "Banks in Europe"],
-        "expected": {"industries": ["banks"], "geographies": ["Europe"]},
+        "expected": {"industries": ["banks"], "lead_geographies": ["Europe"]},
     }))  # fmt: skip
 
 
@@ -31,7 +31,7 @@ def scripted_llm(f1_good=True):
         "interviewer": [
             AgentTurn(say="Best customers?", updates=[SlotUpdate(slot="product", values=["Payroll"], confidence=0.9)]),
             AgentTurn(say="Pains?", updates=[SlotUpdate(slot="industries", values=industries, confidence=0.9),
-                                             SlotUpdate(slot="geographies", values=["Europe"], confidence=0.9)]),
+                                             SlotUpdate(slot="lead_geographies", values=["Europe"], confidence=0.9)]),
         ],
         "final_icp": [ICPSynthesis()],
     })  # fmt: skip
