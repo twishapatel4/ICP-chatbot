@@ -198,6 +198,28 @@ class Repo:
                 raise Conflict(session_id)
         return expected_version + 1
 
+    async def add_usage(
+        self, tenant_id: str, session_id: str, *, usage: Usage, cost_usd: float = 0.0
+    ) -> None:
+        """Count model spend made outside a turn, such as the website read that runs while the
+        user fills in step 2. The state and its version are left alone, so this never
+        conflicts with a turn being saved."""
+        async with self._factory() as s, s.begin():
+            await self._owned(s, tenant_id, session_id)
+            await s.execute(
+                update(m.InterviewSession)
+                .where(
+                    m.InterviewSession.id == session_id,
+                    m.InterviewSession.tenant_id == tenant_id,
+                )
+                .values(
+                    input_tokens=m.InterviewSession.input_tokens + usage.input_tokens,
+                    output_tokens=m.InterviewSession.output_tokens + usage.output_tokens,
+                    thought_tokens=m.InterviewSession.thought_tokens + usage.thought_tokens,
+                    cost_usd=m.InterviewSession.cost_usd + cost_usd,
+                )
+            )
+
     # -- turns, ICP versions, feedback -----------------------------------------------------
 
     async def add_turn(

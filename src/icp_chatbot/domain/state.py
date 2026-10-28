@@ -207,6 +207,10 @@ def rename_slot_items(items: list) -> list:
 class SessionState(BaseModel):
     track: Track = "sales"  # sessions saved before tracks existed are Sales sessions
     step: Literal["profile", "chat"] = "chat"  # older sessions were already in the chat
+    # step 1 as given, so step 3 can start in a later request or another process
+    signup: dict[str, str | None] = Field(default_factory=dict)
+    # step 2 as last submitted, so a form sent back as incomplete comes back filled in
+    profile_answers: dict[str, list[str]] = Field(default_factory=dict)
     mode: Literal["quick", "detail"] = "quick"
     domain: DomainContext | None = None
     slots: dict[str, SlotValue] = Field(default_factory=dict)

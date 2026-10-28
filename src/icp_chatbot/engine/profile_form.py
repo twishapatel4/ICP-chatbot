@@ -258,6 +258,19 @@ def validate_profile(track: Track, answers: Any) -> list[str]:
     return problems
 
 
+def clean_answers(track: Track, answers: Any) -> dict[str, list[str]]:
+    """The answers worth keeping for a form that comes back: the track's card slots only, as
+    cleaned text, within the value limits. Malformed answers are dropped, never raised on."""
+    answers = _as_dict(answers)
+    out: dict[str, list[str]] = {}
+    for card in profile_cards(track):
+        for field in card.fields:
+            values = [v for v in _answer(answers, field) or [] if len(v) <= MAX_VALUE_CHARS]
+            if values:
+                out[field.slot] = values[:MAX_VALUES]
+    return out
+
+
 def apply_profile(state: SessionState, answers: Any, turn_no: int = 0) -> list[str]:
     """Seed the session with the step 2 answers. Returns the slot keys written."""
     problems = validate_profile(state.track, answers)

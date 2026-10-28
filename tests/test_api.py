@@ -32,45 +32,76 @@ def q(text):
     return QuestionOutput(question=text)
 
 
+# A valid step 2 for a B2B seller that pins nothing down: every card answered "Any", so the
+# chat still gathers the specifics the way it did before step 2 existed.
+SALES_B2B_PROFILE = {
+    "business_model": ["B2B"],
+    "industries": ["Any"],
+    "company_size": ["Any"],
+    "lead_geographies": ["Any"],
+    "company_hq_geographies": ["Any"],
+    "buyer_seniority": ["Any"],
+    "buyer_departments": ["Any"],
+}
+
+
 class World:
-    def __init__(self, app, client, llm):
-        self.app, self.client, self.llm = app, client, llm
+    def __init__(self, app, client, llm, db=None):
+        self.app, self.client, self.llm, self.db = app, client, llm, db
         self.repo = app.state.container.repo
 
     async def call(self, method, url, tenant="tenant-1", **kw):
         headers = {"X-Tenant-Id": tenant} if tenant else {}
         return await self.client.request(method, url, headers=headers, **kw)
 
-    async def start(self, **body):
-        self.llm.queue("opener", q("What do you sell, and to whom?"))
+    async def create(self, **body):
+        """Step 1 only: the session exists and waits for the step 2 form."""
         response = await self.call(
             "POST", "/sessions", json={"company_name": "Acme", "role": "CTO", **body}
         )
         assert response.status_code == 201, response.text
         return response.json()
 
+    async def start(self, profile=None, **body):
+        """Steps 1 and 2: returns the first chat turn, as POST /sessions did before step 2."""
+        created = await self.create(**body)
+        self.llm.queue("opener", q("What do you sell, and to whom?"))
+        response = await self.call(
+            "POST",
+            f"/sessions/{created['session_id']}/profile",
+            json={"answers": SALES_B2B_PROFILE if profile is None else profile},
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
 
 @pytest.fixture
 async def world():
-    async def build(**settings):
-        db = make_engine("sqlite+aiosqlite:///:memory:")
-        await init_models(db)
+    async def build(db=None, fetcher=None, **settings):
+        fresh = db is None
+        if fresh:
+            db = make_engine("sqlite+aiosqlite:///:memory:")
+            await init_models(db)
         llm = FakeLLM({}, Usage(100, 10, 0, 0))
         app = create_app(
             Settings(_env_file=None, **settings),
             llm=llm,
-            fetcher=NoFetcher(),
+            fetcher=fetcher or NoFetcher(),
             db_engine=db,
         )
         client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
-        built.append((client, db))
-        return World(app, client, llm)
+        w = World(app, client, llm, db)
+        built.append((w, fresh))
+        return w
 
     built = []
     yield build
-    for client, db in built:
-        await client.aclose()
-        await db.dispose()
+    for w, _ in built:  # website reads still running in the background finish first
+        await w.app.state.container.engine.drain()
+    for w, fresh in built:
+        await w.client.aclose()
+        if fresh:
+            await w.db.dispose()
 
 
 async def run_to_completion(w):

@@ -10,16 +10,20 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from icp_chatbot.api.schemas import (
     AnswerRequest,
+    CardOut,
     FormFieldOut,
     FormRequest,
     ICPResponse,
+    OptionOut,
+    ProfileRequest,
     ProgressOut,
     QuestionOut,
+    SessionCreated,
     SessionView,
     StartRequest,
     TranscribeResponse,
@@ -27,15 +31,18 @@ from icp_chatbot.api.schemas import (
     VerdictRequest,
 )
 from icp_chatbot.config import Settings, get_settings
-from icp_chatbot.domain.signup import SignupInfo
+from icp_chatbot.domain.slots import Track
 from icp_chatbot.engine.fallback import apply_form, fallback_form, missing_required
 from icp_chatbot.engine.interview import (
     InterviewEngine,
     InvalidAnswer,
+    InvalidProfile,
     InvalidTransition,
+    ProfileNotSubmitted,
     SessionClosed,
 )
 from icp_chatbot.engine.planner import enough_for_icp, interview_progress
+from icp_chatbot.engine.profile_form import profile_cards
 from icp_chatbot.engine.questions import Question
 from icp_chatbot.engine.transcribe import normalize_mime, transcribe
 from icp_chatbot.enrichment.fetcher import SafeFetcher
@@ -44,6 +51,7 @@ from icp_chatbot.icp.builder import build_icp
 from icp_chatbot.icp.document import ICPDocument
 from icp_chatbot.icp.review import Edit, apply_edit, approve, carry_over_edits
 from icp_chatbot.limits import BudgetExceeded, BudgetGuard, RateLimiter
+from icp_chatbot.linkedin.catalog import FACETS, default_catalog
 from icp_chatbot.llm.factory import make_llm
 from icp_chatbot.llm.types import LLM, LLMError
 from icp_chatbot.store.db import init_models, make_engine, make_session_factory
@@ -51,6 +59,7 @@ from icp_chatbot.store.models import utcnow
 from icp_chatbot.store.repo import Conflict, NotFound, Repo
 
 TENANT_ID = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+SHUTDOWN_READ_WAIT_S = 5.0  # website reads still running at shutdown get this long to finish
 
 
 @dataclass
@@ -88,6 +97,7 @@ def create_app(
         if settings.auto_create_tables:
             await init_models(db_engine)
         yield
+        await engine.drain(timeout=SHUTDOWN_READ_WAIT_S)
         await db_engine.dispose()
 
     app = FastAPI(title="ICP chatbot", lifespan=lifespan)
@@ -100,6 +110,13 @@ def create_app(
 
     app.add_exception_handler(NotFound, lambda r, e: problem(404, "not_found"))
     app.add_exception_handler(SessionClosed, lambda r, e: problem(409, "session_closed"))
+    app.add_exception_handler(ProfileNotSubmitted, lambda r, e: problem(409, "profile_incomplete"))
+    app.add_exception_handler(  # the same body as the fallback form's 422
+        InvalidProfile,
+        lambda r, e: JSONResponse(
+            status_code=422, content={"detail": {"missing_required": e.missing}}
+        ),
+    )
     app.add_exception_handler(InvalidTransition, lambda r, e: problem(409, f"not_allowed: {e}"))
     app.add_exception_handler(Conflict, lambda r, e: problem(409, "conflict"))
     app.add_exception_handler(InvalidAnswer, lambda r, e: problem(422, f"invalid_answer: {e}"))
@@ -119,18 +136,51 @@ def create_app(
     def c(request: Request) -> Container:
         return request.app.state.container
 
+    def cards(track: Track) -> list[CardOut]:
+        return [CardOut.of(card, track) for card in profile_cards(track)]
+
     # -- routes ------------------------------------------------------------------------------------
 
     @app.get("/health")
     async def health():
         return {"status": "ok"}
 
-    @app.post("/sessions", status_code=201, response_model=TurnResponse)
+    @app.post("/sessions", status_code=201, response_model=SessionCreated)
     async def start(
         body: StartRequest, tenant_id: str = Depends(tenant), ct: Container = Depends(c)
     ):
-        result = await ct.engine.start(tenant_id, SignupInfo(**body.model_dump()))
-        return TurnResponse.of(result)
+        """Step 1: the session and the step 2 cards. The first question comes from /profile."""
+        session_id = await ct.engine.create(tenant_id, body.signup(), body.track)
+        return SessionCreated(
+            session_id=session_id, step="profile", track=body.track, cards=cards(body.track)
+        )
+
+    @app.get("/profile-form", response_model=list[CardOut])
+    async def profile_form(track: Track = "sales", tenant_id: str = Depends(tenant)):
+        return cards(track)
+
+    @app.get("/options/{facet}", response_model=list[OptionOut])
+    async def options(
+        facet: str,
+        q: str = Query("", max_length=100),
+        limit: int = Query(500, ge=1, le=1000),
+        tenant_id: str = Depends(tenant),
+    ):
+        """A facet's LinkedIn options, matching q if given, in catalog order otherwise. A facet
+        whose catalog is not in place yet has none."""
+        if facet not in FACETS:
+            raise HTTPException(404, "unknown_facet")
+        return [OptionOut.of(o) for o in default_catalog().search(facet, q, limit)]
+
+    @app.post("/sessions/{session_id}/profile", response_model=TurnResponse)
+    async def profile(
+        session_id: str,
+        body: ProfileRequest,
+        tenant_id: str = Depends(tenant),
+        ct: Container = Depends(c),
+    ):
+        """Step 2: the cards are checked and seed the session, then the chat begins."""
+        return TurnResponse.of(await ct.engine.begin_chat(tenant_id, session_id, body.answers))
 
     @app.post("/sessions/{session_id}/answers", response_model=TurnResponse)
     async def answer(
@@ -164,6 +214,8 @@ def create_app(
         if not audio:
             raise HTTPException(422, "empty_audio")
         record = await ct.repo.get_session(tenant_id, session_id)  # 404 for another tenant's
+        if record.state.step == "profile":
+            raise ProfileNotSubmitted()
         if record.status != "active":
             raise SessionClosed()
         try:
@@ -204,6 +256,7 @@ def create_app(
                     state.pending_multi,
                 )
             )
+        in_profile = state.step == "profile"  # resuming lands on step 2, filled in as left
         return SessionView(
             session_id=session_id,
             status=record.status,
@@ -213,11 +266,15 @@ def create_app(
             stop_reason=state.stop_reason,
             has_icp=await ct.repo.latest_icp(tenant_id, session_id) is not None,
             progress=ProgressOut.of(interview_progress(state)),
+            step=state.step,
+            track=state.track,
+            cards=cards(state.track) if in_profile else None,
+            answers=dict(state.profile_answers) if in_profile else None,
         )
 
     @app.get("/fallback-form", response_model=list[FormFieldOut])
-    async def form(tenant_id: str = Depends(tenant)):
-        return [FormFieldOut.of(f) for f in fallback_form()]
+    async def form(track: Track = "sales", tenant_id: str = Depends(tenant)):
+        return [FormFieldOut.of(f) for f in fallback_form(track)]
 
     @app.post("/sessions/{session_id}/fallback", response_model=TurnResponse)
     async def submit_form(
@@ -238,6 +295,7 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
         state.finished, state.stop_reason = True, "form_submitted"
+        state.step = "chat"  # a form sent instead of step 2 covers it too
         state.pending_question, state.pending_kind, state.pending_slot = "", "", None
         await ct.repo.save_state(
             tenant_id, session_id, state, expected_version=record.row_version, status="completed"
@@ -251,6 +309,8 @@ def create_app(
     @app.post("/sessions/{session_id}/icp", response_model=ICPResponse)
     async def build(session_id: str, tenant_id: str = Depends(tenant), ct: Container = Depends(c)):
         record = await ct.repo.get_session(tenant_id, session_id)
+        if record.state.step == "profile":
+            raise ProfileNotSubmitted()
         if record.status != "completed":
             raise HTTPException(409, "not_ready")
         # too little to go on still gets a profile: the user asked to stop, so show what they gave

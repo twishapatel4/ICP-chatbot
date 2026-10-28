@@ -9,17 +9,19 @@ All state lives in the database. Each call reads the session, does its work, and
 optimistic version check, so two answers submitted at once cannot both be applied.
 """
 
+import asyncio
 import dataclasses
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 
 from icp_chatbot.config import Settings
 from icp_chatbot.domain.signup import SignupInfo
+from icp_chatbot.domain.slots import Track, slot_map
 from icp_chatbot.domain.state import SessionState, SlotSource, SlotValue, TurnPair
 from icp_chatbot.engine.extraction import (
     DomainUpdate,
@@ -35,6 +37,7 @@ from icp_chatbot.engine.planner import (
     interview_progress,
     missing_core_slots,
 )
+from icp_chatbot.engine.profile_form import apply_profile, clean_answers, validate_profile
 from icp_chatbot.engine.questions import (
     Question,
     clean_options,
@@ -44,7 +47,7 @@ from icp_chatbot.engine.questions import (
 from icp_chatbot.engine.style import recent_openings, style_problem
 from icp_chatbot.enrichment.service import EnrichmentOutcome, website_for
 from icp_chatbot.llm.types import LLM, LLMError, StepConfig, Usage
-from icp_chatbot.store.repo import Repo
+from icp_chatbot.store.repo import Conflict, Repo
 from icp_chatbot.versions import ConfigVersionData, default_config
 
 log = logging.getLogger(__name__)
@@ -78,6 +81,18 @@ class InvalidAnswer(Exception):
 
 class InvalidTransition(Exception):
     """The requested change is not allowed in the session's current state."""
+
+
+class ProfileNotSubmitted(Exception):
+    """The chat was asked for before the step 2 profile cards were submitted."""
+
+
+class InvalidProfile(Exception):
+    """The step 2 answers are missing or invalid for these slot keys."""
+
+    def __init__(self, missing: list[str]):
+        super().__init__(", ".join(missing))
+        self.missing = list(missing)
 
 
 class Guard(Protocol):
@@ -210,6 +225,7 @@ class InterviewEngine:
         self._enrichment = enrichment
         self._settings = settings
         self._guard = guard or NullGuard()
+        self._reads: dict[str, asyncio.Task] = {}  # session id -> website read still running
         self._caps = Caps(
             quick_cap=settings.quick_mode_question_cap,
             detail_total_cap=settings.detail_mode_total_cap,
@@ -232,7 +248,7 @@ class InterviewEngine:
     def _labels(session_id: str, turn: int, version: int) -> dict[str, str]:
         return {"session_id": session_id, "turn": str(turn), "config_version": str(version)}
 
-    # -- start -----------------------------------------------------------------------------
+    # -- start: step 1 creates the session, step 2 starts the chat ----------------------------
 
     async def _cached_enrichment(self, signup: SignupInfo) -> EnrichmentOutcome | None:
         """An earlier read of the same website, so the site is not fetched and paid for again."""
@@ -254,13 +270,36 @@ class InterviewEngine:
             detail="cached",
         )
 
+    async def create(self, tenant_id: str, signup: SignupInfo, track: Track = "sales") -> str:
+        """Step 1: the session, waiting for the step 2 cards. The website is read in the
+        background meanwhile. Returns the session id."""
+        return await self._create(tenant_id, signup, track, background=True)
+
+    async def begin_chat(self, tenant_id: str, session_id: str, answers: Any) -> TurnResult:
+        """Step 2 submitted: check the cards, seed the session from them and ask the first chat
+        question. Raises InvalidProfile (with the slot keys) when a shown card is incomplete."""
+        return await self._begin(tenant_id, session_id, answers, validate=True)
+
     async def start(self, tenant_id: str, signup: SignupInfo) -> TurnResult:
+        """Step 1 and the chat in one call, without the step 2 cards: a Sales session that goes
+        straight to the opener, as before steps existed. Used by the eval runner and the CLIs."""
+        session_id = await self._create(tenant_id, signup, "sales", background=False)
+        return await self._begin(tenant_id, session_id, None, validate=False)
+
+    async def _create(
+        self, tenant_id: str, signup: SignupInfo, track: Track, *, background: bool
+    ) -> str:
         await self._guard.check_start(tenant_id)
         await self._repo.ensure_tenant(tenant_id, signup.company_name)
         config = await self.ensure_live_config()
 
-        state = SessionState(speaker_role=(signup.role or "").strip()[:100])
-        if signup.website:
+        state = SessionState(
+            track=track,
+            step="profile",
+            signup=signup.stored(),
+            speaker_role=(signup.role or "").strip()[:100],
+        )
+        if signup.website and "online_presence" in slot_map(track):
             state.slots["online_presence"] = SlotValue(
                 values=[signup.website],
                 confidence=0.9,
@@ -269,26 +308,42 @@ class InterviewEngine:
                 evidence="given at signup",
             )
         session_id = await self._repo.create_session(tenant_id, config.version, state)
+        if background:
+            task = asyncio.create_task(self._background_read(tenant_id, session_id, signup, config))
+            self._reads[session_id] = task
+            task.add_done_callback(lambda _: self._reads.pop(session_id, None))
+        return session_id
+
+    async def _begin(
+        self, tenant_id: str, session_id: str, answers: Any, *, validate: bool
+    ) -> TurnResult:
+        record = await self._repo.get_session(tenant_id, session_id)
+        if record.status != "active":
+            raise SessionClosed(record.status)
+        state = record.state
+        if state.step != "profile":
+            raise InvalidTransition("the profile was already submitted")
+        if validate:
+            submitted = clean_answers(state.track, answers)
+            missing = validate_profile(state.track, answers)
+            if missing:
+                await self._keep_answers(tenant_id, session_id, record, submitted)
+                raise InvalidProfile(missing)
+            apply_profile(state, answers)
+            state.profile_answers = submitted
+
+        config = await self._repo.get_config(record.config_version)
         labels = self._labels(session_id, 0, config.version)
         spend = _Spend()
-
-        enrichment = await self._cached_enrichment(signup)
-        if enrichment is None:
-            enrichment = await self._enrichment.run(signup, config, labels)
-        spend.add(enrichment.usage, enrichment.cost_usd)
+        signup = SignupInfo.from_stored(state.signup)
+        enrichment = await self._site_read(tenant_id, session_id, signup, config, spend)
         state.seed = dict(enrichment.seed)
+        standard = slot_map(state.track)
         for key, value in enrichment.seed.items():
-            state.slots.setdefault(key, value)  # never overrides something the user stated
-        await self._repo.save_enrichment(
-            tenant_id,
-            session_id,
-            website=enrichment.website,
-            pages=enrichment.pages,
-            outcome=enrichment.status,
-            seed={k: v.model_dump(mode="json") for k, v in enrichment.seed.items()},
-            duration_ms=enrichment.duration_ms,
-            usage=enrichment.usage,
-        )
+            # never overrides something the user stated; an HR session takes nothing, as the
+            # website describes the employer, not the people to hire
+            if key in standard:
+                state.slots.setdefault(key, value)
 
         opener = await generate_opener(
             self._llm,
@@ -299,15 +354,120 @@ class InterviewEngine:
             site_unread=bool(website_for(signup)) and not enrichment.seed,
         )
         spend.add(opener.usage, opener.cost_usd, fallback=opener.used_fallback)
+        state.step = "chat"
         state.questions_asked = 1
         state.pending_question = opener.question.text
         state.pending_kind = "opener"
         state.pending_slot = None
         state.pending_options, state.pending_multi = [], True
         await self._repo.save_state(
-            tenant_id, session_id, state, expected_version=1, usage=spend.usage, cost_usd=spend.cost
-        )
+            tenant_id, session_id, state, expected_version=record.row_version,
+            usage=spend.usage, cost_usd=spend.cost,
+        )  # fmt: skip
         return self._result(session_id, state, "active", opener.question, notice=spend.degraded)
+
+    async def _keep_answers(self, tenant_id: str, session_id: str, record, answers) -> None:
+        """Save an incomplete step 2 so the form comes back filled in. Best effort: when another
+        request saved the session first, its answers stand."""
+        if answers == record.state.profile_answers:
+            return
+        record.state.profile_answers = answers
+        try:
+            await self._repo.save_state(
+                tenant_id, session_id, record.state, expected_version=record.row_version
+            )
+        except Conflict:
+            log.info("step 2 answers for session %s not kept: saved by another request", session_id)
+
+    # -- the website read --------------------------------------------------------------------
+
+    async def _read_site(
+        self, tenant_id: str, session_id: str, signup: SignupInfo, config: ConfigVersionData
+    ) -> EnrichmentOutcome:
+        """Read the website (or reuse an earlier read of the same site) and record the run."""
+        enrichment = await self._cached_enrichment(signup)
+        if enrichment is None:
+            labels = self._labels(session_id, 0, config.version)
+            enrichment = await self._enrichment.run(signup, config, labels)
+        await self._repo.save_enrichment(
+            tenant_id,
+            session_id,
+            website=enrichment.website,
+            pages=enrichment.pages,
+            outcome=enrichment.status,
+            seed={k: v.model_dump(mode="json") for k, v in enrichment.seed.items()},
+            duration_ms=enrichment.duration_ms,
+            usage=enrichment.usage,
+        )
+        return enrichment
+
+    async def _background_read(
+        self, tenant_id: str, session_id: str, signup: SignupInfo, config: ConfigVersionData
+    ) -> EnrichmentOutcome | None:
+        """The read started at step 1. Its spend is counted on the session as soon as it is
+        made. Never raises: a failed read only means the chat starts without the website."""
+        try:
+            outcome = await self._read_site(tenant_id, session_id, signup, config)
+        except Exception:
+            log.exception("website read failed for session %s", session_id)
+            return None
+        if outcome.usage != Usage() or outcome.cost_usd:
+            try:
+                await self._repo.add_usage(
+                    tenant_id, session_id, usage=outcome.usage, cost_usd=outcome.cost_usd
+                )
+            except Exception:
+                log.exception("website read spend not counted for session %s", session_id)
+        return outcome
+
+    async def _saved_read(self, tenant_id: str, session_id: str) -> EnrichmentOutcome | None:
+        """A read recorded for this session by an earlier request, possibly in another process."""
+        runs = await self._repo.list_enrichment(tenant_id, session_id)
+        if not runs:
+            return None
+        run = runs[-1]
+        return EnrichmentOutcome(
+            run.outcome,
+            website=run.website,
+            pages=list(run.pages),
+            seed={k: SlotValue.model_validate(v) for k, v in run.seed.items()},
+            detail="saved",
+        )
+
+    async def _site_read(
+        self, tenant_id: str, session_id: str, signup: SignupInfo, config, spend: _Spend
+    ) -> EnrichmentOutcome:
+        """The session's website read, paid for once: the background read from step 1 (waited
+        for at most the read's own time limit), else one an earlier process saved (it may have
+        restarted since step 1), else a new read now."""
+        task = self._reads.get(session_id)
+        if task is not None:
+            # wait() neither raises nor cancels: a slow read goes on and is saved for the record
+            done, _ = await asyncio.wait({task}, timeout=self._settings.enrichment_timeout_seconds)
+            outcome = task.result() if task in done and not task.cancelled() else None
+            if outcome is None:
+                log.warning("website read for %s not ready: chat starts without it", session_id)
+                outcome = EnrichmentOutcome(
+                    "failed", website=website_for(signup), detail="not ready"
+                )
+            return outcome
+        saved = await self._saved_read(tenant_id, session_id)
+        if saved is not None:
+            return saved
+        outcome = await self._read_site(tenant_id, session_id, signup, config)
+        spend.add(outcome.usage, outcome.cost_usd)
+        return outcome
+
+    async def drain(self, timeout: float | None = None) -> None:
+        """Wait for website reads still running in the background (at shutdown, and in tests).
+        Reads not done within the timeout are cancelled: step 2 reads the site itself then."""
+        tasks = list(self._reads.values())
+        if not tasks:
+            return
+        _, pending = await asyncio.wait(tasks, timeout=timeout)
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
 
     # -- answer ----------------------------------------------------------------------------
 
@@ -432,9 +592,17 @@ class InterviewEngine:
             return usable
         raise LLMError("invalid_output", problem)
 
+    @staticmethod
+    def _require_chat(record) -> None:
+        """Chat calls are refused until step 2 is submitted (sessions from before steps existed
+        load as already in the chat)."""
+        if record.state.step == "profile":
+            raise ProfileNotSubmitted()
+
     async def answer(self, tenant_id: str, session_id: str, text: str) -> TurnResult:
         text = self._validate(text)
         record = await self._repo.get_session(tenant_id, session_id)
+        self._require_chat(record)
         if record.status != "active":
             raise SessionClosed(record.status)
         return await self._run(tenant_id, session_id, record, text)
@@ -615,6 +783,7 @@ class InterviewEngine:
 
     async def finish(self, tenant_id: str, session_id: str) -> TurnResult:
         record = await self._repo.get_session(tenant_id, session_id)
+        self._require_chat(record)
         if record.status != "active":
             raise SessionClosed(record.status)
         state = record.state
@@ -628,6 +797,7 @@ class InterviewEngine:
 
     async def request_detail(self, tenant_id: str, session_id: str) -> TurnResult:
         record = await self._repo.get_session(tenant_id, session_id)
+        self._require_chat(record)
         state = record.state
         if record.status != "completed":
             raise InvalidTransition("detail mode is offered after the first ICP is complete")
@@ -648,6 +818,7 @@ class InterviewEngine:
         rebuilt after."""
         text = self._validate(text)
         record = await self._repo.get_session(tenant_id, session_id)
+        self._require_chat(record)
         if record.status != "completed":
             raise InvalidTransition("changes are asked for after the first ICP is complete")
         state = record.state

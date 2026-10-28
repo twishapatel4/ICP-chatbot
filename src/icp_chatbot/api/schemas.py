@@ -1,15 +1,24 @@
 """Request and response bodies of the HTTP API."""
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
+from icp_chatbot.domain.signup import SignupInfo
+from icp_chatbot.domain.slots import Track, slot_map
 from icp_chatbot.engine.fallback import FormField
 from icp_chatbot.engine.interview import TurnResult
 from icp_chatbot.engine.planner import Progress
+from icp_chatbot.engine.profile_form import Card, CardField
 from icp_chatbot.engine.questions import Question
 from icp_chatbot.icp.document import ICPDocument
+from icp_chatbot.linkedin.catalog import Option, default_catalog
 
 
 class StartRequest(BaseModel):
+    """Step 1. A missing track means Sales; the free-text role is still accepted."""
+
+    track: Track = "sales"
     company_name: str = Field(min_length=1, max_length=200)
     website: str | None = Field(default=None, max_length=500)
     email: str | None = Field(default=None, max_length=200)
@@ -17,6 +26,81 @@ class StartRequest(BaseModel):
     industry: str | None = Field(default=None, max_length=100)
     company_size: str | None = Field(default=None, max_length=50)
     source: str | None = Field(default=None, max_length=100)
+
+    def signup(self) -> SignupInfo:
+        return SignupInfo(**self.model_dump(exclude={"track"}))
+
+
+class ProfileRequest(BaseModel):
+    """Step 2: slot key -> chosen values. Checked by the engine, which names any bad slot
+    rather than rejecting the whole body."""
+
+    answers: dict[str, Any] = Field(default_factory=dict)
+
+
+class FieldOut(BaseModel):
+    slot: str
+    label: str
+    input: str  # single, multi, chips, range or geo
+    facet: str | None  # options come from GET /options/{facet}
+    optional: bool
+    any_allowed: bool  # "Any" may be picked, on its own
+    choices: list[str]  # the fixed choices of a field without a facet
+    # the registry's skip rules: hidden while that slot is unanswered or holds that value
+    depends_on: list[list[str]]
+
+    @classmethod
+    def of(cls, field: CardField, track: Track) -> "FieldOut":
+        slot = slot_map(track)[field.slot]
+        return cls(
+            slot=field.slot,
+            label=slot.label,
+            input=field.input,
+            facet=field.facet,
+            optional=field.optional,
+            any_allowed=field.any_allowed,
+            choices=[] if field.facet else list(slot.choices),
+            depends_on=[[key, value] for key, value in slot.skip_if],
+        )
+
+
+class CardOut(BaseModel):
+    id: str
+    title: str
+    required: bool
+    available: bool  # false while a catalog it needs is missing: the form leaves it out
+    fields: list[FieldOut]
+
+    @classmethod
+    def of(cls, card: Card, track: Track) -> "CardOut":
+        catalog = default_catalog()
+        return cls(
+            id=card.id,
+            title=card.title,
+            required=card.required,
+            available=all(catalog.has(facet) for facet in card.requires_catalog),
+            fields=[FieldOut.of(f, track) for f in card.fields],
+        )
+
+
+class OptionOut(BaseModel):
+    id: str
+    label: str
+    level: int
+    parent: str | None
+
+    @classmethod
+    def of(cls, option: Option) -> "OptionOut":
+        return cls(id=option.id, label=option.label, level=option.level, parent=option.parent)
+
+
+class SessionCreated(BaseModel):
+    """Step 1 done: the session waits for the step 2 cards."""
+
+    session_id: str
+    step: str
+    track: Track
+    cards: list[CardOut]
 
 
 class AnswerRequest(BaseModel):
@@ -99,6 +183,10 @@ class SessionView(BaseModel):
     stop_reason: str | None = None
     has_icp: bool = False
     progress: ProgressOut = ProgressOut(percent=0, known=0, total=0)
+    step: str = "chat"  # profile: step 2 not yet submitted
+    track: Track = "sales"
+    cards: list[CardOut] | None = None  # while step is profile
+    answers: dict[str, list[str]] | None = None  # while step is profile: the last submitted
 
 
 class FormFieldOut(BaseModel):
