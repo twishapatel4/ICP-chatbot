@@ -23,8 +23,8 @@
 @layer base {
   /* glassy look: a flat white frosted panel on a soft grey page, hairline borders, ink accents */
   :root {
-    --page: #f2f2f3; --frame: #fcfcfc; --panel: #fff;
-    --fade: rgba(252, 252, 252, .96); --card: #f8f8f8;
+    --page: #fff; --frame: #fff; --panel: #fff;
+    --fade: rgba(255, 255, 255, .96); --card: #f8f8f8;
     --bot-grad: linear-gradient(135deg, #ffffff 0%, #eef0fb 100%);
     --user-grad: linear-gradient(135deg, #3a3e4a 0%, #14161b 100%);
     --text: #1b1c20; --muted: #5f636c; --line: rgba(20, 24, 31, .07);

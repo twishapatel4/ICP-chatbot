@@ -127,6 +127,7 @@ export default function Composer({ disabled, sessionId, hasPicks = false, onSend
       <div className={promptBox}>
         <textarea
           className={promptInput}
+          data-answer-box
           ref={ref}
           rows={1}
           maxLength={MAX_CHARS}

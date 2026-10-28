@@ -119,10 +119,16 @@ export default function App() {
     setMessages((m) => [...m, { id: nextId.current++, role, text }]);
   }, []);
 
+  // bot replies that have finished typing out; the options under a reply wait for it
+  const [typed, setTyped] = useState<Set<number>>(new Set());
+  const markTyped = useCallback((id: number) => setTyped((t) => (t.has(id) ? t : new Set(t).add(id))), []);
+  const lastBot = [...messages].reverse().find((m) => m.role === "bot");
+  const replyTyped = !lastBot || lastBot.id < firstNewId.current || typed.has(lastBot.id);
+
   useEffect(() => {
     // the bottom of the page, not of the log: the composer is sticky and would cover the last message
     window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
-  }, [messages, stage, icp, options]);
+  }, [messages, stage, icp, options, replyTyped]);
 
   useEffect(() => {
     const snap: Snapshot = { stage, messages, options, multi, picked, sessionId, form, missing, icp, icpAfter, approved, revising, progress };
@@ -263,7 +269,7 @@ export default function App() {
     // The clicked option keeps keyboard focus, so Enter would press it again and un-select it.
     // After a mouse or touch pick, focus goes back to the answer box, where Enter sends.
     // A keyboard pick keeps its focus so the next option can be reached with Tab.
-    if (byPointer) document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
+    if (byPointer) document.querySelector<HTMLTextAreaElement>("[data-answer-box]")?.focus();
   };
 
   const submitForm = (answers: Record<string, string[]>) =>
@@ -432,7 +438,7 @@ export default function App() {
               {m.role === "note" && stage === "building" && i === messages.length - 1 ? (
                 <TextShimmer>{m.text}</TextShimmer>
               ) : m.role === "bot" && m.id >= firstNewId.current ? (
-                <Typewriter text={m.text} />
+                <Typewriter text={m.text} onDone={() => markTyped(m.id)} />
               ) : (
                 m.text
               )}
@@ -442,7 +448,7 @@ export default function App() {
         ))}
         {!messages.some((m) => m.id === icpAfter) && profile}
 
-        {options.length > 0 && (
+        {options.length > 0 && replyTyped && (
           <div className="flex flex-col items-end gap-2">
             <div className={chips} role="group" aria-label={multi ? "Select all that apply" : "Pick one"}>
               {options.map((o) => (
