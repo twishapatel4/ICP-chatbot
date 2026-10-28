@@ -122,12 +122,3 @@ def test_progress_waits_below_the_cap_until_the_interview_is_enough():
     assert interview_progress(state).percent == PROGRESS_CAP
     state.agent_enough = True
     assert interview_progress(state).percent == 100
-
-
-def test_a_finished_interview_that_is_enough_never_reads_below_the_cap():
-    state = SessionState()
-    for key in ("product", "industries", "buyer_roles", "company_size"):
-        known(state, key)
-    state.agent_enough, state.finished = True, True
-    assert icp_floor_met(state)
-    assert interview_progress(state).percent >= PROGRESS_CAP

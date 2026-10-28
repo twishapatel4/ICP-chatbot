@@ -13,6 +13,7 @@ import TextShimmer from "./components/TextShimmer";
 import TextEffect from "./components/TextEffect";
 import ThemeToggle from "./components/ThemeToggle";
 import type { FormField, IcpResponse, Progress, StartRequest, Turn } from "./types";
+import { app, chip, chipOn, chips, column, gutter, header, pillInput, promptActions, promptBox, promptInput, roundBtn, sendBtn } from "./ui";
 
 type Stage = "home" | "interview" | "fallback" | "building" | "done";
 interface Message {
@@ -29,6 +30,14 @@ const INTRO_EXTRAS: [IntroKey, string][] = [
 ];
 
 const BUILD_NOTE = "Building your ICP. This can take a minute...";
+
+const MSG = "max-w-[min(82%,1100px)] rounded-[22px] whitespace-pre-wrap [overflow-wrap:anywhere] ";
+const MSG_CLASS: Record<Message["role"], string> = {
+  bot: `${MSG}py-3 px-[18px] bg-(image:--bot-grad) self-start rounded-bl-[8px] border border-line shadow-soft`,
+  me: `${MSG}py-3 px-[18px] bg-(image:--user-grad) text-user-text self-end rounded-br-[8px] shadow-soft`,
+  note: `${MSG}p-0 self-center text-muted text-[12px]`,
+  error: `${MSG}p-0 self-center text-warn text-[13px]`,
+};
 
 const NO_PROGRESS: Progress = { percent: 0, known: 0, total: 0 };
 
@@ -87,7 +96,7 @@ function explain(e: unknown): string {
 
 export default function App() {
   const [saved] = useState(loadSnapshot);
-  const [stage, setStage] = useState<Stage>((saved?.stage as string) === "signup" ? "home" : (saved?.stage ?? "home"));
+  const [stage, setStage] = useState<Stage>(["signup", "starting"].includes(saved?.stage as string) ? "home" : (saved?.stage ?? "home"));
   const [messages, setMessages] = useState<Message[]>(saved?.messages ?? []);
   const [options, setOptions] = useState<string[]>(saved?.options ?? []);
   const [multi, setMulti] = useState(saved?.multi ?? true);
@@ -101,6 +110,7 @@ export default function App() {
   const [approved, setApproved] = useState(saved?.approved ?? false);
   const [revising, setRevising] = useState(saved?.revising ?? false);
   const [progress, setProgress] = useState<Progress>(saved?.progress ?? NO_PROGRESS);
+  const [startError, setStartError] = useState("");
   const [intro, setIntro] = useState<Record<IntroKey, string>>({ company_name: "", website: "", industry: "", role: "" });
   const nextId = useRef(Math.max(0, ...(saved?.messages ?? []).map((m) => m.id)) + 1);
   const firstNewId = useRef(nextId.current); // messages restored after a reload show at once, not typed out
@@ -225,8 +235,14 @@ export default function App() {
 
   const start = (body: StartRequest) =>
     guarded(async () => {
-      push("me", body.website ? `${body.company_name} (${body.website})` : body.company_name);
-      await handleTurn(await api.startSession(body));
+      // the welcome screen stays up, showing it is working, until the first question arrives: the
+      // chat then opens with that question, not with an echo of what was typed
+      setStartError("");
+      try {
+        await handleTurn(await api.startSession(body));
+      } catch (e) {
+        setStartError(explain(e));
+      }
     });
 
   // Picked chips and typed text go out as one answer.
@@ -286,64 +302,72 @@ export default function App() {
 
   if (stage === "home") {
     return (
-      <main className="app home">
-        <header>
-          <div className="head-left" />
+      <main className={app}>
+        <header className={header}>
+          <div className="flex items-center gap-2.5" />
           <ThemeToggle />
         </header>
-        <div className="home-body">
-          <span className="logo">
+        <div className="flex-1 flex flex-col items-center justify-center text-center gap-0 px-[clamp(16px,4vw,48px)] pt-0 pb-10">
+          <span className="inline-flex items-center justify-center size-16 rounded-full bg-panel shadow-[0_10px_28px_rgba(20,24,31,.1),0_0_0_1px_var(--line)]">
             <Icon name="sparkle" size={26} />
           </span>
-          <h1>
+          <h1 className="mt-[26px] mx-0 mb-0 text-[clamp(26px,3.4vw,34px)] leading-[1.15] font-medium tracking-[-.025em]">
             <TextEffect preset="fade-in-blur" speedReveal={1.4}>Build your</TextEffect>{" "}
-            <TextEffect preset="fade-in-blur" speedReveal={1.4} delay={0.25} className="muted">Ideal Customer Profile</TextEffect>
+            <TextEffect preset="fade-in-blur" speedReveal={1.4} delay={0.25} className="text-muted">Ideal Customer Profile</TextEffect>
           </h1>
-          <p>A short conversation about your business. At the end you get an ICP and a scoring model you can review and approve.</p>
-          <div className="steps">
+          <p className="text-muted text-[14px] max-w-[520px] mt-[10px] mx-0 mb-0">A short conversation about your business. At the end you get an ICP and a scoring model you can review and approve.</p>
+          <div className="grid grid-cols-3 gap-[18px] mt-11 w-full max-w-[1000px] text-left max-[820px]:grid-cols-1">
             {STEPS.map((step) => (
-              <div className="step" key={step.title}>
-                <span className="step-icon">
+              <div className="flex flex-col bg-card border border-line rounded-[28px] p-[18px] shadow-soft" key={step.title}>
+                <span className="inline-flex size-11 items-center justify-center rounded-[14px] bg-panel shadow-[0_0_0_1px_var(--line),0_1px_2px_rgba(20,24,31,.05)]">
                   <Icon name={step.icon} size={22} />
                 </span>
-                <h3>{step.title}</h3>
-                <p>{step.text}</p>
-                <span className="step-tag">{step.tag}</span>
+                <h3 className="mt-[22px] mx-0 mb-[10px] text-[17px] font-semibold tracking-[-.015em] leading-[1.2]">{step.title}</h3>
+                <p className="mt-0 mx-0 mb-[18px] text-[13px] leading-[1.55] text-muted max-w-none flex-1">{step.text}</p>
+                <span className="block text-center py-[11px] px-3 rounded-full bg-panel border border-line text-[13px] font-semibold">{step.tag}</span>
               </div>
             ))}
           </div>
           <form
-            className="home-composer"
+            className="w-full max-w-[1000px] mt-14"
             onSubmit={(e) => {
               e.preventDefault();
               const body: Record<string, string> = {};
               for (const [k, v] of Object.entries(intro)) if (v.trim()) body[k] = v.trim();
               if (!body.company_name || busy) return;
-              newChat();
               void start(body as unknown as StartRequest);
             }}
           >
-            <div className="prompt-box">
+            <div className={promptBox}>
               <input
+                className={promptInput}
                 type="text"
                 maxLength={200}
+                disabled={busy}
                 autoFocus
                 placeholder="Your company name"
                 aria-label="Company name"
                 value={intro.company_name}
                 onChange={(e) => setIntro({ ...intro, company_name: e.target.value })}
               />
-              <div className="prompt-actions">
-                <button className="send" type="submit" aria-label="Start" title="Start" disabled={!intro.company_name.trim()}>
+              <div className={promptActions}>
+                <button className={`${roundBtn} ${sendBtn}`} type="submit" aria-label="Start" title="Start" disabled={busy || !intro.company_name.trim()}>
                   <Icon name="arrowUp" size={18} />
                 </button>
               </div>
             </div>
-            <div className="intro-extras">
+            {startError && (
+              <p className="mt-3 mx-0 mb-0 text-warn text-[14px] text-center" role="alert">
+                {startError}
+              </p>
+            )}
+            <div className="grid grid-cols-3 gap-3 mt-3 max-[720px]:grid-cols-1">
               {INTRO_EXTRAS.map(([k, label]) => (
                 <input
+                  className={`${pillInput} py-3 px-5 shadow-soft placeholder:text-muted`}
                   key={k}
                   type="text"
+                  disabled={busy}
                   maxLength={200}
                   placeholder={label}
                   aria-label={label}
@@ -352,6 +376,12 @@ export default function App() {
                 />
               ))}
             </div>
+            {busy && (
+              <div className="flex items-center justify-center gap-2 mt-4 text-[16px] text-muted" role="status">
+                <BotAvatar type="star" state="working" size={34} aria-hidden="true" />
+                <TextShimmer>AI is generating your first question...</TextShimmer>
+              </div>
+            )}
           </form>
         </div>
       </main>
@@ -371,18 +401,18 @@ export default function App() {
         onNewChat={newChat}
       />
     ) : (
-      <details className="previous">
-        <summary>Show the current profile (being updated)</summary>
+      <details className="my-2">
+        <summary className="cursor-pointer text-ink text-[16px] font-medium py-1.5 hover:text-muted">Show the current profile (being updated)</summary>
         <IcpView icp={icp} approved={approved} busy readOnly onApprove={approve} onImprove={improve} onNewChat={newChat} />
       </details>
     )
   ) : null;
 
   return (
-    <main className="app">
+    <main className={app}>
       <ScrollProgress />
-      <header>
-        <div className="head-left">
+      <header className={header}>
+        <div className="flex items-center gap-2.5">
           <h1 className="sr-only">ICP Chatbot</h1>
           <button onClick={newChat} disabled={busy}>
             <Icon name="plus" size={18} /> New chat
@@ -395,10 +425,10 @@ export default function App() {
         <ProgressBar progress={progress} building={stage === "building"} done={stage === "done"} />
       )}
 
-      <div className="log" aria-live="polite">
+      <div className={`${column} flex-1 flex flex-col gap-3 pt-2 pb-[18px] ${gutter}`} aria-live="polite">
         {messages.map((m, i) => (
           <Fragment key={m.id}>
-            <InView className={`msg ${m.role}`}>
+            <InView className={MSG_CLASS[m.role]}>
               {m.role === "note" && stage === "building" && i === messages.length - 1 ? (
                 <TextShimmer>{m.text}</TextShimmer>
               ) : m.role === "bot" && m.id >= firstNewId.current ? (
@@ -413,12 +443,12 @@ export default function App() {
         {!messages.some((m) => m.id === icpAfter) && profile}
 
         {options.length > 0 && (
-          <div className="chips-wrap">
-            <div className="chips" role="group" aria-label={multi ? "Select all that apply" : "Pick one"}>
+          <div className="flex flex-col items-end gap-2">
+            <div className={chips} role="group" aria-label={multi ? "Select all that apply" : "Pick one"}>
               {options.map((o) => (
                 <button
                   key={o}
-                  className={picked.includes(o) ? "on" : ""}
+                  className={`${chip} ${picked.includes(o) ? chipOn : ""}`}
                   aria-pressed={multi ? picked.includes(o) : undefined}
                   disabled={busy}
                   onClick={(e) => choose(o, e.detail > 0)}
@@ -428,11 +458,11 @@ export default function App() {
                 </button>
               ))}
             </div>
-            {multi && <span className="hint">Select all that apply, then press Send. You can also type your own below.</span>}
+            {multi && <span className="text-right text-[12px] text-muted">Select all that apply, then press Send. You can also type your own below.</span>}
           </div>
         )}
 
-        {busy && stage !== "building" && <div className="msg note thinking">
+        {busy && stage !== "building" && <div className={`${MSG}p-0 self-start flex items-center gap-2 text-[16px] text-muted`}>
             <BotAvatar type="star" state="working" size={34} aria-hidden="true" />
             <TextShimmer>Thinking...</TextShimmer>
           </div>}
