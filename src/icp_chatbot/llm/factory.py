@@ -1,6 +1,7 @@
 """Build the SDK client and the adapter from settings."""
 
 import inspect
+import json
 
 from google import genai
 from google.genai import types
@@ -32,7 +33,15 @@ def make_client(settings: Settings):
     params = inspect.signature(genai.Client.__init__).parameters
     flag = "enterprise" if "enterprise" in params else "vertexai"
     extra = {}
-    if settings.google_application_credentials:
+    if settings.google_credentials_json:
+        try:
+            extra["credentials"] = service_account.Credentials.from_service_account_info(
+                json.loads(settings.google_credentials_json),
+                scopes=["https://www.googleapis.com/auth/cloud-platform"],
+            )
+        except ValueError as exc:  # json.JSONDecodeError is a ValueError
+            raise LLMError("config", f"cannot read GOOGLE_CREDENTIALS_JSON: {exc}") from exc
+    elif settings.google_application_credentials:
         # The .env file is read into Settings, not into the process environment, so the Google
         # libraries would not see GOOGLE_APPLICATION_CREDENTIALS from it: load the file here.
         try:

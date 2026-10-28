@@ -1,3 +1,24 @@
+[project]
+# Runtime dependencies, read by Vercel. Keep in step with requirements.txt.
+name = "icp-chatbot"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.143.1",
+    "uvicorn[standard]==0.54.0",
+    "pydantic==2.14.1",
+    "pydantic-settings==2.16.0",
+    "SQLAlchemy[asyncio]==2.1.4",
+    "alembic==1.20.0",
+    "psycopg[binary]==3.3.6",
+    "google-genai==2.31.0",
+    "httpx==0.28.1",
+    "beautifulsoup4==4.15.0",
+]
+
+[tool.uv]
+package = false  # install the dependencies only; the code runs from src/
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]

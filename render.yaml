@@ -1,4 +1,4 @@
-# Render Blueprint: backend (free web service) + frontend (free static site).
+# Render Blueprint: backend only (free web service). Frontend is on Vercel (frontend/vercel.json).
 # Postgres lives on Neon (free, no expiry), not on Render. See docs/DEPLOY.md.
 services:
   - type: web
@@ -29,19 +29,3 @@ services:
         sync: false
       - key: GOOGLE_CLOUD_PROJECT # your GCP project ID
         sync: false
-
-  - type: web
-    name: icp-chatbot-ui
-    runtime: static
-    rootDir: frontend
-    buildCommand: npm ci && npm run build
-    staticPublishPath: dist
-    routes:
-      # Frontend calls /api/*; forward to the backend (no CORS needed).
-      # If the API URL differs (name taken), edit it here.
-      - type: rewrite
-        source: /api/*
-        destination: https://icp-chatbot-api.onrender.com/*
-      - type: rewrite
-        source: /*
-        destination: /index.html

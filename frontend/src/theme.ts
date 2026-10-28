@@ -1,4 +1,4 @@
-// Light or dark. Until the user picks one, the system setting decides (see styles.css).
+// Light or dark. Until the user picks one, the system setting decides (see index.css).
 export type Theme = "light" | "dark";
 
 const KEY = "icp.theme";

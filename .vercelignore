@@ -1,0 +1,7 @@
+.venv
+.playwright-mcp
+tests
+docs
+reports
+research_notes
+eval_cases

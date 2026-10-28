@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     google_cloud_project: str = ""
     google_application_credentials: str = ""  # service-account JSON file; else the default login
+    google_credentials_json: str = ""  # the same key as JSON text, for hosts with no file storage
     google_cloud_location: str = "global"  # spec decision D3: global endpoint for now
 
     # Model per step (spec section 3).

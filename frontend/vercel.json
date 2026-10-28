@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://icp-chatbot.vercel.app/:path*" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
+}

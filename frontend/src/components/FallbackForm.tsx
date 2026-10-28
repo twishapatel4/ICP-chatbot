@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FormField } from "../types";
+import { actions, card, chip, chipOn, chips, pillInput, primaryBtn } from "../ui";
 
 interface Props {
   fields: FormField[];
@@ -30,14 +31,15 @@ export default function FallbackForm({ fields, disabled, missing, onSubmit }: Pr
   }
 
   return (
-    <form className="card" onSubmit={submit}>
+    <form className={card} onSubmit={submit}>
       {fields.map((f) => (
-        <div key={f.key} className={missing.includes(f.key) ? "field missing" : "field"}>
-          <label>
+        <div key={f.key}>
+          <label className={`block text-[12px] font-medium ${missing.includes(f.key) ? "text-warn" : "text-muted"}`}>
             {f.label}
             {f.required ? " *" : ""}
             {f.choices.length === 0 && (
               <input
+                className={`${pillInput} block w-full mt-1.5 py-3 px-[18px]`}
                 type="text"
                 disabled={disabled}
                 value={answers[f.key]?.[0] ?? ""}
@@ -46,13 +48,13 @@ export default function FallbackForm({ fields, disabled, missing, onSubmit }: Pr
             )}
           </label>
           {f.choices.length > 0 && (
-            <div className="chips">
+            <div className={chips}>
               {f.choices.map((c) => (
                 <button
                   type="button"
                   key={c}
                   disabled={disabled}
-                  className={answers[f.key]?.includes(c) ? "on" : ""}
+                  className={`${chip} ${answers[f.key]?.includes(c) ? chipOn : ""}`}
                   onClick={() => toggle(f.key, c)}
                 >
                   {c}
@@ -62,8 +64,8 @@ export default function FallbackForm({ fields, disabled, missing, onSubmit }: Pr
           )}
         </div>
       ))}
-      <div className="actions">
-        <button className="primary" type="submit" disabled={disabled}>
+      <div className={actions}>
+        <button className={primaryBtn} type="submit" disabled={disabled}>
           Submit
         </button>
       </div>
