@@ -192,3 +192,24 @@ async def test_open_questions_that_repeat_a_disqualifier_or_each_other_are_dropp
     result = await build_icp(FakeLLM({"final_icp": [synthesis]}), CONFIG, state, today=TODAY)
     model_notes = [n for n in result.document.open_questions if not n.startswith(("Not yet", "Please confirm"))]
     assert model_notes == ["Which port do they ship from?"]
+
+
+async def test_builder_emits_hr_scoring_model_for_hr_state():
+    state = SessionState(track="hr")
+    state.slots.update(
+        {
+            "target_functions": slot(["Engineering"]),
+            "required_skills": slot(["Python"]),
+            "years_experience": slot(["3-8"]),
+        }
+    )
+    result = await build_icp(FakeLLM({"final_icp": [LLMError("x", "y")]}), CONFIG, state, today=TODAY)
+    model = result.document.scoring_model
+    assert [c.key for c in model.criteria] == [
+        "role_fit", "experience_fit", "skills_fit", "education_fit", "location_fit",
+        "background_fit",
+    ]  # fmt: skip
+    assert {c.key for c in model.criteria if c.applicable} == {
+        "role_fit", "experience_fit", "skills_fit"
+    }
+    assert validate_model(model, track="hr") == []

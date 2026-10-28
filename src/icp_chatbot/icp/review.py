@@ -8,6 +8,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
+from icp_chatbot.domain.slots import Track
 from icp_chatbot.domain.state import SlotSource, normalize_values
 from icp_chatbot.icp.document import (
     FieldEntry,
@@ -133,9 +134,11 @@ def apply_edit(
     ]
 
 
-def approve(document: ICPDocument, today: date) -> tuple[ICPDocument, list[FeedbackSpec]]:
+def approve(
+    document: ICPDocument, today: date, track: Track = "sales"
+) -> tuple[ICPDocument, list[FeedbackSpec]]:
     """Approval verifies every field as of today. The scoring model must be valid."""
-    problems = validate_model(document.scoring_model)
+    problems = validate_model(document.scoring_model, track)
     if problems:
         raise ValueError("; ".join(problems))
     sections = {

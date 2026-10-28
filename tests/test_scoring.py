@@ -261,3 +261,115 @@ def test_refresh_model_updates_rules_but_keeps_the_users_choices():
 def test_model_round_trips_through_json():
     model = default_scoring_model(FULL)
     assert ScoringModel.model_validate_json(model.model_dump_json()) == model
+
+
+# -- HR track -------------------------------------------------------------------------------------
+
+
+def _hr_model(values, **kw):
+    return default_scoring_model(values, track="hr", **kw)
+
+
+def _crit(model, key):
+    return next(c for c in model.criteria if c.key == key)
+
+
+def test_hr_default_weights_sum_to_100_and_use_the_six_criteria():
+    model = _hr_model({})
+    assert [(c.key, c.weight) for c in model.criteria] == [
+        ("role_fit", 25.0), ("experience_fit", 20.0), ("skills_fit", 20.0),
+        ("education_fit", 15.0), ("location_fit", 10.0), ("background_fit", 10.0),
+    ]  # fmt: skip
+    assert sum(c.weight for c in model.criteria) == 100.0
+    assert _crit(model, "education_fit").reads == [
+        "education_level", "field_of_study", "graduation_year"
+    ]
+    assert validate_model(model, track="hr") == []
+
+
+def test_fresher_profile_scores_without_experience_and_background():
+    model = _hr_model(
+        {
+            "target_functions": ["Engineering"],
+            "required_skills": ["Python"],
+            "education_level": ["Bachelor's"],
+            "candidate_locations": ["India"],
+        }
+    )
+    assert not _crit(model, "experience_fit").applicable
+    assert not _crit(model, "background_fit").applicable
+    lead = {
+        "target_functions": ["Engineering"],
+        "required_skills": ["Python"],
+        "education_level": ["Bachelor's"],
+        "candidate_locations": ["Germany"],
+    }
+    result = score_lead(model, lead)
+    # role 25 + skills 20 + education 15 score 1, location 10 scores 0; 60 of 70 applicable weight
+    assert result.score == pytest.approx(100 * 60 / 70, abs=1e-3)
+    assert set(result.breakdown) == {"role_fit", "skills_fit", "education_fit", "location_fit"}
+    assert result.completeness == 1.0
+
+
+def test_years_experience_range_parses_3_dash_8_and_3_plus():
+    rule = build_rule("years_experience", ["3-8"])
+    assert rule.kind == "range" and (rule.min, rule.max) == (3, 8)
+    model = _hr_model({"years_experience": ["3-8"]})
+    assert score_lead(model, {"years_experience": ["6"]}).breakdown["experience_fit"] == 1.0
+    assert score_lead(model, {"years_experience": ["1"]}).breakdown["experience_fit"] == 0.0
+    open_rule = build_rule("years_experience", ["3+"])
+    assert open_rule.min == 3 and open_rule.max is None
+
+
+def test_graduation_year_far_outside_range_scores_zero():
+    rule = build_rule("graduation_year", ["2024-2026"])
+    assert rule.tolerance == 0.001
+    assert range_match(2015, rule) == 0.0
+    assert range_match(2027, rule) == 0.5
+    assert range_match(2025, rule) == 1.0
+    assert build_rule("company_size", ["50-500"]).tolerance == 0.2
+
+
+def test_any_answer_builds_no_rule():
+    assert build_rule("industries", ["Any"]) is None
+    assert build_rule("candidate_locations", ["Any"]) is None
+    sales = default_scoring_model({"industries": ["Any"]})
+    assert not _crit(sales, "industry_fit").applicable
+    hr = _hr_model({"candidate_locations": ["Any"]})
+    assert not _crit(hr, "location_fit").applicable
+
+
+def test_hr_candidate_scores_skills_by_loose_match():
+    model = _hr_model({"required_skills": ["Python"]})
+    result = score_lead(model, {"required_skills": ["Python, Django"]})
+    assert result.breakdown["skills_fit"] == 1.0 and result.score == 100.0
+
+
+def test_validate_model_uses_the_tracks_registry():
+    model = _hr_model({"required_skills": ["Python"]})
+    assert validate_model(model, track="hr") == []
+    problems = validate_model(model, track="sales")
+    assert any("skills_fit reads unknown slot required_skills" in p for p in problems)
+
+
+def test_hr_disqualifier_on_candidate_location():
+    d = make_disqualifier("candidate_locations", "in", ["Germany"])
+    assert d is not None
+    assert make_disqualifier("current_industries", "in", ["Banking"]) is not None
+    assert make_disqualifier("current_company_size", "lt", ["50"]) is not None
+    model = _hr_model({"required_skills": ["Python"]}, disqualifiers=[d])
+    assert validate_model(model, track="hr") == []
+    result = score_lead(model, {"candidate_locations": ["Berlin, Germany"]})
+    assert not result.qualified and result.score == 0.0
+    assert result.disqualified_by is not None
+    assert score_lead(model, {"candidate_locations": ["India"]}).disqualified_by is None
+
+
+def test_required_hr_criterion_failing_makes_candidate_unqualified():
+    model = set_requirement(
+        _hr_model({"required_skills": ["Python"], "target_functions": ["Engineering"]}),
+        "skills_fit",
+        "required",
+    )
+    result = score_lead(model, {"required_skills": ["Java"], "target_functions": ["Engineering"]})
+    assert not result.qualified and result.failed_required == ["skills_fit"]

@@ -189,7 +189,7 @@ async def build_icp(
 
     shell = ICPDocument(
         sections={},
-        scoring_model=default_scoring_model({}),
+        scoring_model=default_scoring_model({}, track=state.track),
         completeness=compute_completeness({}),
         custom_fields=list(state.domain.fields) if state.domain else [],
         not_needed=list(state.domain.not_needed) if state.domain else [],
@@ -200,7 +200,7 @@ async def build_icp(
     document = shell.model_copy(
         update={
             "sections": group_by_section(entries, shell.slot_defs()),
-            "scoring_model": default_scoring_model(slot_values, disqualifiers),
+            "scoring_model": default_scoring_model(slot_values, disqualifiers, track=state.track),
             "summary": render_summary(entries, shell.slot_defs()),
             "completeness": compute_completeness(entries, needed),
             "open_questions": open_questions,

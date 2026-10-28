@@ -15,6 +15,7 @@ from icp_chatbot.domain.slots import (
     with_custom,
 )
 
+ANY = "Any"  # the answer "no preference": the slot builds no scoring rule
 SEED_CONFIDENCE_CAP = 0.5  # inferred values never exceed this until the user confirms them
 CONFIRMED_CONFIDENCE = 0.9  # confidence once the user confirms a value
 

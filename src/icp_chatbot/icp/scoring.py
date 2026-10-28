@@ -14,17 +14,38 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from icp_chatbot.domain.slots import SLOTS
+from icp_chatbot.domain.slots import Track, slot_map
+from icp_chatbot.domain.state import ANY
 
-RANGE_SLOTS = frozenset({"company_size"})
+RANGE_SLOTS = frozenset(
+    {"company_size", "years_experience", "current_company_size", "graduation_year"}
+)
+# A graduation year one off is half a match, further off is none.
+RANGE_TOLERANCE: dict[str, float] = {"graduation_year": 0.001}
+DEFAULT_TOLERANCE = 0.2
+
+Criteria = tuple[tuple[str, str, float, tuple[str, ...]], ...]
 
 # (key, label, default weight, slots read). Illustrative defaults; users edit them.
-CRITERIA_DEFS: tuple[tuple[str, str, float, tuple[str, ...]], ...] = (
+SALES_CRITERIA: Criteria = (
     ("industry_fit", "Industry fit", 35.0, ("industries", "customer_segments")),
     ("company_size", "Company size", 25.0, ("company_size",)),
     ("buying_signals", "Buying signals", 15.0, ("buying_triggers",)),
     ("geographic_fit", "Geographic fit", 25.0, ("lead_geographies", "company_hq_geographies")),
 )
+HR_CRITERIA: Criteria = (
+    ("role_fit", "Role fit", 25.0, ("target_functions", "target_roles")),
+    ("experience_fit", "Experience fit", 20.0, ("years_experience",)),
+    ("skills_fit", "Skills fit", 20.0, ("required_skills",)),
+    (
+        "education_fit", "Education fit", 15.0,
+        ("education_level", "field_of_study", "graduation_year"),
+    ),
+    ("location_fit", "Location fit", 10.0, ("candidate_locations",)),
+    ("background_fit", "Background fit", 10.0, ("current_industries", "current_company_size")),
+)  # fmt: skip
+CRITERIA_BY_TRACK: dict[Track, Criteria] = {"sales": SALES_CRITERIA, "hr": HR_CRITERIA}
+CRITERIA_DEFS = SALES_CRITERIA  # kept for callers that predate tracks
 WEIGHT_TOTAL = 100.0
 EPSILON = 1e-6
 
@@ -146,14 +167,19 @@ def _slot_score(rule: MatchRule, lead_values: list[str]) -> float | None:
 
 def build_rule(slot_key: str, values: list[str]) -> MatchRule | None:
     values = [v for v in values if v.strip()]
-    if not values:
+    if not values or any(v.strip().lower() == ANY.lower() for v in values):
         return None
     if slot_key in RANGE_SLOTS:
         ranges = [r for r in (parse_range(v) for v in values) if r]
         if ranges:
             lo = None if any(r[0] is None for r in ranges) else min(r[0] for r in ranges)
             hi = None if any(r[1] is None for r in ranges) else max(r[1] for r in ranges)
-            return MatchRule(kind="range", min=lo, max=hi)
+            return MatchRule(
+                kind="range",
+                min=lo,
+                max=hi,
+                tolerance=RANGE_TOLERANCE.get(slot_key, DEFAULT_TOLERANCE),
+            )
     return MatchRule(kind="list", primary=values)
 
 
@@ -167,10 +193,12 @@ def _rules_for(reads: tuple[str, ...] | list[str], slot_values: dict[str, list[s
 
 
 def default_scoring_model(
-    slot_values: dict[str, list[str]], disqualifiers: list[Disqualifier] | None = None
+    slot_values: dict[str, list[str]],
+    disqualifiers: list[Disqualifier] | None = None,
+    track: Track = "sales",
 ) -> ScoringModel:
     criteria = []
-    for key, label, weight, reads in CRITERIA_DEFS:
+    for key, label, weight, reads in CRITERIA_BY_TRACK[track]:
         rules = _rules_for(reads, slot_values)
         criteria.append(
             Criterion(
@@ -226,7 +254,7 @@ def set_requirement(model: ScoringModel, key: str, requirement: str) -> ScoringM
 DISQUALIFIER_FIELDS = frozenset(
     {
         "industries", "lead_geographies", "company_hq_geographies", "company_size",
-        "company_type",
+        "company_type", "candidate_locations", "current_industries", "current_company_size",
     }
 )  # fmt: skip
 
@@ -243,8 +271,9 @@ def make_disqualifier(field_name: str, operator: str, values: list[str]) -> Disq
     return Disqualifier(field=field_name, operator=operator, values=values)
 
 
-def validate_model(model: ScoringModel) -> list[str]:
+def validate_model(model: ScoringModel, track: Track = "sales") -> list[str]:
     """Problems that make the model unusable; an empty list means it is valid."""
+    known_slots = slot_map(track)
     errors: list[str] = []
     keys = [c.key for c in model.criteria]
     if len(keys) != len(set(keys)):
@@ -254,7 +283,7 @@ def validate_model(model: ScoringModel) -> list[str]:
         errors.append(f"weights sum to {total:g}, not {WEIGHT_TOTAL:g}")
     for c in model.criteria:
         for slot in c.reads:
-            if slot not in SLOTS:
+            if slot not in known_slots:
                 errors.append(f"{c.key} reads unknown slot {slot}")
         for slot, rule in c.rules.items():
             if slot not in c.reads:
@@ -267,7 +296,7 @@ def validate_model(model: ScoringModel) -> list[str]:
                 elif rule.min is not None and rule.max is not None and rule.min > rule.max:
                     errors.append(f"{c.key}/{slot}: minimum is above maximum")
     for d in model.disqualifiers:
-        if d.field not in SLOTS:
+        if d.field not in known_slots:
             errors.append(f"disqualifier names unknown field {d.field}")
         if not d.values:
             errors.append(f"disqualifier on {d.field} has no values")
