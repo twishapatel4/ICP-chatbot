@@ -56,7 +56,7 @@ def test_seniority_has_10_and_function_35():
     assert len(cat.options("seniority")) == 10
     assert len(cat.options("function")) == 35
     assert cat.resolve("function", "sale").label == "Sales"
-    assert cat.resolve("seniority", "VP").label == "Vice President (VP)"
+    assert cat.resolve("seniority", "vp").label == "Vice President (VP)"
 
 
 def test_every_db_country_code_resolves():
@@ -66,7 +66,7 @@ def test_every_db_country_code_resolves():
             assert cat.resolve("country", code) is None
         else:
             assert cat.resolve("country", code) is not None, code
-    assert cat.resolve("country", "in").label == "India"
+    assert cat.resolve("country", "IN").label == "India"
 
 
 def test_search_is_case_insensitive_and_limited():
@@ -85,3 +85,15 @@ def test_missing_degree_catalog_reports_has_false(tmp_path):
     assert set(FACETS) >= set(SLOT_FACETS.values())
     (tmp_path / "degrees.json").write_text(json.dumps([{"id": "1", "label": "BSc"}]))
     assert OptionCatalog(tmp_path).has("degree")
+
+
+def test_ids_match_exact_case_but_labels_and_aliases_do_not():
+    cat = default_catalog()
+    assert cat.resolve("country", "IN").label == "India"
+    assert cat.resolve("country", "in") is None
+    assert cat.resolve("country", "No") is None
+    assert cat.resolve("country", "india").label == "India"
+    assert cat.resolve("country", "  INDIA ").label == "India"
+    assert cat.resolve("company_size", "B").label == "1-10"
+    assert cat.resolve("company_size", "b") is None
+    assert cat.resolve("company_size", "2-10").label == "1-10"

@@ -99,6 +99,7 @@ def resolve_slot_values(
     labels: list[str] = []
     refs: list[OptionRef] = []
     unmapped: list[str] = []
+    seen_refs: set[tuple[str, str]] = set()
     for value in values:
         if value == ANY:
             labels.append(value)
@@ -110,8 +111,10 @@ def resolve_slot_values(
                 unmapped.append(value)
             continue
         labels.append(opt.label)
-        refs.append(OptionRef(facet=facet, id=opt.id, level=opt.level, parent=opt.parent))
-    return normalize_values(labels), refs, unmapped
+        if (facet, opt.id) not in seen_refs:
+            seen_refs.add((facet, opt.id))
+            refs.append(OptionRef(facet=facet, id=opt.id, level=opt.level, parent=opt.parent))
+    return normalize_values(labels), refs, normalize_values(unmapped)
 
 
 class SlotValue(BaseModel):

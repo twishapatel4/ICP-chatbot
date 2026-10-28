@@ -71,6 +71,7 @@ class OptionCatalog:
     def __init__(self, data_dir: Path = DATA_DIR) -> None:
         self._options: dict[str, list[Option]] = {}
         self._lookup: dict[str, dict[str, Option]] = {}
+        self._by_id: dict[str, dict[str, Option]] = {}
         for facet, filename in _FILES.items():
             path = data_dir / filename
             if not path.exists():
@@ -80,9 +81,10 @@ class OptionCatalog:
             self._options[facet] = opts
             lookup: dict[str, Option] = {}
             for opt in opts:
-                for key in (opt.label, opt.id, *opt.match):
+                for key in (opt.label, *opt.match):
                     lookup.setdefault(_norm(key), opt)
             self._lookup[facet] = lookup
+            self._by_id[facet] = {opt.id: opt for opt in opts}
 
     @staticmethod
     def _build(facet: str, row: dict) -> Option:
@@ -115,7 +117,10 @@ class OptionCatalog:
         return (starts + rest)[:limit]
 
     def resolve(self, facet: str, text: str) -> Option | None:
-        return self._lookup.get(facet, {}).get(_norm(text))
+        """Labels and match aliases match case-insensitively; ids match exactly ("IN", not "in"),
+        so short free text such as "in" or "no" is not read as a code."""
+        found = self._lookup.get(facet, {}).get(_norm(text))
+        return found or self._by_id.get(facet, {}).get(str(text).strip())
 
 
 @lru_cache(maxsize=1)

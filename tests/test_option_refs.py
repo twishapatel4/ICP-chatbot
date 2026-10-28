@@ -58,7 +58,7 @@ def test_old_slot_value_without_refs_loads():
 def test_country_resolves_and_cities_are_free_text():
     labels, refs, unmapped = resolve_slot_values("lead_geographies", ["India", "Pune, India", "US"])
     assert labels[0] == "India" and labels[1] == "Pune, India"
-    assert len(refs) == 2 and refs[0].id == "IN"
+    assert [r.id for r in refs] == ["IN", "US"]
     assert unmapped == []
 
 
@@ -78,3 +78,23 @@ def test_extraction_fills_refs_and_unmapped():
     sv = state.slots["industries"]
     assert sv.source == SlotSource.STATED
     assert len(sv.refs) == 1 and sv.unmapped == ["Basket"]
+
+
+def test_aliases_of_one_option_give_one_label_and_one_ref():
+    labels, refs, _ = resolve_slot_values("lead_geographies", ["US", "United States"])
+    assert labels == ["United States"] and [r.id for r in refs] == ["US"]
+    labels, refs, _ = resolve_slot_values("company_size", ["2-10", "1-10"])
+    assert labels == ["1-10"] and [r.id for r in refs] == ["B"]
+
+
+def test_same_unmapped_value_in_two_cases_appears_once():
+    _, _, unmapped = resolve_slot_values("industries", ["Basket", "basket"])
+    assert unmapped == ["Basket"]
+
+
+def test_short_free_text_is_not_a_country_code():
+    labels, refs, unmapped = resolve_slot_values("lead_geographies", ["in", "No", "IN", "india"])
+    assert labels == ["in", "No", "India"]
+    assert [r.id for r in refs] == ["IN"] and unmapped == []
+    assert resolve_slot_values("company_size", ["b"])[1] == []
+    assert resolve_slot_values("company_size", ["B"])[1][0].id == "B"
