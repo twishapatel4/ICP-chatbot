@@ -69,21 +69,19 @@ def test_build_rule_uses_ranges_for_size_and_lists_for_the_rest():
 
 
 FULL = {
-    "industries": ["Fintech"], "company_size": ["50-500"], "revenue_range": ["$1M-$10M"],
-    "pain_points": ["manual payroll"], "budget_range": ["$10k-$50k"], "deal_size": ["$20k"],
-    "tech_stack": ["Salesforce"], "buying_triggers": ["new funding"], "geographies": ["Europe"],
+    "industries": ["Fintech"], "customer_segments": ["SMB"], "company_size": ["50-500"],
+    "buying_triggers": ["new funding"], "geographies": ["Europe"],
 }  # fmt: skip
 PERFECT_LEAD = {
-    "industries": ["Fintech"], "company_size": ["120"], "revenue_range": ["$5M"],
-    "pain_points": ["manual payroll"], "budget_range": ["$30k"], "deal_size": ["$20k"],
-    "tech_stack": ["Salesforce"], "buying_triggers": ["New funding round"], "geographies": ["Europe"],
+    "industries": ["Fintech"], "customer_segments": ["SMB"], "company_size": ["120"],
+    "buying_triggers": ["New funding round"], "geographies": ["Europe"],
 }  # fmt: skip
 
 
 def test_default_model_has_the_spec_weights_and_is_valid():
     model = default_scoring_model(FULL)
     assert [(c.key, c.weight) for c in model.criteria] == [(k, w) for k, _, w, _ in CRITERIA_DEFS]
-    assert [c.weight for c in model.criteria] == [20, 15, 20, 15, 10, 10, 10]
+    assert [c.weight for c in model.criteria] == [35, 25, 15, 25]
     assert sum(c.weight for c in model.criteria) == 100
     assert validate_model(model) == []
     assert all(c.applicable for c in model.criteria)
@@ -100,24 +98,24 @@ def test_a_perfect_lead_scores_100_and_a_poor_one_scores_low():
     perfect = score_lead(model, PERFECT_LEAD)
     assert perfect.score == 100.0 and perfect.qualified and perfect.completeness == 1.0
     poor = score_lead(model, {**PERFECT_LEAD, "industries": ["Retail"], "geographies": ["Asia"]})
-    assert poor.score == pytest.approx(100 - 20 - 10)
+    assert poor.score == pytest.approx(100 - 35 / 2 - 25)  # segments still fit: half of industry_fit
 
 
 def test_unknown_lead_data_drops_the_criterion_and_renormalizes():
     model = default_scoring_model(FULL)
-    lead = {"industries": ["Fintech"], "geographies": ["Europe"]}  # only 20 + 10 weight is known
+    lead = {"industries": ["Fintech"], "geographies": ["Europe"]}  # only 35 + 25 weight is known
     result = score_lead(model, lead)
     assert result.score == 100.0
-    assert result.completeness == pytest.approx(2 / 7)
+    assert result.completeness == pytest.approx(2 / 4)
     half = score_lead(model, {"industries": ["Fintech"], "geographies": ["Asia"]})
-    assert half.score == pytest.approx(100 * 20 / 30)
+    assert half.score == pytest.approx(100 * 35 / 60)
 
 
 def test_partial_slot_data_averages_within_a_criterion():
     model = default_scoring_model(FULL)
-    lead = {"company_size": ["120"], "revenue_range": ["$500M"]}  # size fits, revenue far outside
+    lead = {"industries": ["Fintech"], "customer_segments": ["Enterprise"]}  # one fits, one not
     result = score_lead(model, lead)
-    assert result.breakdown["company_size_revenue"] == 0.5
+    assert result.breakdown["industry_fit"] == 0.5
 
 
 def test_a_lead_with_no_readable_data_scores_zero():
@@ -129,7 +127,7 @@ def test_required_criteria_decide_qualification_not_the_score():
     model = set_requirement(default_scoring_model(FULL), "geographic_fit", "required")
     wrong_place = score_lead(model, {**PERFECT_LEAD, "geographies": ["Asia"]})
     assert not wrong_place.qualified and wrong_place.failed_required == ["geographic_fit"]
-    assert wrong_place.score > 80  # still scored, but not qualified
+    assert wrong_place.score == pytest.approx(75.0)  # still scored, but not qualified
     unknown_place = {k: v for k, v in PERFECT_LEAD.items() if k != "geographies"}
     assert score_lead(model, unknown_place).failed_required == ["geographic_fit"]
     assert score_lead(model, PERFECT_LEAD).qualified
@@ -177,7 +175,7 @@ def test_validate_model_reports_every_kind_of_problem():
         Criterion(key="x", label="x", weight=0, reads=["nope"], rules={
             "industries": MatchRule(kind="list"),
             "company_size": MatchRule(kind="range"),
-            "revenue_range": MatchRule(kind="range", min=5, max=1),
+            "geographies": MatchRule(kind="range", min=5, max=1),
         }),
     ], "disqualifiers": [Disqualifier(field="nope", operator="in", values=[])]})  # fmt: skip
     text = " | ".join(validate_model(broken))
@@ -191,13 +189,13 @@ def test_validate_model_reports_every_kind_of_problem():
 def test_validate_model_reports_weights_that_do_not_sum_to_100():
     model = default_scoring_model(FULL)
     broken = model.model_copy(update={"criteria": model.criteria[:-1]})
-    assert any("weights sum to 90" in e for e in validate_model(broken))
+    assert any("weights sum to 75" in e for e in validate_model(broken))
 
 
 def test_set_weights_requires_a_total_of_100():
     model = default_scoring_model(FULL)
-    updated = set_weights(model, {"industry_fit": 30, "geographic_fit": 0})
-    assert {c.key: c.weight for c in updated.criteria}["industry_fit"] == 30
+    updated = set_weights(model, {"industry_fit": 40, "geographic_fit": 20})
+    assert {c.key: c.weight for c in updated.criteria}["industry_fit"] == 40
     with pytest.raises(ValueError, match="sum to 100"):
         set_weights(model, {"industry_fit": 30})
     with pytest.raises(ValueError, match="unknown"):
@@ -217,7 +215,7 @@ def test_set_requirement_validates_its_input():
 def test_refresh_model_updates_rules_but_keeps_the_users_choices():
     model = default_scoring_model(FULL)
     model = set_requirement(
-        set_weights(model, {"industry_fit": 25, "geographic_fit": 5}), "industry_fit", "required"
+        set_weights(model, {"industry_fit": 45, "geographic_fit": 15}), "industry_fit", "required"
     )
     model = model.model_copy(
         update={
@@ -229,7 +227,7 @@ def test_refresh_model_updates_rules_but_keeps_the_users_choices():
     refreshed = refresh_model(model, {"industries": ["Retail"]})
     industry = next(c for c in refreshed.criteria if c.key == "industry_fit")
     assert industry.rules["industries"].primary == ["Retail"]
-    assert industry.weight == 25 and industry.requirement == "required"
+    assert industry.weight == 45 and industry.requirement == "required"
     assert [c.key for c in refreshed.criteria if c.applicable] == ["industry_fit"]
     assert refreshed.disqualifiers == model.disqualifiers
 

@@ -15,11 +15,11 @@ def entry(values, confidence=0.9, source=SlotSource.STATED):
 
 def test_entries_are_grouped_by_section_in_registry_order_and_empty_ones_dropped():
     entries = {
-        "pain_points": entry(["slow"]), "industries": entry(["Fintech"]),
+        "buyer_roles": entry(["CFO"]), "industries": entry(["Fintech"]),
         "product": entry(["Payroll"]), "geographies": entry([]),
     }  # fmt: skip
     grouped = group_by_section(entries)
-    assert list(grouped) == ["seller_context", "target_firmographics", "problems_and_needs"]
+    assert list(grouped) == ["seller_context", "target_firmographics", "buying_structure"]
     assert list(grouped["target_firmographics"]) == ["industries"]  # empty geographies dropped
 
 
@@ -27,15 +27,14 @@ def test_completeness_counts_known_slots_and_skips_inapplicable_ones():
     nothing = compute_completeness({})
     assert nothing.tier_a == 0.0 and nothing.tier_b == 0.0
     tier_a = [
-        "industries", "company_size", "revenue_range", "geographies", "pain_points",
-        "desired_outcomes", "buyer_roles", "buyer_departments", "disqualifiers",
-        "product",
+        "industries", "company_size", "geographies", "buyer_roles", "buyer_departments",
+        "disqualifiers", "product",
     ]  # fmt: skip
     entries = {k: entry(["x"]) for k in tier_a}
     entries["business_model"] = entry(["B2B"])
     assert compute_completeness(entries).tier_a == 1.0
     entries["industries"] = entry(["x"], confidence=0.5)  # below the 0.7 bar
-    assert compute_completeness(entries).tier_a == round(10 / 11, 4)
+    assert compute_completeness(entries).tier_a == round(7 / 8, 4)
     b2c = {k: entry(["x"]) for k in tier_a if not k.startswith("buyer_")}
     b2c["business_model"] = entry(["B2C"])
     b2c["customer_profile"] = entry(["x"])
@@ -46,26 +45,26 @@ def test_summary_is_built_only_from_the_fields_and_marks_inferences():
     entries = {
         "industries": entry(["Fintech"]),
         "geographies": entry(["Europe"], source=SlotSource.INFERRED, confidence=0.5),
-        "pain_points": entry(["manual payroll", "errors"]),
-        "buyer_roles": entry(["CFO"]),
+        "buyer_departments": entry(["Finance"]),
+        "buyer_roles": entry(["CFO", "COO"]),
     }
     summary = render_summary(entries)
     assert "Target industries: Fintech" in summary
     assert "geographies: Europe (inferred)" in summary
-    assert "Pain points: manual payroll, errors." in summary and "Buyers: CFO." in summary
-    assert "budget" not in summary.lower()  # nothing is invented for missing fields
+    assert "Buyers: CFO, COO; Finance." in summary
+    assert "pain points" not in summary.lower()  # nothing is invented for missing fields
     assert render_summary({}) == ""
 
 
 def test_document_helpers_and_json_round_trip():
-    entries = {"industries": entry(["Fintech"]), "pain_points": entry(["slow"])}
+    entries = {"industries": entry(["Fintech"]), "buyer_roles": entry(["CFO"])}
     document = ICPDocument(
         sections=group_by_section(entries),
         scoring_model=default_scoring_model({"industries": ["Fintech"]}),
         completeness=compute_completeness(entries),
     )
-    assert document.slot_values() == {"industries": ["Fintech"], "pain_points": ["slow"]}
-    assert set(document.entries()) == {"industries", "pain_points"}
+    assert document.slot_values() == {"industries": ["Fintech"], "buyer_roles": ["CFO"]}
+    assert set(document.entries()) == {"industries", "buyer_roles"}
     assert ICPDocument.model_validate_json(document.model_dump_json()) == document
 
 

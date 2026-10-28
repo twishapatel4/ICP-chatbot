@@ -188,10 +188,5 @@ class SessionState(BaseModel):
                 return False
         return True
 
-    def topics_asked(self) -> set[str]:
-        return {
-            SLOTS[k].topic for k in self.asked_slots if k in SLOTS and SLOTS[k].topic is not None
-        }
-
     def push_turn(self, question: str, answer: str) -> None:
         self.last_turns = (self.last_turns + [TurnPair(question=question, answer=answer)])[-2:]

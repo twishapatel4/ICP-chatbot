@@ -158,7 +158,6 @@ def render_summary(entries: dict[str, FieldEntry], defs: list[SlotDef] | None = 
         ("Who they are", "customer_profile"),
         ("Target industries", "industries"),
         ("company size", "company_size"),
-        ("revenue", "revenue_range"),
         ("geographies", "geographies"),
     ]
     own = [s for s in defs or [] if s.section == "industry_specifics" and show(s.key)]
@@ -167,14 +166,8 @@ def render_summary(entries: dict[str, FieldEntry], defs: list[SlotDef] | None = 
     if firm:
         lines.append(f"Ideal customer: {firm}.")
     for label, keys in (
-        ("Pain points", ("pain_points",)),
-        ("Desired outcomes", ("desired_outcomes",)),
         ("Buyers", ("buyer_roles", "buyer_departments")),
-        ("Technology", ("tech_stack", "incumbents", "integration_needs")),
-        ("Commercial", ("budget_range", "deal_size")),
-        ("Process", ("sales_cycle", "procurement", "approvals")),
         ("Buying triggers", ("buying_triggers",)),
-        ("Success looks like", ("success_definition",)),
         ("Exclusions", ("disqualifiers",)),
     ):
         found = [v for k in keys if (v := show(k))]

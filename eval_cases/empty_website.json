@@ -18,9 +18,6 @@
   "expected": {
     "geographies": [
       "US"
-    ],
-    "pain_points": [
-      "content production"
     ]
   },
   "notes": "A website with no usable text gives no seed; the opener falls back."

@@ -118,24 +118,9 @@ def test_no_exclusions_is_a_real_answer_for_disqualifiers():
     assert state.slots["disqualifiers"].values == ["none"]
 
 
-def test_a_pain_point_from_an_off_target_answer_is_not_trusted_as_known():
-    state = SessionState()
-    apply_extraction(
-        state, result(up("pain_points", ["price sensitivity"], 0.9, "haggled on price")), 2,
-        target=None,
-    )  # fmt: skip
-    assert state.slots["pain_points"].confidence == 0.6  # recorded, but below "known" (0.7)
-
-
-def test_a_pain_point_answering_its_own_question_keeps_full_confidence():
-    state = SessionState()
-    apply_extraction(state, result(up("pain_points", ["manual quoting"], 0.9)), 3, "pain_points")
-    assert state.slots["pain_points"].confidence == 0.9
-
-
 def test_other_slots_filled_by_a_broad_answer_keep_their_confidence():
     state = SessionState()
-    apply_extraction(state, result(up("industries", ["Freight"], 0.9)), 2, target=None)
+    apply_extraction(state, result(up("industries", ["Freight"], 0.9)), 2)
     assert state.slots["industries"].confidence == 0.9
 
 

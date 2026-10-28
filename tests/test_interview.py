@@ -383,12 +383,12 @@ async def test_the_conversation_so_far_is_shown_to_the_model_each_turn(world):
 async def test_a_stated_correction_is_applied_without_a_which_is_right_question(world):
     engine, repo, llm, _ = world
     state = known(pending(SessionState(questions_asked=4), "Which industries?"),
-                  revenue_range=["$1M-$10M"])  # fmt: skip
+                  company_size=["11-50"])  # fmt: skip
     sid = await preset(repo, state)
-    llm.queue("interviewer", ask("Which regions?", up("revenue_range", ["<$1M"])))
-    result = await engine.answer(T, sid, "sorry, less than 1M")
+    llm.queue("interviewer", ask("Which regions?", up("company_size", ["1-10"])))
+    result = await engine.answer(T, sid, "sorry, under 10 people")
     record = await repo.get_session(T, sid)
-    assert record.state.slots["revenue_range"].values == ["<$1M"]
+    assert record.state.slots["company_size"].values == ["1-10"]
     assert result.question.text == "Which regions?"
 
 

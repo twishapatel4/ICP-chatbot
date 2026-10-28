@@ -92,7 +92,7 @@ def test_progress_rises_as_must_ask_fields_become_known():
     known(state, "product")
     first = interview_progress(state)
     known(state, "customer_profile")
-    known(state, "pain_points")
+    known(state, "industries")
     second = interview_progress(state)
     assert 0 < first.percent < second.percent
     assert (first.known, second.known) == (1, 3)
@@ -108,7 +108,7 @@ def test_a_guess_counts_part_way_and_a_confirmed_answer_counts_fully():
 def test_a_declined_field_counts_as_settled():
     state = SessionState()
     before = interview_progress(state)
-    state.skipped.append("pain_points")
+    state.skipped.append("industries")
     after = interview_progress(state)
     assert after.percent > before.percent and after.known == before.known + 1
 

@@ -31,8 +31,8 @@ def missing_core_slots(state: SessionState) -> list[SlotDef]:
 
 
 FLOOR_CONFIDENCE = 0.5
-CUSTOMER_KEYS = ("customer_profile", "industries", "company_size", "geographies", "pain_points",
-                 "buyer_roles", "buyer_departments", "desired_outcomes")  # fmt: skip
+CUSTOMER_KEYS = ("customer_profile", "industries", "company_size", "geographies",
+                 "buyer_roles", "buyer_departments")  # fmt: skip
 PRODUCT_SEEN_AFTER = 2  # replies after which a website description of the product counts
 FLOOR_CUSTOMER_FACTS = 3  # what they sell plus this many facts about who buys it
 

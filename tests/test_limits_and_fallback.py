@@ -93,9 +93,8 @@ def test_the_form_asks_every_blocking_tier_a_slot_as_required():
     form = fallback_form()
     required = {f.key for f in form if f.required}
     assert required == {
-        "industries", "company_size", "revenue_range", "geographies", "pain_points",
-        "desired_outcomes", "buyer_roles", "buyer_departments", "disqualifiers",
-        "product", "business_model", "customer_profile",
+        "industries", "company_size", "geographies", "buyer_roles",
+        "buyer_departments", "disqualifiers", "product", "business_model", "customer_profile",
     }  # fmt: skip
     size = next(f for f in form if f.key == "company_size")
     assert "1-10" in size.choices
@@ -107,7 +106,7 @@ def test_missing_required_ignores_inapplicable_and_already_known_fields():
     state.slots["industries"] = SlotValue(values=["x"], confidence=0.9, source=SlotSource.STATED)
     missing = missing_required({"company_size": ["11-50"]}, state)
     assert (
-        "industries" not in missing and "company_size" not in missing and "pain_points" in missing
+        "industries" not in missing and "company_size" not in missing and "geographies" in missing
     )
     state.slots["business_model"] = SlotValue(
         values=["B2C"], confidence=0.9, source=SlotSource.STATED
@@ -117,7 +116,7 @@ def test_missing_required_ignores_inapplicable_and_already_known_fields():
 
 def test_apply_form_records_stated_values_and_rejects_unknown_fields():
     state = SessionState()
-    applied = apply_form(state, {"industries": ["Fintech"], "pain_points": ["  "]}, turn_no=3)
+    applied = apply_form(state, {"industries": ["Fintech"], "disqualifiers": ["  "]}, turn_no=3)
     assert applied == ["industries"]
     value = state.slots["industries"]
     assert (value.confidence, value.source, value.source_turn) == (0.8, SlotSource.STATED, 3)

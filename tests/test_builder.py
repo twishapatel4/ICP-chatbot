@@ -29,7 +29,7 @@ def make_state():
             "industries": slot(["fintech", "banks"], evidence="we sell to banks"),
             "company_size": slot(["50-500"]),
             "geographies": slot(["Europe"], 0.5, SlotSource.INFERRED),
-            "pain_points": slot(["manual payroll"], 0.6, SlotSource.CONFIRMED),
+            "buyer_roles": slot(["CFO"], 0.6, SlotSource.CONFIRMED),
             "disqualifiers": slot(["no government, nothing under 50 people"]),
         }
     )
@@ -39,7 +39,7 @@ def make_state():
 def test_last_verified_is_set_only_for_values_the_user_stated_or_confirmed():
     entries = entries_from_state(make_state(), TODAY)
     assert entries["industries"].last_verified == "2026-10-15"
-    assert entries["pain_points"].last_verified == "2026-10-15"
+    assert entries["buyer_roles"].last_verified == "2026-10-15"
     assert entries["geographies"].last_verified is None  # inferred
 
 
@@ -74,18 +74,18 @@ async def test_synthesis_cleans_values_but_keeps_source_and_confidence():
 async def test_the_model_cannot_add_fields_and_unusable_rules_are_reported():
     synthesis = ICPSynthesis(
         fields=[
-            FieldDraft(slot="budget_range", values=["$1M"]),
+            FieldDraft(slot="buyer_departments", values=["Finance"]),
             FieldDraft(slot="nonsense", values=["x"]),
         ],
         disqualifiers=[DisqualifierDraft(field="favourite_colour", operator="in", values=["blue"])],
     )
     result = await build_icp(FakeLLM({"final_icp": [synthesis]}), CONFIG, make_state(), today=TODAY)
     doc = result.document
-    assert "budget_range" not in doc.entries() and "nonsense" not in doc.entries()
+    assert "buyer_departments" not in doc.entries() and "nonsense" not in doc.entries()
     assert doc.scoring_model.disqualifiers == []
     text = " ".join(doc.open_questions)
     assert "favourite_colour" in text  # an unusable rule is reported
-    assert "budget_range" not in text and "nonsense" not in text  # internal notes stay out
+    assert "buyer_departments" not in text and "nonsense" not in text  # internal notes stay out
 
 
 async def test_empty_cleaned_values_keep_the_original():
@@ -114,7 +114,7 @@ async def test_summary_and_completeness_follow_the_final_fields():
     assert 0.0 < doc.completeness.tier_a < 1.0
     industry = next(c for c in doc.scoring_model.criteria if c.key == "industry_fit")
     assert industry.applicable and industry.rules["industries"].primary == ["fintech", "banks"]
-    size = next(c for c in doc.scoring_model.criteria if c.key == "company_size_revenue")
+    size = next(c for c in doc.scoring_model.criteria if c.key == "company_size")
     assert size.rules["company_size"].min == 50 and size.rules["company_size"].max == 500
 
 
@@ -139,13 +139,13 @@ async def test_still_unclear_lists_the_core_fields_that_are_missing():
 
 async def test_a_low_confidence_or_non_answer_field_is_listed_as_unknown():
     state = SessionState()
-    state.slots["pain_points"] = slot(["price sensitivity"], 0.6)
+    state.slots["industries"] = slot(["Retail"], 0.6)
     state.slots["buyer_roles"] = slot(["none"])
     state.slots["product"] = slot(["flats"])
     state.slots["business_model"] = slot(["B2B"])
     result = await build_icp(FakeLLM({"final_icp": [ICPSynthesis()]}), CONFIG, state, today=TODAY)
     text = " ".join(result.document.open_questions).lower()
-    assert "pain points" in text and "buyer roles" in text
+    assert "target industries" in text and "buyer roles" in text
 
 
 async def test_a_fully_known_core_has_no_missing_notes():
@@ -168,14 +168,14 @@ async def test_added_wording_is_rejected_and_the_recorded_values_are_kept():
 
 
 async def test_a_shown_but_unconfirmed_field_asks_to_confirm_instead_of_saying_unknown():
-    # QA 2026-10-27: about half of all cards said "Not yet known: pain points" right under the
-    # pain points they listed, because the value sat below the known confidence
+    # QA 2026-10-27: about half of all cards said "Not yet known: <field>" right under the
+    # values they listed, because the value sat below the known confidence
     state = SessionState()
-    state.slots["pain_points"] = slot(["price sensitivity"], 0.6)
+    state.slots["industries"] = slot(["Retail"], 0.6)
     result = await build_icp(FakeLLM({"final_icp": [ICPSynthesis()]}), CONFIG, state, today=TODAY)
     notes = result.document.open_questions
-    assert not any(n.lower().startswith("not yet known: pain points") for n in notes)
-    assert any("pain points" in n.lower() and "price sensitivity" in n for n in notes)
+    assert not any(n.lower().startswith("not yet known: target industries") for n in notes)
+    assert any("target industries" in n.lower() and "retail" in n.lower() for n in notes)
 
 
 async def test_open_questions_that_repeat_a_disqualifier_or_each_other_are_dropped():

@@ -16,17 +16,14 @@ from pydantic import BaseModel, Field
 
 from icp_chatbot.domain.slots import SLOTS
 
-RANGE_SLOTS = frozenset({"company_size", "revenue_range", "budget_range", "deal_size"})
+RANGE_SLOTS = frozenset({"company_size"})
 
 # (key, label, default weight, slots read). Illustrative defaults; users edit them.
 CRITERIA_DEFS: tuple[tuple[str, str, float, tuple[str, ...]], ...] = (
-    ("industry_fit", "Industry fit", 20.0, ("industries", "customer_segments")),
-    ("company_size_revenue", "Company size and revenue", 15.0, ("company_size", "revenue_range")),
-    ("pain_alignment", "Pain-point alignment", 20.0, ("pain_points", "desired_outcomes")),
-    ("budget_commercial", "Budget and commercial potential", 15.0, ("budget_range", "deal_size")),
-    ("technology_readiness", "Technology readiness", 10.0, ("tech_stack", "integration_needs")),
-    ("buying_signals", "Buying signals", 10.0, ("buying_triggers",)),
-    ("geographic_fit", "Geographic fit", 10.0, ("geographies",)),
+    ("industry_fit", "Industry fit", 35.0, ("industries", "customer_segments")),
+    ("company_size", "Company size", 25.0, ("company_size",)),
+    ("buying_signals", "Buying signals", 15.0, ("buying_triggers",)),
+    ("geographic_fit", "Geographic fit", 25.0, ("geographies",)),
 )
 WEIGHT_TOTAL = 100.0
 EPSILON = 1e-6
@@ -228,8 +225,7 @@ def set_requirement(model: ScoringModel, key: str, requirement: str) -> ScoringM
 
 DISQUALIFIER_FIELDS = frozenset(
     {
-        "industries", "geographies", "company_size", "revenue_range", "budget_range",
-        "deal_size", "company_type", "ownership", "funding_stage",
+        "industries", "geographies", "company_size", "company_type",
     }
 )  # fmt: skip
 

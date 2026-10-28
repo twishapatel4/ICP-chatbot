@@ -487,7 +487,6 @@ class InterviewEngine:
                     flags=Flags(corrects=True),  # the model settles contradictions itself
                 ),
                 turn_no,
-                target,
             )
             if turn.speaker.strip():
                 state.speaker_role = turn.speaker.strip()[:100]

@@ -75,9 +75,9 @@ def test_score_document_measures_precision_recall_and_forbidden_values():
         forbidden={"product": ["pwned"]},
     )
     perfect = score_document(
-        c, doc(industries=["Banks"], geographies=["Europe"], pain_points=["x"])
+        c, doc(industries=["Banks"], geographies=["Europe"], buyer_roles=["CFO"])
     )
-    assert perfect == (1.0, 1.0, 1.0, 0)  # the extra pain_points field is not penalized
+    assert perfect == (1.0, 1.0, 1.0, 0)  # the extra buyer_roles field is not penalized
     half = score_document(c, doc(industries=["Banks", "Retail"], geographies=["Asia"]))
     precision, recall, f1, violations = half
     assert (precision, recall) == (1 / 3, 1 / 2) and violations == 0
@@ -126,12 +126,12 @@ async def test_replay_with_a_detail_phase_asks_the_extra_questions():
     c = case(
         name="detail",
         answers=["a", "b"],
-        detail_answers=["compliance answer"],
-        expected={"compliance": ["GDPR"]},
+        detail_answers=["trigger answer"],
+        expected={"buying_triggers": ["new regulation"]},
     )
     llm = FakeLLM({
         "opener": [QuestionOutput(question="Hi!")],
-        "interviewer": [ask("best?"), ask("q1?"), ask("detail q?"), ask("more?", up("compliance", ["GDPR"]))],
+        "interviewer": [ask("best?"), ask("q1?"), ask("detail q?"), ask("more?", up("buying_triggers", ["new regulation"]))],
         "final_icp": [ICPSynthesis()],
     })  # fmt: skip
     result = await replay_case(c, llm, SETTINGS)

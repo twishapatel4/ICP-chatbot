@@ -7,9 +7,7 @@ from icp_chatbot.domain.slots import SLOT_LIST, SLOTS, Tier
 from icp_chatbot.domain.state import SessionState, SlotSource, SlotValue, normalize_values
 
 FORM_CONFIDENCE = 0.8
-OPTIONAL_FORM_SLOTS = (
-    "incumbents", "budget_range", "deal_size", "sales_cycle", "buying_triggers", "success_definition",
-)  # fmt: skip
+OPTIONAL_FORM_SLOTS = ("buying_triggers",)
 
 
 @dataclass(frozen=True)

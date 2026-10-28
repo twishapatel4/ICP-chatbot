@@ -59,7 +59,7 @@ async def test_the_dashboard_summarizes_sessions_latency_and_feedback(repo_and_f
 
     draft = doc(
         industries=["Fintech"],
-        pain_points=["slow"],
+        buyer_roles=["CFO"],
         geographies=["Europe"],
         company_size=["50-500"],
     )
@@ -67,7 +67,7 @@ async def test_the_dashboard_summarizes_sessions_latency_and_feedback(repo_and_f
         "t1", approved, document=draft.model_dump(mode="json"), summary="", author="bot"
     )
     final = doc(
-        industries=["Fintech"], pain_points=["slow"], geographies=["Asia"], company_size=["50-500"]
+        industries=["Fintech"], buyer_roles=["CFO"], geographies=["Asia"], company_size=["50-500"]
     )
     await repo.add_icp_version(
         "t1", approved, document=final.model_dump(mode="json"), summary="", author="company"

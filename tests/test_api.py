@@ -90,7 +90,7 @@ async def run_to_completion(w):
         "interviewer",
         ask("Who signs off on buying this?",
              up("industries", ["Fintech"]), up("company_size", ["50-500"]),
-             up("geographies", ["Europe"]), up("pain_points", ["manual payroll"]),
+             up("geographies", ["Europe"]), up("buying_triggers", ["manual payroll"]),
              up("buyer_roles", ["CFO"]), target_slot="buyer_roles", enough=True),
     )  # fmt: skip
     nxt = await w.call(
@@ -130,7 +130,7 @@ async def test_the_full_flow_from_signup_to_an_approved_icp(world):
     assert (body["version"], body["author"]) == (1, "bot")
     assert "Fintech" in body["document"]["summary"]
     weights = [c["weight"] for c in body["document"]["scoring_model"]["criteria"]]
-    assert weights == [20, 15, 20, 15, 10, 10, 10]
+    assert weights == [35, 25, 15, 25]
 
     edited = await w.call(
         "PATCH",
@@ -141,7 +141,7 @@ async def test_the_full_flow_from_signup_to_an_approved_icp(world):
     reweighted = await w.call(
         "PATCH",
         f"/sessions/{sid}/icp",
-        json={"kind": "weights", "weights": {"industry_fit": 30, "geographic_fit": 0}},
+        json={"kind": "weights", "weights": {"industry_fit": 40, "geographic_fit": 20}},
     )
     assert reweighted.status_code == 200
     toggled = await w.call(
@@ -261,7 +261,7 @@ async def test_the_fallback_form_completes_a_session_without_the_model(world):
         "POST", f"/sessions/{sid}/fallback", json={"answers": {"industries": ["Fintech"]}}
     )
     assert (
-        partial.status_code == 422 and "pain_points" in partial.json()["detail"]["missing_required"]
+        partial.status_code == 422 and "buyer_roles" in partial.json()["detail"]["missing_required"]
     )
     answers = {key: [f"value for {key}"] for key in required}
     done = await w.call("POST", f"/sessions/{sid}/fallback", json={"answers": answers})
@@ -286,23 +286,23 @@ async def test_detail_mode_rebuild_keeps_the_companys_earlier_edits(world):
     await w.call(
         "PATCH",
         f"/sessions/{sid}/icp",
-        json={"kind": "weights", "weights": {"industry_fit": 30, "geographic_fit": 0}},
+        json={"kind": "weights", "weights": {"industry_fit": 40, "geographic_fit": 20}},
     )
 
-    w.llm.queue("interviewer", ask("Any compliance needs?"))
+    w.llm.queue("interviewer", ask("Any buying triggers?"))
     detail = await w.call("POST", f"/sessions/{sid}/detail")
     assert detail.status_code == 200 and detail.json()["mode"] == "detail"
-    w.llm.queue("interviewer", ask("Switching costs?", up("compliance", ["GDPR"]), enough=True))
+    w.llm.queue("interviewer", ask("Anything else?", up("buying_triggers", ["GDPR"]), enough=True))
     await w.call("POST", f"/sessions/{sid}/answers", json={"text": "GDPR applies"})
     await w.call("POST", f"/sessions/{sid}/finish")
 
     w.llm.queue("final_icp", ICPSynthesis())
     rebuilt = (await w.call("POST", f"/sessions/{sid}/icp")).json()
     entries = {k: e for s in rebuilt["document"]["sections"].values() for k, e in s.items()}
-    assert entries["compliance"]["values"] == ["GDPR"]  # the new detail answer is there
+    assert entries["buying_triggers"]["values"] == ["GDPR"]  # the new detail answer is there
     assert entries["industries"]["values"] == ["Insurance"]  # the earlier edit survived
     weights = {c["key"]: c["weight"] for c in rebuilt["document"]["scoring_model"]["criteria"]}
-    assert weights["industry_fit"] == 30 and weights["geographic_fit"] == 0
+    assert weights["industry_fit"] == 40 and weights["geographic_fit"] == 20
 
 
 async def test_a_returning_user_gets_the_pending_question_back(world):
