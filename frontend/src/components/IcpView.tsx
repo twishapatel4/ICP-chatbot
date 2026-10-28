@@ -11,10 +11,9 @@ interface Props {
   readOnly?: boolean; // shown for reference while they ask for changes
   onApprove: () => void;
   onImprove: () => void;
-  onNewChat: () => void;
 }
 
-export default function IcpView({ icp, approved, busy, readOnly, onApprove, onImprove, onNewChat }: Props) {
+export default function IcpView({ icp, approved, busy, readOnly, onApprove, onImprove }: Props) {
   const doc = icp.document;
 
   return (
@@ -59,7 +58,7 @@ export default function IcpView({ icp, approved, busy, readOnly, onApprove, onIm
       )}
 
       {readOnly ? null : approved ? (
-        <p className="text-[#4ade80]">Thanks. You confirmed this profile is correct.</p>
+        <p className="text-[#4ade80]">Thanks. You confirmed this profile is correct. You can still continue the conversation to refine it.</p>
       ) : (
         <>
           <h4 className={H4}>Is this profile fine, or does it need improvement?</h4>
@@ -73,9 +72,11 @@ export default function IcpView({ icp, approved, busy, readOnly, onApprove, onIm
           </div>
         </>
       )}
-      {!readOnly && (
+      {!readOnly && approved && (
         <div className={actions}>
-          <button onClick={onNewChat}>New chat</button>
+          <button disabled={busy} onClick={onImprove}>
+            Continue the conversation
+          </button>
         </div>
       )}
     </article>

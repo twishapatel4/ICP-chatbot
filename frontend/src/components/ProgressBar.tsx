@@ -38,7 +38,7 @@ export default function ProgressBar({ progress, building, done }: Props) {
 
   return (
     <div
-      className={`${column} ${gutter} sticky top-0 z-5 pt-2.5 pb-4 bg-[linear-gradient(to_bottom,var(--fade)_78%,transparent)]`}
+      className={`${column} ${gutter} sticky top-[74px] z-5 pt-2.5 pb-4 bg-[linear-gradient(to_bottom,var(--frame)_78%,transparent)]`}
       role="progressbar"
       aria-label="ICP progress"
       aria-valuemin={0}

@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BotAvatar } from "bot-avatars";
 import * as api from "./api";
 import Composer from "./components/Composer";
@@ -13,7 +13,7 @@ import TextShimmer from "./components/TextShimmer";
 import TextEffect from "./components/TextEffect";
 import ThemeToggle from "./components/ThemeToggle";
 import type { FormField, IcpResponse, Progress, StartRequest, Turn } from "./types";
-import { app, chip, chipOn, chips, column, gutter, header, pillInput, promptActions, promptBox, promptInput, roundBtn, sendBtn } from "./ui";
+import { app, chip, chipOn, chips, column, gutter, header, iconBtn, pillInput, promptActions, promptBox, promptInput, roundBtn, sendBtn } from "./ui";
 
 type Stage = "home" | "interview" | "fallback" | "building" | "done";
 interface Message {
@@ -59,7 +59,6 @@ interface Snapshot {
   form: FormField[];
   missing: string[];
   icp: IcpResponse | null;
-  icpAfter?: number | null; // id of the message the profile was built after: the card sits there
   approved: boolean;
   revising: boolean;
   progress?: Progress;
@@ -106,7 +105,6 @@ export default function App() {
   const [form, setForm] = useState<FormField[]>(saved?.form ?? []);
   const [missing, setMissing] = useState<string[]>(saved?.missing ?? []);
   const [icp, setIcp] = useState<IcpResponse | null>(saved?.icp ?? null);
-  const [icpAfter, setIcpAfter] = useState<number | null>(saved?.icpAfter ?? null);
   const [approved, setApproved] = useState(saved?.approved ?? false);
   const [revising, setRevising] = useState(saved?.revising ?? false);
   const [progress, setProgress] = useState<Progress>(saved?.progress ?? NO_PROGRESS);
@@ -118,6 +116,11 @@ export default function App() {
   const push = useCallback((role: Message["role"], text: string) => {
     setMessages((m) => [...m, { id: nextId.current++, role, text }]);
   }, []);
+
+  // The profile panel beside the chat. On a phone-sized screen it covers the chat, so it starts
+  // closed there and the chat, with its last message, is what they see first.
+  const wide = () => window.matchMedia("(min-width: 768px)").matches;
+  const [showProfile, setShowProfile] = useState(wide);
 
   // bot replies that have finished typing out; the options under a reply wait for it
   const [typed, setTyped] = useState<Set<number>>(new Set());
@@ -131,13 +134,13 @@ export default function App() {
   }, [messages, stage, icp, options, replyTyped]);
 
   useEffect(() => {
-    const snap: Snapshot = { stage, messages, options, multi, picked, sessionId, form, missing, icp, icpAfter, approved, revising, progress };
+    const snap: Snapshot = { stage, messages, options, multi, picked, sessionId, form, missing, icp, approved, revising, progress };
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
     } catch {
       // storage unavailable: the chat just will not survive a reload
     }
-  }, [stage, messages, options, multi, picked, sessionId, form, missing, icp, icpAfter, approved, revising, progress]);
+  }, [stage, messages, options, multi, picked, sessionId, form, missing, icp, approved, revising, progress]);
 
   // A reload mid-build loses the in-flight request; ask for the ICP again.
   const resumed = useRef(false);
@@ -156,7 +159,7 @@ export default function App() {
     setForm([]);
     setMissing([]);
     setIcp(null);
-    setIcpAfter(null);
+    setShowProfile(wide());
     setApproved(false);
     setRevising(false);
     setProgress(NO_PROGRESS);
@@ -167,12 +170,11 @@ export default function App() {
 
   async function makeIcp(id: string) {
     setStage("building");
-    // the card goes after the last real message; the "building" note is removed once it is ready
-    const lastMessage = nextId.current - 1;
+    // the "building" note is removed once the profile is ready
     push("note", BUILD_NOTE);
     try {
       setIcp(await api.buildIcp(id));
-      setIcpAfter(lastMessage);
+      setShowProfile(wide());
       setStage("done");
     } catch (e) {
       const missing = (e instanceof api.ApiError && (e.detail as { not_enough_info?: string[] })?.not_enough_info) || null;
@@ -301,8 +303,10 @@ export default function App() {
 
   // The current profile stays on the page (collapsed) while they explain what to change.
   function improve() {
+    // from an approved profile this is "continue the conversation": the rebuilt profile needs approving again
+    push("bot", approved ? "Happy to keep going. What would you like to change or add?" : "Sorry about that. What should be changed or added?");
+    setApproved(false);
     setRevising(true);
-    push("bot", "Sorry about that. What should be changed or added?");
     setStage("interview");
   }
 
@@ -394,25 +398,30 @@ export default function App() {
     );
   }
 
-  // The profile card sits in the conversation, after the message it was built after, so anything
-  // typed later appears below it, at the bottom, and the page never has to be scrolled to find it.
-  const profile = icp ? (
-    stage === "done" ? (
-      <IcpView
-        icp={icp}
-        approved={approved}
-        busy={busy}
-        onApprove={approve}
-        onImprove={improve}
-        onNewChat={newChat}
-      />
-    ) : (
-      <details className="my-2">
-        <summary className="cursor-pointer text-ink text-[16px] font-medium py-1.5 hover:text-muted">Show the current profile (being updated)</summary>
-        <IcpView icp={icp} approved={approved} busy readOnly onApprove={approve} onImprove={improve} onNewChat={newChat} />
-      </details>
-    )
-  ) : null;
+  // Once a profile exists it sits beside the chat, like an artifact, and the header toggles it.
+  // On a narrow screen it covers the chat, except while they are answering the follow-up.
+  const panelOpen = !!icp && showProfile;
+  const profilePanel = icp && panelOpen && (
+    <aside
+      aria-label="Ideal Customer Profile"
+      className={`border-l border-line w-[min(46%,640px)] min-w-[340px] shrink-0 max-md:fixed max-md:inset-0 max-md:z-30 max-md:w-auto max-md:min-w-0 max-md:border-l-0 max-md:bg-frame ${stage === "done" ? "" : "max-md:hidden"}`}
+    >
+      <div className="sticky top-[74px] max-h-[calc(100vh-74px)] overflow-y-auto p-4 flex flex-col">
+        <button className={`${iconBtn} self-end mb-2`} onClick={() => setShowProfile(false)} aria-label="Hide profile" title="Hide profile">
+          <Icon name="close" size={18} />
+        </button>
+        {stage !== "done" && <p className="mt-0 mx-0 mb-2 text-[12px] text-muted">The current profile, being updated from your answer.</p>}
+        <IcpView
+          icp={icp}
+          approved={approved}
+          busy={busy || stage !== "done"}
+          readOnly={stage !== "done"}
+          onApprove={approve}
+          onImprove={improve}
+        />
+      </div>
+    </aside>
+  );
 
   return (
     <main className={app}>
@@ -424,17 +433,25 @@ export default function App() {
             <Icon name="plus" size={18} /> New chat
           </button>
         </div>
-        <ThemeToggle />
+        <div className="flex items-center gap-2.5">
+          {icp && (
+            <button onClick={() => setShowProfile((v) => !v)} aria-pressed={panelOpen} title={panelOpen ? "Hide profile" : "Show profile"}>
+              <Icon name="panel" size={18} /> Profile
+            </button>
+          )}
+          <ThemeToggle />
+        </div>
       </header>
 
+      <div className="flex flex-1 items-stretch">
+      <div className="flex-1 min-w-0 flex flex-col">
       {sessionId && (stage === "interview" || stage === "building" || stage === "done") && (
         <ProgressBar progress={progress} building={stage === "building"} done={stage === "done"} />
       )}
 
       <div className={`${column} flex-1 flex flex-col gap-3 pt-2 pb-[18px] ${gutter}`} aria-live="polite">
         {messages.map((m, i) => (
-          <Fragment key={m.id}>
-            <InView className={MSG_CLASS[m.role]}>
+            <InView key={m.id} className={MSG_CLASS[m.role]}>
               {m.role === "note" && stage === "building" && i === messages.length - 1 ? (
                 <TextShimmer>{m.text}</TextShimmer>
               ) : m.role === "bot" && m.id >= firstNewId.current ? (
@@ -443,10 +460,7 @@ export default function App() {
                 m.text
               )}
             </InView>
-            {icpAfter === m.id && profile}
-          </Fragment>
         ))}
-        {!messages.some((m) => m.id === icpAfter) && profile}
 
         {options.length > 0 && replyTyped && (
           <div className="flex flex-col items-end gap-2">
@@ -473,6 +487,19 @@ export default function App() {
             <TextShimmer>Thinking...</TextShimmer>
           </div>}
 
+        {stage === "done" && icp && approved && (
+          <InView className="self-stretch mt-5 flex flex-col items-center gap-2.5">
+            <div className="flex items-center gap-4 w-full">
+              <span className="h-px flex-1 bg-line" />
+              <button disabled={busy} onClick={improve}>
+                <Icon name="chat" size={18} /> Continue the conversation
+              </button>
+              <span className="h-px flex-1 bg-line" />
+            </div>
+            <p className="m-0 text-[12px] text-muted">Add more detail or change something, and the profile will be rebuilt.</p>
+          </InView>
+        )}
+
         {stage === "fallback" && (
           <FallbackForm fields={form} disabled={busy} missing={missing} onSubmit={submitForm} />
         )}
@@ -480,6 +507,9 @@ export default function App() {
       </div>
 
       {stage === "interview" && <Composer disabled={busy} sessionId={sessionId} hasPicks={picked.length > 0} onSend={send} />}
+      </div>
+      {profilePanel}
+      </div>
     </main>
   );
 }
