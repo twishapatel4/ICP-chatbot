@@ -83,3 +83,99 @@ def test_completeness_ignores_fields_whose_values_are_not_real_answers():
         {key: FieldEntry(values=["Fintech"], confidence=0.9, source=SlotSource.STATED)}
     )
     assert real.tier_a > empty.tier_a
+
+
+# -- documents stored before geography was split --------------------------------------------------
+
+
+def stored(values, **kw):
+    return {"values": values, "confidence": 0.9, "source": "stated", **kw}
+
+
+def legacy_document() -> dict:
+    """An ICP version as saved before `geographies` became `lead_geographies`."""
+    return {
+        "schema_version": "1",
+        "sections": {
+            "target_firmographics": {
+                "industries": stored(["Fintech"], requirement="preferred"),
+                "geographies": stored(["Europe"], requirement="required"),
+            }
+        },
+        "scoring_model": {
+            "criteria": [
+                {"key": "industry_fit", "label": "Industry fit", "weight": 35,
+                 "reads": ["industries", "customer_segments"],
+                 "rules": {"industries": {"kind": "list", "primary": ["Fintech"]}}},
+                {"key": "company_size", "label": "Company size", "weight": 25,
+                 "reads": ["company_size"], "applicable": False},
+                {"key": "buying_signals", "label": "Buying signals", "weight": 15,
+                 "reads": ["buying_triggers"], "applicable": False},
+                {"key": "geographic_fit", "label": "Geographic fit", "weight": 25,
+                 "reads": ["geographies"], "requirement": "required",
+                 "rules": {"geographies": {"kind": "list", "primary": ["Europe"]}}},
+            ],
+            "disqualifiers": [{"field": "geographies", "operator": "in", "values": ["Asia"]}],
+        },
+        "completeness": {"tier_a": 0.25, "tier_b": 0.0},
+        "not_needed": ["geographies"],
+    }  # fmt: skip
+
+
+def test_a_stored_document_with_legacy_geographies_loads_with_the_new_key():
+    doc = ICPDocument.model_validate(legacy_document())
+    assert list(doc.sections["target_firmographics"]) == ["industries", "lead_geographies"]
+    moved = doc.entries()["lead_geographies"]
+    assert moved.values == ["Europe"] and moved.requirement == "required"
+    geo = next(c for c in doc.scoring_model.criteria if c.key == "geographic_fit")
+    assert geo.reads == ["lead_geographies"] and list(geo.rules) == ["lead_geographies"]
+    assert geo.rules["lead_geographies"].primary == ["Europe"] and geo.requirement == "required"
+    assert [d.field for d in doc.scoring_model.disqualifiers] == ["lead_geographies"]
+    assert doc.not_needed == ["lead_geographies"]
+    assert "geographies" not in doc.model_dump_json().replace("lead_geographies", "")
+    assert ICPDocument.model_validate_json(doc.model_dump_json()) == doc  # idempotent
+
+
+def test_a_legacy_document_validates_and_can_still_be_scored_edited_and_approved():
+    from datetime import date
+
+    from icp_chatbot.icp.review import FieldEdit, apply_edit, approve
+    from icp_chatbot.icp.scoring import score_lead, validate_model
+
+    doc = ICPDocument.model_validate(legacy_document())
+    assert validate_model(doc.scoring_model) == []
+    assert score_lead(doc.scoring_model, {"lead_geographies": ["Asia"]}).disqualified_by
+    edited, _ = apply_edit(doc, FieldEdit(slot="lead_geographies", values=["India"]), date.today())
+    assert edited.entries()["lead_geographies"].values == ["India"]
+    approved, _ = approve(edited, date.today())
+    assert approved.entries()["lead_geographies"].values == ["India"]
+
+
+def test_the_new_key_wins_when_a_stored_document_has_both():
+    legacy = legacy_document()
+    legacy["sections"]["target_firmographics"]["lead_geographies"] = stored(["India"])
+    geo = legacy["scoring_model"]["criteria"][3]
+    geo["reads"] = ["geographies", "lead_geographies"]
+    geo["rules"]["lead_geographies"] = {"kind": "list", "primary": ["India"]}
+    doc = ICPDocument.model_validate(legacy)
+    assert doc.entries()["lead_geographies"].values == ["India"]
+    assert "geographies" not in doc.entries()
+    criterion = next(c for c in doc.scoring_model.criteria if c.key == "geographic_fit")
+    assert criterion.reads == ["lead_geographies"]
+    assert criterion.rules["lead_geographies"].primary == ["India"]
+
+
+def test_a_document_with_the_new_keys_is_unchanged_by_the_legacy_hook():
+    entries = {
+        "industries": entry(["Fintech"]),
+        "lead_geographies": entry(["Europe"]),
+        "company_hq_geographies": entry(["United States"]),
+    }
+    doc = ICPDocument(
+        sections=group_by_section(entries),
+        scoring_model=default_scoring_model({k: e.values for k, e in entries.items()}),
+        completeness=compute_completeness(entries),
+        not_needed=["company_size"],
+    )
+    dumped = doc.model_dump(mode="json")
+    assert ICPDocument.model_validate(dumped).model_dump(mode="json") == dumped

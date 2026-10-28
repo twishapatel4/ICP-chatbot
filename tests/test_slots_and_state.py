@@ -177,12 +177,14 @@ def test_legacy_geographies_in_the_industry_context_and_threads_are_renamed_too(
         "slots": {"geographies": older, "lead_geographies": newer},  # the new key wins
         "domain": {"industry": "Logistics", "not_needed": ["geographies", "company_size"]},
         "thread_slot": "geographies",
+        "agent_missing": ["geographies", "Buyer roles"],  # raw keys were stored before 3d6abd9
     })  # fmt: skip
     assert list(state.slots) == ["lead_geographies"] and state.values("lead_geographies") == [
         "India"
     ]
     assert state.domain.not_needed == ["lead_geographies", "company_size"]
     assert state.thread_slot == "lead_geographies"
+    assert state.agent_missing == ["lead_geographies", "Buyer roles"]
 
 
 def test_state_without_track_defaults_to_sales():

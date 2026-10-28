@@ -1,8 +1,8 @@
 """The ICP as a stored, versioned JSON document (spec section 6)."""
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from icp_chatbot.domain.slots import (
     SECTION_ORDER,
@@ -13,7 +13,13 @@ from icp_chatbot.domain.slots import (
     Tier,
     with_custom,
 )
-from icp_chatbot.domain.state import SlotSource, real_values
+from icp_chatbot.domain.state import (
+    SlotSource,
+    real_values,
+    rename_slot_items,
+    rename_slot_keys,
+    renamed_slot,
+)
 from icp_chatbot.icp.scoring import ScoringModel
 
 KNOWN_CONFIDENCE = 0.7
@@ -45,6 +51,25 @@ class ICPDocument(BaseModel):
     not_needed: list[str] = Field(default_factory=list)  # standard fields this industry skips
     partial: bool = False  # built before the basics were known, because the user stopped early
 
+    @model_validator(mode="before")
+    @classmethod
+    def _rename_legacy_slots(cls, data: Any) -> Any:
+        """Stored versions may name slots by their old keys (see LEGACY_SLOT_KEYS): in the
+        sections, in what each criterion reads and its rules, in exclusions and in not_needed."""
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        if isinstance(data.get("sections"), dict):
+            data["sections"] = {
+                name: rename_slot_keys(fields) if isinstance(fields, dict) else fields
+                for name, fields in data["sections"].items()
+            }
+        if isinstance(data.get("not_needed"), list):
+            data["not_needed"] = rename_slot_items(data["not_needed"])
+        if isinstance(data.get("scoring_model"), dict):
+            data["scoring_model"] = _rename_in_scoring_model(data["scoring_model"])
+        return data
+
     def slot_defs(self) -> list[SlotDef]:
         return with_custom(self.custom_fields)
 
@@ -57,6 +82,27 @@ class ICPDocument(BaseModel):
 
     def slot_values(self) -> dict[str, list[str]]:
         return {slot: e.values for slot, e in self.entries().items() if e.values}
+
+
+def _rename_in_scoring_model(model: dict) -> dict:
+    model = dict(model)
+    if isinstance(model.get("criteria"), list):
+        criteria = []
+        for criterion in model["criteria"]:
+            if isinstance(criterion, dict):
+                criterion = dict(criterion)
+                if isinstance(criterion.get("reads"), list):
+                    criterion["reads"] = rename_slot_items(criterion["reads"])
+                if isinstance(criterion.get("rules"), dict):
+                    criterion["rules"] = rename_slot_keys(criterion["rules"])
+            criteria.append(criterion)
+        model["criteria"] = criteria
+    if isinstance(model.get("disqualifiers"), list):
+        model["disqualifiers"] = [
+            {**d, "field": renamed_slot(d["field"])} if isinstance(d, dict) and "field" in d else d
+            for d in model["disqualifiers"]
+        ]
+    return model
 
 
 def group_by_section(

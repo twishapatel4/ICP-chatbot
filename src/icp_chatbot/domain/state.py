@@ -119,39 +119,42 @@ class DomainContext(BaseModel):
         return lines
 
 
-# Slots renamed since sessions were first saved: old key -> new key. Geography was split into
-# where the people are (lead_geographies) and where their companies are headquartered; a saved
-# `geographies` answer said the first, so the HQ slot stays unknown.
+# Slots renamed since sessions and ICP versions were first saved: old key -> new key. Geography
+# was split into where the people are (lead_geographies) and where their companies are
+# headquartered; a saved `geographies` answer said the first, so the HQ slot stays unknown.
 LEGACY_SLOT_KEYS = {"geographies": "lead_geographies"}
 _KEYED_BY_SLOT = ("slots", "seed", "asked_slots", "probes", "probe_conf", "stalls", "declines",
                   "flips")  # fmt: skip
-_SLOT_LISTS = ("skipped", "clarified", "contradictions")
+# agent_missing holds field labels today, but raw slot keys were stored before 3d6abd9
+_SLOT_LISTS = ("skipped", "clarified", "contradictions", "agent_missing")
 _SLOT_NAMES = ("pending_slot", "thread_slot")
 
 
-def _renamed(key: Any) -> Any:
+def renamed_slot(key: Any) -> Any:
+    """The current key for a slot saved under an old one; anything else unchanged."""
     return LEGACY_SLOT_KEYS.get(key, key) if isinstance(key, str) else key
 
 
-def _rename_keys(mapping: dict) -> dict:
+def rename_slot_keys(mapping: dict) -> dict:
     """Old slot keys renamed; where both the old and the new key are present, the new one wins."""
     if not any(key in LEGACY_SLOT_KEYS for key in mapping):
         return mapping
     out = {}
     for key, value in mapping.items():
-        new = _renamed(key)
+        new = renamed_slot(key)
         if new != key and new in mapping:
             continue
         out[new] = value
     return out
 
 
-def _rename_items(items: list) -> list:
-    if not any(_renamed(item) != item for item in items):
+def rename_slot_items(items: list) -> list:
+    """Old slot keys in a list renamed, without repeating a key the list already holds."""
+    if not any(renamed_slot(item) != item for item in items):
         return items
     out: list = []
     for item in items:
-        if (new := _renamed(item)) not in out:
+        if (new := renamed_slot(item)) not in out:
             out.append(new)
     return out
 
@@ -211,16 +214,16 @@ class SessionState(BaseModel):
         data = dict(data)
         for name in _KEYED_BY_SLOT:
             if isinstance(data.get(name), dict):
-                data[name] = _rename_keys(data[name])
+                data[name] = rename_slot_keys(data[name])
         for name in _SLOT_LISTS:
             if isinstance(data.get(name), list):
-                data[name] = _rename_items(data[name])
+                data[name] = rename_slot_items(data[name])
         for name in _SLOT_NAMES:
             if name in data:
-                data[name] = _renamed(data[name])
+                data[name] = renamed_slot(data[name])
         domain = data.get("domain")
         if isinstance(domain, dict) and isinstance(domain.get("not_needed"), list):
-            data["domain"] = {**domain, "not_needed": _rename_items(domain["not_needed"])}
+            data["domain"] = {**domain, "not_needed": rename_slot_items(domain["not_needed"])}
         return data
 
     def confidence(self, key: str) -> float:
