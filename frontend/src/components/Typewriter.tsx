@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const MAX_MS = 3500; // long replies speed up so nobody waits more than this
 
@@ -19,10 +19,12 @@ export default function Typewriter({ text, speed = "normal", variance = 0.6, cur
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const [shown, setShown] = useState(reduce ? text.length : 0);
   const done = shown >= text.length;
+  const finished = useRef(onDone); // the latest callback, without restarting the typing when it changes
+  finished.current = onDone;
 
   useEffect(() => {
     if (done) {
-      onDone?.();
+      finished.current?.();
       return;
     }
     const base = Math.min(typeof speed === "number" ? speed : SPEEDS[speed], MAX_MS / text.length);
@@ -31,7 +33,7 @@ export default function Typewriter({ text, speed = "normal", variance = 0.6, cur
     const wobble = 1 + (Math.random() * 2 - 1) * variance;
     const id = window.setTimeout(() => setShown((n) => n + 1), Math.max(4, base * wobble * pause));
     return () => window.clearTimeout(id);
-  }, [shown, done, text, speed, variance, onDone]);
+  }, [shown, done, text, speed, variance]);
 
   return (
     <>

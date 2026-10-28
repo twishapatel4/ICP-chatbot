@@ -8,6 +8,8 @@ const PATHS = {
   chat: "M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z",
   profile: "M9 12l2 2 4-4M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z",
   search: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-4.3-4.3",
+  panel: "M4 5h16v14H4zM15 5v14",
+  close: "M6 6l12 12M18 6L6 18",
   arrowUp: "M12 19V5M5 12l7-7 7 7",
 } as const;
 

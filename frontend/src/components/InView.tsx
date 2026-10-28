@@ -26,7 +26,7 @@ export default function InView({
   once = true,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once, margin: "0px 0px -8% 0px", ...viewOptions });
+  const inView = useInView(ref, { once, ...viewOptions });
 
   return (
     <motion.div

@@ -46,4 +46,3 @@ Hosting is free (Hobby); only Vertex AI calls cost money.
   The daily DB-backed session/token caps still hold.
 - Vertex AI is billed per use. Set budget alerts in GCP.
 - Never use SQLite on Vercel: the filesystem is read-only/ephemeral.
-- Render alternative: `render.yaml` still describes a Render web service for the API.

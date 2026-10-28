@@ -1,14 +1,15 @@
 // Class strings shared by more than one component.
 
-// the inset rounded frame every screen sits in
-export const app =
-  "w-[calc(100%-20px)] m-[10px] min-h-[calc(100vh-20px)] flex flex-col bg-frame rounded-[30px] shadow-[0_0_0_1px_var(--line)]";
+// every screen fills the window, on the page background
+export const app = "w-full min-h-screen flex flex-col bg-frame";
 
 // a centred column, as wide as the chat
 export const column = "w-full max-w-[1000px] mx-auto";
 export const gutter = "px-[clamp(16px,4vw,28px)]";
 
-export const header = "flex items-center justify-between pt-[22px] px-[26px] pb-[10px]";
+// stays at the top while the chat scrolls. Its height is 74px (22 + 42 + 10): the sticky progress bar
+// and profile panel sit below it with top-[74px], so change them together
+export const header = "sticky top-0 z-10 bg-frame flex items-center justify-between pt-[22px] px-[26px] pb-[10px]";
 
 export const card = "bg-card border border-line rounded-[28px] py-[22px] px-6 self-stretch shadow-soft";
 
