@@ -5,7 +5,7 @@ holds the caps and the floor under that decision."""
 
 from dataclasses import dataclass
 
-from icp_chatbot.domain.slots import SlotDef, Tier, Track
+from icp_chatbot.domain.slots import SlotDef, Tier, Track, slot_map
 from icp_chatbot.domain.state import SessionState, SlotSource
 
 COMPLETION_CONFIDENCE = 0.7  # a slot at or above this counts as known
@@ -64,10 +64,18 @@ def _told(state: SessionState, key: str) -> bool:
 def icp_floor_met(state: SessionState) -> bool:
     """A sanity floor under the interviewer's own call: the user told us what they sell and at
     least three things about who buys it (B2B or B2C alone, or a guess from their website, does
-    not count)."""
+    not count). Three, or all of them when fewer apply to this profile (B2C)."""
     anchor = _anchor_key(state.track)
-    known = [k for k in customer_keys(state.track) if k != anchor and _told(state, k)]
-    return _told(state, anchor) and len(known) >= FLOOR_CUSTOMER_FACTS
+    standard = slot_map(state.track)
+    # only fields that apply count: a B2C seller has two (who buys, where), so the bar is
+    # whatever is reachable, up to FLOOR_CUSTOMER_FACTS
+    applicable = [
+        k for k in customer_keys(state.track)
+        if k != anchor and state.is_applicable(standard[k])
+    ]  # fmt: skip
+    known = [k for k in applicable if _told(state, k)]
+    needed = min(FLOOR_CUSTOMER_FACTS, len(applicable))
+    return _told(state, anchor) and len(known) >= needed
 
 
 def enough_for_icp(state: SessionState) -> bool:

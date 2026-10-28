@@ -379,10 +379,17 @@ class InterviewEngine:
         state.pending_kind = "opener"
         state.pending_slot = None
         state.pending_options, state.pending_multi = [], True
-        await self._repo.save_state(
-            tenant_id, session_id, state, expected_version=record.row_version,
-            usage=spend.usage, cost_usd=spend.cost,
-        )  # fmt: skip
+        try:
+            await self._repo.save_state(
+                tenant_id, session_id, state, expected_version=record.row_version,
+                usage=spend.usage, cost_usd=spend.cost,
+            )  # fmt: skip
+        except Conflict:
+            # a double submit: the other request's opener stands, but this one was paid for
+            await self._repo.add_usage(
+                tenant_id, session_id, usage=spend.usage, cost_usd=spend.cost
+            )
+            raise
         return self._result(session_id, state, "active", opener.question, notice=spend.degraded)
 
     async def _keep_answers(self, tenant_id: str, session_id: str, record, answers) -> None:
@@ -619,9 +626,9 @@ class InterviewEngine:
             raise ProfileNotSubmitted()
 
     async def answer(self, tenant_id: str, session_id: str, text: str) -> TurnResult:
-        text = self._validate(text)
         record = await self._repo.get_session(tenant_id, session_id)
         self._require_chat(record)
+        text = self._validate(text)
         if record.status != "active":
             raise SessionClosed(record.status)
         return await self._run(tenant_id, session_id, record, text)
@@ -835,9 +842,9 @@ class InterviewEngine:
         """The company read the ICP description and says what is off. Reopen the finished chat and
         take the note as an answer, so the interviewer can ask what it needs and the ICP is
         rebuilt after."""
-        text = self._validate(text)
         record = await self._repo.get_session(tenant_id, session_id)
         self._require_chat(record)
+        text = self._validate(text)
         if record.status != "completed":
             raise InvalidTransition("changes are asked for after the first ICP is complete")
         state = record.state

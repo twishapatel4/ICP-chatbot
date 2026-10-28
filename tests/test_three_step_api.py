@@ -20,7 +20,7 @@ from icp_chatbot.llm.fake import FakeLLM
 from icp_chatbot.llm.types import Usage
 from icp_chatbot.store import models
 from icp_chatbot.store.db import init_models, make_engine, make_session_factory
-from icp_chatbot.store.repo import Repo
+from icp_chatbot.store.repo import Conflict, Repo
 from test_api import SALES_B2B_PROFILE, WAV, ask, q, up
 
 world = test_api.world  # the API fixture, shared with test_api.py
@@ -230,6 +230,42 @@ async def test_chat_endpoint_409_before_profile(world):
     assert (voice.status_code, voice.json()) == (409, {"detail": "profile_incomplete"})
     assert (await w.call("GET", f"/sessions/{sid}")).status_code == 200
     assert w.llm.calls == []
+
+
+async def test_empty_answer_in_profile_step_is_409(world):
+    w = await world()
+    sid = (await w.create())["session_id"]
+    for path in ("answers", "revise"):
+        response = await w.call("POST", f"/sessions/{sid}/{path}", json={"text": ""})
+        assert (response.status_code, response.json()) == (
+            409, {"detail": "profile_incomplete"},
+        ), path  # fmt: skip
+    assert w.llm.calls == []
+
+
+async def test_fallback_in_profile_step_sets_chat_and_completes(world):
+    w = await world()
+    sid = (await w.create())["session_id"]
+    missing = (await w.call("POST", f"/sessions/{sid}/fallback", json={"answers": {}})).json()
+    answers = {key: [f"value for {key}"] for key in missing["detail"]["missing_required"]}
+    done = await w.call("POST", f"/sessions/{sid}/fallback", json={"answers": answers})
+    assert done.status_code == 200 and done.json()["icp_ready"]
+    record = await w.repo.get_session(T, sid)
+    assert (record.state.step, record.status) == ("chat", "completed")
+    view = (await w.call("GET", f"/sessions/{sid}")).json()
+    assert (view["step"], view["status"]) == ("chat", "completed")
+
+
+async def test_profile_and_session_get_are_tenant_scoped(world):
+    w = await world()
+    sid = (await w.create())["session_id"]
+    other = await w.call(
+        "POST", f"/sessions/{sid}/profile", tenant="tenant-2", json={"answers": SALES_B2B_PROFILE}
+    )
+    assert other.status_code == 404
+    assert (await w.call("GET", f"/sessions/{sid}", tenant="tenant-2")).status_code == 404
+    assert w.llm.calls == []
+    assert (await w.repo.get_session(T, sid)).state.step == "profile"
 
 
 async def test_old_session_without_step_still_answers(world):
@@ -477,9 +513,11 @@ async def test_begin_chat_waits_for_a_read_still_running(eng):
     sid = await engine.create(T, SignupInfo("Acme", website="acme.test"))
     llm.queue("opener", q("You sell payroll?"))
     chat = asyncio.create_task(engine.begin_chat(T, sid, SALES_B2B_PROFILE))
-    await asyncio.sleep(0.01)
-    assert not chat.done()
-    enrichment.gate.set()
+    try:
+        await asyncio.sleep(0.01)
+        assert not chat.done()
+    finally:  # a failed assertion must not leave the read (and drain) waiting forever
+        enrichment.gate.set()
     await chat
     assert enrichment.calls == 1
     assert (await repo.get_session(T, sid)).state.slots["product"].values == ["Payroll"]
@@ -491,12 +529,33 @@ async def test_a_slow_read_does_not_hold_up_the_chat(eng):
     enrichment.gate = asyncio.Event()
     sid = await engine.create(T, SignupInfo("Acme", website="acme.test"))
     llm.queue("opener", q("What do you sell?"))
-    result = await engine.begin_chat(T, sid, SALES_B2B_PROFILE)
-    assert result.question.text == "What do you sell?"
-    assert enrichment.calls == 1  # not started a second time
-    assert "could not be read" in llm.calls_for("opener")[0].user
-    assert "product" not in (await repo.get_session(T, sid)).state.slots
-    enrichment.gate.set()
+    try:
+        result = await engine.begin_chat(T, sid, SALES_B2B_PROFILE)
+        assert result.question.text == "What do you sell?"
+        assert enrichment.calls == 1  # not started a second time
+        assert "could not be read" in llm.calls_for("opener")[0].user
+        assert "product" not in (await repo.get_session(T, sid)).state.slots
+    finally:
+        enrichment.gate.set()
+
+
+async def test_double_profile_submit_counts_loser_usage(eng):
+    engine, repo, llm, enrichment, _ = await eng()
+    enrichment.gate = asyncio.Event()
+    sid = await engine.create(T, SignupInfo("Acme", website="acme.test"))
+    llm.queue("opener", q("First?"))
+    llm.queue("opener", q("Second?"))
+    runs = [asyncio.create_task(engine.begin_chat(T, sid, SALES_B2B_PROFILE)) for _ in range(2)]
+    try:
+        await asyncio.sleep(0.01)
+    finally:
+        enrichment.gate.set()
+    results = await asyncio.gather(*runs, return_exceptions=True)
+    assert sum(isinstance(r, Conflict) for r in results) == 1
+    assert len(llm.calls_for("opener")) == 2
+    record = await repo.get_session(T, sid)
+    assert record.usage.input_tokens == 200  # both openers were paid for
+    assert record.state.step == "chat"
 
 
 async def test_hr_website_read_feeds_the_opener_only(eng):

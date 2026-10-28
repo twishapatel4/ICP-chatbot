@@ -124,3 +124,54 @@ def test_progress_waits_below_the_cap_until_the_interview_is_enough():
     assert interview_progress(state).percent == PROGRESS_CAP
     state.agent_enough = True
     assert interview_progress(state).percent == 100
+
+
+def b2c(*keys):
+    state = known(SessionState(), "business_model", values=("B2C",))
+    for key in keys:
+        known(state, key)
+    return state
+
+
+def test_b2c_floor_met_with_product_and_both_applicable_customer_keys():
+    state = b2c("product", "customer_profile", "lead_geographies")
+    assert icp_floor_met(state)
+
+
+def test_b2c_floor_not_met_with_one_customer_key():
+    assert not icp_floor_met(b2c("product", "customer_profile"))
+    assert not icp_floor_met(b2c("customer_profile", "lead_geographies"))  # no product
+
+
+def test_b2b_floor_unchanged_needs_three():
+    for model in ("B2B", "Both"):
+        state = known(SessionState(), "business_model", values=(model,))
+        known(known(known(state, "product"), "industries"), "buyer_roles")
+        assert not icp_floor_met(state), model
+        known(state, "company_size")
+        assert icp_floor_met(state), model
+
+
+def test_hr_fresher_floor_ignores_experience_keys():
+    state = known(SessionState(track="hr"), "experience_level", values=("Fresher",))
+    known(known(known(state, "target_roles"), "target_functions"), "years_experience")
+    known(state, "required_skills")
+    assert not icp_floor_met(state)  # years_experience does not apply to freshers
+    known(state, "candidate_locations")
+    assert icp_floor_met(state)
+
+
+def test_filled_b2c_fallback_form_is_not_partial():
+    from icp_chatbot.engine.fallback import apply_form, fallback_form, missing_required
+
+    state = SessionState()
+    answers = {"business_model": ["B2C"]}
+    state.slots["business_model"] = SlotValue(
+        values=["B2C"], confidence=0.9, source=SlotSource.STATED
+    )
+    missing = missing_required(answers, state)
+    answers.update({key: [f"value for {key}"] for key in missing})
+    apply_form(state, answers, 1)
+    required = {f.key for f in fallback_form("sales") if f.required}
+    assert "product" in required and "customer_profile" in required
+    assert enough_for_icp(state)
