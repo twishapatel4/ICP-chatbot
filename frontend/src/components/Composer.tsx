@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import * as api from "../api";
 import { canRecord, MAX_RECORD_SECONDS, startRecording, type Recording } from "../audio";
+import { column, gutter, promptActions, promptBox, promptInput, roundBtn, sendBtn } from "../ui";
 
 const MAX_CHARS = 2000;
+
+const MIC_IDLE = "bg-transparent border-transparent text-muted hover:enabled:bg-bot hover:enabled:text-ink";
+const MIC_ON =
+  "bg-[#c0392b] text-white border-[#c0392b] animate-[mic-pulse_1.4s_ease-in-out_infinite] motion-reduce:animate-none hover:enabled:bg-bot hover:enabled:text-ink"; // recording: pulses red
 
 const Icon = ({ d }: { d: string }) => (
   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2"
@@ -113,14 +118,15 @@ export default function Composer({ disabled, sessionId, hasPicks = false, onSend
 
   return (
     <form
-      className="composer"
+      className={`${column} sticky bottom-0 z-4 pt-3.5 pb-[22px] ${gutter} bg-[linear-gradient(to_top,var(--fade)_72%,transparent)]`}
       onSubmit={(e) => {
         e.preventDefault();
         send();
       }}
     >
-      <div className="prompt-box">
+      <div className={promptBox}>
         <textarea
+          className={promptInput}
           ref={ref}
           rows={1}
           maxLength={MAX_CHARS}
@@ -135,11 +141,11 @@ export default function Composer({ disabled, sessionId, hasPicks = false, onSend
             }
           }}
         />
-        <div className="prompt-actions">
+        <div className={promptActions}>
           {canRecord() && sessionId && (
             <button
               type="button"
-              className={`mic${phase === "recording" ? " on" : ""}`}
+              className={`${roundBtn} ${phase === "recording" ? MIC_ON : MIC_IDLE}`}
               disabled={disabled || phase === "transcribing"}
               onClick={() => void toggleMic()}
               aria-pressed={phase === "recording"}
@@ -150,7 +156,7 @@ export default function Composer({ disabled, sessionId, hasPicks = false, onSend
             </button>
           )}
           <button
-            className="send"
+            className={`${roundBtn} ${sendBtn}`}
             type="submit"
             aria-label="Send"
             title="Send"
@@ -161,8 +167,8 @@ export default function Composer({ disabled, sessionId, hasPicks = false, onSend
         </div>
       </div>
       {status && (
-        <div className="voice-row" role="status">
-          <span className={phase === "idle" ? "mic-error" : ""}>{status}</span>
+        <div className="flex items-center gap-3 pt-1.5 px-3.5 text-[12px] text-muted min-h-[18px]" role="status">
+          <span className={phase === "idle" ? "text-[#c0392b]" : ""}>{status}</span>
         </div>
       )}
     </form>

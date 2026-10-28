@@ -36,7 +36,10 @@ export default function Typewriter({ text, speed = "normal", variance = 0.6, cur
   return (
     <>
       <span aria-hidden="true">{text.slice(0, shown)}</span>
-      {cursor && !done && <span className="type-cursor" aria-hidden="true" />}
+      {cursor && !done && <span
+          className="inline-block w-0.5 h-[1.05em] -mr-0.5 ml-px align-text-bottom bg-current animate-[cursor-blink_1s_steps(1)_infinite] motion-reduce:animate-none"
+          aria-hidden="true"
+        />}
       <span aria-hidden="true" style={{ visibility: "hidden" }}>
         {text.slice(shown)}
       </span>

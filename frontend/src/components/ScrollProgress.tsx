@@ -14,7 +14,7 @@ export default function ScrollProgress({ className, containerRef }: Props) {
 
   return (
     <motion.div
-      className={`scroll-progress${className ? ` ${className}` : ""}`}
+      className={`fixed inset-x-0 top-0 h-1 z-20 origin-left bg-(image:--grad-progress)${className ? ` ${className}` : ""}`}
       style={{ scaleX }}
       aria-hidden="true"
     />

@@ -1,0 +1,97 @@
+/* Tailwind v4 without its preflight reset: the app keeps the browser's own element defaults, so
+   only utilities and the theme are loaded. Colours come from the CSS variables below, which the
+   light/dark switch rewrites; @theme inline maps them to utilities (bg-panel, text-muted, ...). */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@theme inline {
+  --color-frame: var(--frame);
+  --color-panel: var(--panel);
+  --color-card: var(--card);
+  --color-ink: var(--text);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-text: var(--accent-text);
+  --color-bot: var(--bot);
+  --color-user-text: var(--user-text);
+  --color-warn: var(--warn);
+  --shadow-soft: var(--soft);
+}
+
+@layer base {
+  /* glassy look: a flat white frosted panel on a soft grey page, hairline borders, ink accents */
+  :root {
+    --page: #f2f2f3; --frame: #fcfcfc; --panel: #fff;
+    --fade: rgba(252, 252, 252, .96); --card: #f8f8f8;
+    --bot-grad: linear-gradient(135deg, #ffffff 0%, #eef0fb 100%);
+    --user-grad: linear-gradient(135deg, #3a3e4a 0%, #14161b 100%);
+    --text: #1b1c20; --muted: #5f636c; --line: rgba(20, 24, 31, .07);
+    --accent: #16181d; --accent-text: #fff; --bot: #fff; --user-text: #fff;
+    --warn: #b45309;
+    --soft: 0 1px 2px rgba(20, 24, 31, .04), 0 6px 18px rgba(20, 24, 31, .04);
+    --grad-progress: linear-gradient(90deg, #8b9bff 0%, #b58cff 60%, #ff9ec7 100%);
+    --grad-done: linear-gradient(90deg, #34d399, #22c55e);
+    color-scheme: light;
+  }
+  /* dark: when picked with the toggle, or when the system is dark and nothing was picked */
+  :root[data-theme="dark"] {
+    --page: #050608; --frame: #0e0f14; --panel: rgba(255, 255, 255, .07);
+    --fade: rgba(14, 15, 20, .96); --card: rgba(255, 255, 255, .04);
+    --bot-grad: linear-gradient(135deg, rgba(255, 255, 255, .1) 0%, rgba(255, 255, 255, .03) 100%);
+    --user-grad: linear-gradient(135deg, #f4f5fa 0%, #cfd2e0 100%);
+    --text: #ececf1; --muted: #9a9fac; --line: rgba(255, 255, 255, .09);
+    --accent: #ececf1; --accent-text: #121318; --bot: rgba(255, 255, 255, .06);
+    --user-text: #121318; --warn: #f59e0b;
+    --soft: 0 3px 14px rgba(0, 0, 0, .3);
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #050608; --frame: #0e0f14; --panel: rgba(255, 255, 255, .07);
+      --fade: rgba(14, 15, 20, .96); --card: rgba(255, 255, 255, .04);
+      --bot-grad: linear-gradient(135deg, rgba(255, 255, 255, .1) 0%, rgba(255, 255, 255, .03) 100%);
+      --user-grad: linear-gradient(135deg, #f4f5fa 0%, #cfd2e0 100%);
+      --text: #ececf1; --muted: #9a9fac; --line: rgba(255, 255, 255, .09);
+      --accent: #ececf1; --accent-text: #121318; --bot: rgba(255, 255, 255, .06);
+      --user-text: #121318; --warn: #f59e0b;
+      --soft: 0 3px 14px rgba(0, 0, 0, .3);
+      color-scheme: dark;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; color: var(--text); background: var(--page);
+    font: 14px/1.5 "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased; }
+  button, input, textarea { font: inherit; }
+
+  /* every button is a soft pill; variants and sizes are utilities on the element */
+  button { font-weight: 600; cursor: pointer; border-radius: 999px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--text); padding: 9px 18px; box-shadow: var(--soft);
+    display: inline-flex; align-items: center; gap: 6px; transition: transform .12s, box-shadow .12s; }
+  button:hover:not(:disabled) { transform: translateY(-1px); }
+  button:disabled { opacity: .5; cursor: default; }
+  @media (prefers-reduced-motion: reduce) { button { transition: none; } }
+}
+
+/* generating: a light band sweeps across the status text (TextShimmer) */
+@layer components {
+  .text-shimmer { --base-color: var(--muted); --base-gradient-color: var(--text);
+    display: inline-block; color: transparent; -webkit-text-fill-color: transparent;
+    background-repeat: no-repeat; background-size: 250% 100%; -webkit-background-clip: text; background-clip: text;
+    background-image: linear-gradient(90deg, #0000 calc(50% - var(--spread)), var(--base-gradient-color), #0000 calc(50% + var(--spread))),
+      linear-gradient(var(--base-color), var(--base-color)); }
+  @media (prefers-reduced-motion: reduce) { .text-shimmer { background: none; -webkit-text-fill-color: var(--muted); color: var(--muted); } }
+}
+
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes mic-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(192, 57, 43, .5); } 50% { box-shadow: 0 0 0 7px rgba(192, 57, 43, 0); } }
+@keyframes cursor-blink { 50% { opacity: 0; } }
+
+/* theme switch: the new theme is revealed left to right over the old one, like an image-comparison slider */
+::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+::view-transition-old(root) { z-index: 1; }
+::view-transition-new(root) { z-index: 2; animation: theme-wipe .8s cubic-bezier(.65, 0, .35, 1); }
+@keyframes theme-wipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }

@@ -67,7 +67,7 @@ def enough_for_icp(state: SessionState) -> bool:
 
 
 TIER_A_WEIGHT = 0.7  # the must-ask fields drive the bar; the optional ones fill the rest
-PROGRESS_CAP = 90  # the bar waits here until the interview is enough; the last stretch is the build
+PROGRESS_CAP = 90  # the bar waits here until the interview is enough
 
 
 @dataclass(frozen=True)
@@ -88,7 +88,8 @@ def _credit(state: SessionState, slot: SlotDef) -> float:
 def interview_progress(state: SessionState) -> Progress:
     """How much of the ICP is gathered, for the progress bar. Importance-weighted, must-ask fields
     count 70% and optional ones 30%; held at PROGRESS_CAP until enough_for_icp says the interview
-    could stop, so the bar never reads 100% while the bot is still asking."""
+    could stop, so the bar never reads 100% while the bot is still asking. It only reflects what is
+    gathered: finishing or building the profile does not move it."""
 
     def share(slots: list[SlotDef]) -> float:
         total = sum(s.importance for s in slots)
@@ -103,7 +104,5 @@ def interview_progress(state: SessionState) -> Progress:
     percent = round(raw * 100)
     if not enough_for_icp(state):
         percent = min(percent, PROGRESS_CAP)
-    elif state.finished:
-        percent = max(percent, PROGRESS_CAP)
     known = sum(1 for s in tier_a if _credit(state, s) >= 1.0)
     return Progress(percent=min(percent, 100), known=known, total=len(tier_a))
