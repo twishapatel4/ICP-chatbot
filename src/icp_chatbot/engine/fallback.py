@@ -8,6 +8,7 @@ from icp_chatbot.domain.state import SessionState, SlotSource, SlotValue, normal
 
 FORM_CONFIDENCE = 0.8
 OPTIONAL_FORM_SLOTS = ("buying_triggers",)
+BRANCH_KEY = "experience_level"  # HR slots that depend on it cannot be judged before the form
 
 
 @dataclass(frozen=True)
@@ -22,7 +23,13 @@ class FormField:
 def fallback_form(track: Track = "sales") -> list[FormField]:
     """Every tier A slot that blocks completion (required), then a few tier B slots (optional)."""
     fields = [
-        FormField(s.key, s.label, s.description, s.choices, required=True)
+        FormField(
+            s.key,
+            s.label,
+            s.description,
+            s.choices,
+            required=not any(k == BRANCH_KEY for k, _ in s.skip_if),
+        )
         for s in registry(track)
         if s.tier == Tier.A and s.blocks
     ]

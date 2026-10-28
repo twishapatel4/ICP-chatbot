@@ -277,7 +277,251 @@ SLOT_LIST: tuple[SlotDef, ...] = (
 SLOTS: dict[str, SlotDef] = {s.key: s for s in SLOT_LIST}
 assert len(SLOTS) == len(SLOT_LIST), "duplicate slot keys"
 
-HR_SLOT_LIST: tuple[SlotDef, ...] = ()  # the HR registry: empty until its slots are defined
+HR_SECTION_ORDER = (
+    "role_and_seniority",
+    "background",
+    "skills",
+    "location_and_terms",
+    "compensation_and_timing",
+    "sourcing",
+    "exclusions",
+)
+
+_EXPERIENCED = (("experience_level", "Experienced"),)
+_NOT_FRESHER_ONLY = (("experience_level", "Experienced"), ("experience_level", "Both"))
+_FRESHER = (("experience_level", "Fresher"),)
+
+HR_SLOT_LIST: tuple[SlotDef, ...] = (
+    # 1. Role and seniority
+    _s(
+        "target_functions",
+        "role_and_seniority",
+        "Job functions",
+        "The job functions the hire belongs to (for example engineering, sales, finance)",
+        "A",
+        0.85,
+    ),
+    _s(
+        "target_roles",
+        "role_and_seniority",
+        "Job titles",
+        "The job titles of the people to hire",
+        "A",
+        1.0,
+    ),
+    _s(
+        "experience_level",
+        "role_and_seniority",
+        "Fresher or experienced",
+        "Whether the hire is a fresher, an experienced professional, or either",
+        "A",
+        0.95,
+        choices=("Fresher", "Experienced", "Both"),
+        single_choice=True,
+    ),
+    _s(
+        "target_seniority",
+        "role_and_seniority",
+        "Seniority level",
+        "How senior the hire should be (for example entry, senior, manager, director)",
+        "B",
+        0.5,
+    ),
+    # 2. Background
+    _s(
+        "education_level",
+        "background",
+        "Education level",
+        "The minimum education the candidates should have",
+        "A",
+        0.7,
+        skip_if=_EXPERIENCED,
+    ),
+    _s(
+        "field_of_study",
+        "background",
+        "Field of study",
+        "The subjects or degrees the candidates should have studied",
+        "A",
+        0.7,
+        skip_if=_NOT_FRESHER_ONLY,
+    ),
+    _s(
+        "graduation_year",
+        "background",
+        "Graduation year",
+        "The graduation years of the candidates (for example 2024 to 2026)",
+        "A",
+        0.7,
+        skip_if=_NOT_FRESHER_ONLY,
+    ),
+    _s(
+        "years_experience",
+        "background",
+        "Years of experience",
+        "How many years of work experience the candidates should have (for example 3 to 8)",
+        "A",
+        0.85,
+        skip_if=_FRESHER,
+    ),
+    _s(
+        "current_industries",
+        "background",
+        "Current industries",
+        "The industries the candidates work in today",
+        "A",
+        0.7,
+        skip_if=_FRESHER,
+    ),
+    _s(
+        "current_company_size",
+        "background",
+        "Current company size",
+        "The size of the companies the candidates work at today",
+        "A",
+        0.7,
+        choices=COMPANY_SIZES,
+        single_choice=True,
+        exact_range=True,
+        skip_if=_FRESHER,
+    ),
+    _s(
+        "current_company_hq",
+        "background",
+        "Current company headquarters",
+        "Countries, and cities if any, where the candidates' current companies are headquartered",
+        "B",
+        0.3,
+        skip_if=_FRESHER,
+    ),
+    # 3. Skills
+    _s(
+        "required_skills",
+        "skills",
+        "Required skills",
+        "The skills and tools the candidates must have",
+        "A",
+        0.9,
+    ),
+    _s(
+        "nice_to_have_skills",
+        "skills",
+        "Nice-to-have skills",
+        "Skills that are a plus but not required",
+        "B",
+        0.5,
+    ),
+    _s(
+        "certifications",
+        "skills",
+        "Certifications",
+        "Certifications or licences the candidates should hold",
+        "B",
+        0.3,
+    ),
+    _s(
+        "languages",
+        "skills",
+        "Languages",
+        "Languages the candidates should speak",
+        "B",
+        0.3,
+    ),
+    # 4. Location and terms
+    _s(
+        "candidate_locations",
+        "location_and_terms",
+        "Where the candidates are",
+        "Countries, and cities if any, where the candidates should be based",
+        "A",
+        0.9,
+    ),
+    _s(
+        "employment_type",
+        "location_and_terms",
+        "Employment type",
+        "Whether the role is full-time, part-time, a contract or an internship",
+        "A",
+        0.8,
+        choices=("Full-time", "Part-time", "Contract", "Internship"),
+    ),
+    _s(
+        "work_mode",
+        "location_and_terms",
+        "Work mode",
+        "Whether the role is onsite, hybrid or remote",
+        "A",
+        0.8,
+        choices=("Onsite", "Hybrid", "Remote"),
+    ),
+    _s(
+        "relocation",
+        "location_and_terms",
+        "Relocation",
+        "Whether candidates from other places can be asked to relocate",
+        "B",
+        0.4,
+    ),
+    _s(
+        "headcount",
+        "location_and_terms",
+        "Number of hires",
+        "How many people are to be hired",
+        "B",
+        0.4,
+    ),
+    # 5. Compensation and timing
+    _s(
+        "salary_range",
+        "compensation_and_timing",
+        "Salary range",
+        "The pay on offer, with the currency and whether it is monthly or yearly",
+        "A",
+        0.8,
+    ),
+    _s(
+        "notice_period",
+        "compensation_and_timing",
+        "Notice period",
+        "The longest notice period the company can wait for",
+        "B",
+        0.4,
+    ),
+    _s(
+        "urgency",
+        "compensation_and_timing",
+        "Hiring urgency",
+        "How soon the role needs to be filled",
+        "B",
+        0.4,
+    ),
+    # 6. Sourcing
+    _s(
+        "source_companies",
+        "sourcing",
+        "Companies to hire from",
+        "Companies where good candidates are likely to work today",
+        "B",
+        0.4,
+    ),
+    _s(
+        "avoid_companies",
+        "sourcing",
+        "Companies to avoid",
+        "Companies the candidates should not be hired from",
+        "B",
+        0.3,
+    ),
+    # 7. Exclusions
+    _s(
+        "disqualifiers",
+        "exclusions",
+        "Exclusions and disqualifiers",
+        "Candidates to rule out",
+        "A",
+        0.9,
+    ),
+)
 
 _REGISTRIES: dict[str, tuple[SlotDef, ...]] = {"sales": SLOT_LIST, "hr": HR_SLOT_LIST}
 _SLOT_MAPS: dict[str, dict[str, SlotDef]] = {
@@ -285,6 +529,11 @@ _SLOT_MAPS: dict[str, dict[str, SlotDef]] = {
     "hr": {s.key: s for s in HR_SLOT_LIST},
 }
 assert all(len(_SLOT_MAPS[t]) == len(slots) for t, slots in _REGISTRIES.items()), "duplicate keys"
+
+
+def section_order(track: Track) -> tuple[str, ...]:
+    """The sections of this track's profile, in display order."""
+    return HR_SECTION_ORDER if track == "hr" else SECTION_ORDER
 
 
 def registry(track: Track) -> tuple[SlotDef, ...]:
