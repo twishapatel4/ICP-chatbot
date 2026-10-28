@@ -97,3 +97,24 @@ def test_ids_match_exact_case_but_labels_and_aliases_do_not():
     assert cat.resolve("company_size", "B").label == "1-10"
     assert cat.resolve("company_size", "b") is None
     assert cat.resolve("company_size", "2-10").label == "1-10"
+
+
+def test_seniority_aliases_resolve_to_the_right_ids():
+    cat = default_catalog()
+    for text, oid in (
+        ("VP", "vp"), ("Vice-President", "vp"), ("C-suite", "c"), ("CXO", "c"),
+        ("Founder", "o"), ("Co-founder", "o"), ("Intern", "tr"), ("Junior", "en"),
+        ("Directors", "d"), ("Managers", "m"), ("Partners", "p"), ("Senior IC", "ic"),
+    ):  # fmt: skip
+        assert cat.resolve("seniority", text).id == oid, text
+
+
+def test_alias_keys_are_unique_within_each_facet():
+    from icp_chatbot.linkedin.catalog import _norm
+
+    cat = default_catalog()
+    for facet in ("industry", "company_size", "seniority", "function", "country"):
+        seen: dict[str, str] = {}
+        for opt in cat.options(facet):
+            for key in {_norm(opt.label), *(_norm(m) for m in opt.match)}:
+                assert seen.setdefault(key, opt.id) == opt.id, (facet, key)

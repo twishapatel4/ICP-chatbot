@@ -10,63 +10,81 @@
   "id": "tr",
   "label": "Training",
   "match": [
-   "2"
+   "2",
+   "Intern",
+   "Trainee"
   ]
  },
  {
   "id": "en",
   "label": "Entry-level",
   "match": [
-   "3"
+   "3",
+   "Entry level",
+   "Junior"
   ]
  },
  {
   "id": "ic",
   "label": "Senior",
   "match": [
-   "4"
+   "4",
+   "Senior IC"
   ]
  },
  {
   "id": "m",
   "label": "Manager",
   "match": [
-   "5"
+   "5",
+   "Managers"
   ]
  },
  {
   "id": "d",
   "label": "Director",
   "match": [
-   "6"
+   "6",
+   "Directors"
   ]
  },
  {
   "id": "vp",
   "label": "Vice President (VP)",
   "match": [
-   "7"
+   "7",
+   "VP",
+   "Vice President",
+   "Vice-President"
   ]
  },
  {
   "id": "c",
   "label": "Chief X Officer (CxO)",
   "match": [
-   "8"
+   "8",
+   "CxO",
+   "CXO",
+   "C-level",
+   "C-suite",
+   "Chief Officer"
   ]
  },
  {
   "id": "p",
   "label": "Partner",
   "match": [
-   "9"
+   "9",
+   "Partners"
   ]
  },
  {
   "id": "o",
   "label": "Owner",
   "match": [
-   "10"
+   "10",
+   "Founder",
+   "Co-founder"
   ]
  }
 ]
