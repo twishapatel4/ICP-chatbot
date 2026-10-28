@@ -17,6 +17,7 @@ from icp_chatbot.domain.state import (
     is_non_answer,
     normalize_values,
     real_values,
+    resolve_slot_values,
 )
 
 EVIDENCE_LIMIT = 200
@@ -111,8 +112,11 @@ def apply_extraction(state: SessionState, result: ExtractionResult, turn_no: int
             and {v.lower() for v in existing.values} != {v.lower() for v in values}
         ):
             outcome.changed[update.slot] = (list(existing.values), list(values))
+        values, refs, unmapped = resolve_slot_values(update.slot, values)
         state.slots[update.slot] = SlotValue(
             values=values,
+            refs=refs,
+            unmapped=unmapped,
             confidence=update.confidence,
             source=SlotSource.STATED,
             source_turn=turn_no,

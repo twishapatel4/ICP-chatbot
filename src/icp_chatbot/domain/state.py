@@ -14,6 +14,7 @@ from icp_chatbot.domain.slots import (
     slot_map,
     with_custom,
 )
+from icp_chatbot.linkedin.catalog import SLOT_FACETS, default_catalog
 
 ANY = "Any"  # the answer "no preference": the slot builds no scoring rule
 SEED_CONFIDENCE_CAP = 0.5  # inferred values never exceed this until the user confirms them
@@ -75,8 +76,48 @@ def normalize_values(values: list[str]) -> list[str]:
     return out
 
 
+class OptionRef(BaseModel):
+    """A pointer to one LinkedIn catalog option."""
+
+    facet: str
+    id: str
+    level: int = 1
+    parent: str | None = None
+
+
+def resolve_slot_values(
+    slot_key: str, values: list[str], catalog=None
+) -> tuple[list[str], list[OptionRef], list[str]]:
+    """Map values onto the LinkedIn catalog: (canonical labels, refs, unmapped values).
+
+    Slots without a facet, and facets without a catalog, resolve nothing. "Any" is kept as is.
+    Country slots also take free-text cities, which are kept without a ref and not flagged."""
+    facet = SLOT_FACETS.get(slot_key)
+    catalog = catalog or default_catalog()
+    if facet is None or not catalog.has(facet):
+        return list(values), [], []
+    labels: list[str] = []
+    refs: list[OptionRef] = []
+    unmapped: list[str] = []
+    for value in values:
+        if value == ANY:
+            labels.append(value)
+            continue
+        opt = catalog.resolve(facet, value)
+        if opt is None:
+            labels.append(value)
+            if facet != "country":  # cities are free-text chips by design
+                unmapped.append(value)
+            continue
+        labels.append(opt.label)
+        refs.append(OptionRef(facet=facet, id=opt.id, level=opt.level, parent=opt.parent))
+    return normalize_values(labels), refs, unmapped
+
+
 class SlotValue(BaseModel):
     values: list[str]
+    refs: list[OptionRef] = Field(default_factory=list)
+    unmapped: list[str] = Field(default_factory=list)
     confidence: float = Field(ge=0.0, le=1.0)
     source: SlotSource
     source_turn: int | None = None
