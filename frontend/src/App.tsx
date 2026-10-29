@@ -3,7 +3,7 @@ import { BotAvatar } from "bot-avatars";
 import * as api from "./api";
 import Composer from "./components/Composer";
 import FallbackForm from "./components/FallbackForm";
-import Icon from "./components/Icon";
+import Icon, { type IconName } from "./components/Icon";
 import IcpView from "./components/IcpView";
 import ProgressBar from "./components/ProgressBar";
 import InView from "./components/InView";
@@ -34,6 +34,12 @@ const MSG_CLASS: Record<Message["role"], string> = {
   note: `${MSG}p-0 self-center text-muted text-[12px]`,
   error: `${MSG}p-0 self-center text-warn text-[13px]`,
 };
+
+const STEPS: { icon: IconName; title: string; text: string; tag: string }[] = [
+  { icon: "company", title: "Tell us about you", text: "Pick your role and share your company, website and industry so I can start from what is already public.", tag: "Step 1" },
+  { icon: "profile", title: "Set the core profile", text: "Choose from a few options such as industry, size, seniority and location.", tag: "Step 2" },
+  { icon: "chat", title: "Chat and review", text: "A short chat fills in the rest. Then review and approve your profile and scoring model.", tag: "Step 3" },
+];
 
 const NO_PROGRESS: Progress = { percent: 0, known: 0, total: 0 };
 
@@ -430,6 +436,18 @@ export default function App() {
                     : "Tell us about your company, pick a few options, then a short chat. At the end you get a profile and a scoring model you can review and approve."}
                 </p>
               </div>
+              <div className="grid grid-cols-3 gap-[18px] w-full text-left max-[820px]:grid-cols-1">
+                {STEPS.map((step) => (
+                  <div className="flex flex-col bg-card border border-line rounded-[28px] p-[18px] shadow-soft" key={step.title}>
+                    <span className="inline-flex size-11 items-center justify-center rounded-[14px] bg-panel shadow-[0_0_0_1px_var(--line),0_1px_2px_rgba(20,24,31,.05)]">
+                      <Icon name={step.icon} size={22} />
+                    </span>
+                    <h3 className="mt-[22px] mx-0 mb-[10px] text-[17px] font-semibold tracking-[-.015em] leading-[1.2]">{step.title}</h3>
+                    <p className="mt-0 mx-0 mb-[18px] text-[13px] leading-[1.55] text-muted max-w-none flex-1">{step.text}</p>
+                    <span className="block text-center py-[11px] px-3 rounded-full bg-panel border border-line text-[13px] font-semibold">{step.tag}</span>
+                  </div>
+                ))}
+              </div>
               <StepOne busy={busy} error={startError} onTrack={setTrack} onSubmit={(body) => void start(body)} />
               {busy && (
                 <div className="flex items-center justify-center gap-2 text-[16px] text-muted" role="status">
@@ -441,9 +459,6 @@ export default function App() {
           ) : (
             sessionId && (
               <>
-                <h1 className="m-0 text-[clamp(22px,3vw,28px)] font-medium tracking-[-.02em]">
-                  {track === "hr" ? "Who are you hiring?" : "Who do you sell to?"}
-                </h1>
                 <StepTwo
                   key={`${sessionId}-${savedAnswers ? "saved" : "none"}`}
                   sessionId={sessionId}

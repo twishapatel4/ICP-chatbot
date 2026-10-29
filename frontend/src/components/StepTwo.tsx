@@ -1,6 +1,8 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import * as api from "../api";
 import type { Card, CardField, ProfileOption, Track } from "../types";
+import PickMenu from "./PickMenu";
+import { fuzzyFilter } from "./fuzzy";
 import { actions, card, chip, chipOn, pillInput, primaryBtn } from "../ui";
 
 export const ANY = "Any";
@@ -127,11 +129,21 @@ const WRAP = "flex flex-wrap gap-2";
 
 function Chip({ text, on, onClick, disabled, remove }: { text: string; on?: boolean; onClick: () => void; disabled?: boolean; remove?: boolean }) {
   return (
-    <button type="button" className={`${chip} py-2 ${on ? chipOn : ""}`} disabled={disabled} aria-pressed={remove ? undefined : !!on} onClick={onClick}>
+    <button type="button" className={`${chip} py-2 font-medium ${on ? chipOn : ""}`} disabled={disabled} aria-pressed={remove ? undefined : !!on} onClick={onClick}>
       {on && !remove ? "✓ " : ""}
       {text}
       {remove ? " ×" : ""}
     </button>
+  );
+}
+
+// A real radio (single choice) or checkbox (multi choice), so the control says which kind of pick it is.
+function Choice({ text, kind, name, on, onChange, disabled }: { text: string; kind: "radio" | "checkbox"; name: string; on: boolean; onChange: () => void; disabled?: boolean }) {
+  return (
+    <label className={`${chip} py-2 flex items-center gap-2 border border-line bg-panel ${on ? "border-accent" : ""} ${disabled ? "opacity-50" : "cursor-pointer"}`}>
+      <input className="size-4 accent-accent m-0" type={kind} name={name} checked={on} disabled={disabled} onChange={onChange} />
+      {text}
+    </label>
   );
 }
 
@@ -173,8 +185,7 @@ function SearchPicker({
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const base = useId();
-  const needle = q.trim().toLowerCase();
-  const results = needle ? options.filter((o) => o.label.toLowerCase().includes(needle)).slice(0, 12) : suggest.slice(0, 20);
+  const results = q.trim() ? fuzzyFilter(options, q, (o) => o.label).slice(0, 12) : suggest.slice(0, 20);
   const shown = open && results.length > 0;
   const blocked = (o: ProfileOption) => full && !values.includes(o.label);
   const optionId = (i: number) => `${base}-o${i}`;
@@ -307,17 +318,49 @@ function ChoiceField({ field, values, disabled, onChange }: FieldProps) {
   const big = !!field.facet && options.length > SEARCH_ABOVE;
   const top = options.filter((o) => o.level === 1);
   const full = !single && atCap(values);
+  const name = useId();
+  const kind = single ? "radio" : "checkbox";
+  const anyOn = values.includes(ANY);
+  // a long multi-pick list is a dropdown with the picks listed below, not a wall of boxes
+  const menu = !single && !big && !!field.facet;
+  const picked = without(values);
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2" role={single ? "radiogroup" : "group"} aria-label={field.label}>
       {error && <LoadError retry={retry} />}
       <div className={WRAP}>
-        {field.any_allowed && <AnyChip values={values} onChange={onChange} disabled={disabled} />}
-        {big
+        {field.any_allowed && <Choice text={ANY} kind={kind} name={name} on={anyOn} disabled={disabled} onChange={() => onChange(single || !anyOn ? [ANY] : [])} />}
+        {menu ? null : big
           ? without(values).map((v) => <Chip key={v} text={v} on remove disabled={disabled} onClick={() => onChange(values.filter((x) => x !== v))} />)
           : labels.map((l) => (
-              <Chip key={l} text={l} on={values.includes(l)} disabled={disabled || (full && !values.includes(l))} onClick={() => onChange(single ? [l] : toggle(values, l))} />
+              <Choice
+                key={l}
+                text={l}
+                kind={kind}
+                name={name}
+                on={values.includes(l)}
+                disabled={disabled || (full && !values.includes(l))}
+                onChange={() => onChange(single ? [l] : toggle(values, l))}
+              />
             ))}
       </div>
+      {menu && (
+        <>
+          <PickMenu
+            label={field.label}
+            placeholder="Choose an option"
+            disabled={disabled || full}
+            options={labels.filter((l) => !picked.includes(l))}
+            onPick={(l) => onChange(toggle(values, l))}
+          />
+          {picked.length > 0 && (
+            <div className={WRAP}>
+              {picked.map((v) => (
+                <Chip key={v} text={v} on remove disabled={disabled} onClick={() => onChange(values.filter((x) => x !== v))} />
+              ))}
+            </div>
+          )}
+        </>
+      )}
       {full && CAP_HINT}
       {big && (
         <SearchPicker
@@ -327,7 +370,7 @@ function ChoiceField({ field, values, disabled, onChange }: FieldProps) {
           placeholder="Search to add more..."
           disabled={disabled}
           full={full}
-          onToggle={(l) => onChange(toggle(values, l))}
+          onToggle={(l) => onChange(single ? [l] : toggle(values, l))}
         />
       )}
     </div>
@@ -341,6 +384,11 @@ function GeoField({ values, disabled, countries: { options, error, retry }, fiel
   const cities = values.filter((v) => v !== ANY && !countryNames.has(v.toLowerCase()));
   const [city, setCity] = useState("");
   const full = atCap(values);
+  const [region, setRegion] = useState("");
+  // the catalog lists regions (level 1) with their countries (level 2) under them
+  const regionNames = useMemo(() => new Set(options.filter((o) => o.level === 1).map((o) => o.label)), [options]);
+  const regions = options.filter((o) => o.level === 1).map((o) => o.label);
+  const inRegion = options.filter((o) => o.level === 2 && o.parent === region && !countries.includes(o.label));
   const addCity = () => {
     const t = city.trim().slice(0, MAX_CHARS);
     setCity("");
@@ -356,22 +404,35 @@ function GeoField({ values, disabled, countries: { options, error, retry }, fiel
       {error && <LoadError retry={retry} />}
       <div className={WRAP}>
         {field.any_allowed && <AnyChip values={values} onChange={onChange} disabled={disabled} />}
-        {countries.map((c) => (
-          <Chip key={c} text={c} on remove disabled={disabled} onClick={() => removeCountry(c)} />
-        ))}
       </div>
-      <SearchPicker
-        options={options}
-        values={countries}
-        suggest={[]}
-        placeholder="Search for a country..."
-        disabled={disabled}
-        full={full}
-        onToggle={(l) => (countries.includes(l) ? removeCountry(l) : onChange(toggle(values, l)))}
-      />
+      <div className="flex flex-wrap gap-2">
+        <PickMenu
+          label="Region"
+          placeholder="Choose a region"
+          value={region}
+          disabled={disabled || full || options.length === 0}
+          options={regions}
+          onPick={(r) => {
+            setRegion(r);
+            // a region on its own means all its countries; naming countries narrows it
+            if (!values.includes(r)) onChange(toggle(values, r));
+          }}
+        />
+        <PickMenu
+          key={region}
+          label="Country"
+          placeholder={region ? `Narrow to a country in ${region} (optional)` : "Choose a region first"}
+          disabled={disabled || full || !region}
+          options={inRegion.map((o) => o.label)}
+          onPick={(l) => onChange(toggle(values.filter((v) => v !== region), l))}
+        />
+      </div>
       {countries.length > 0 && (
         <>
           <div className={WRAP}>
+            {countries.map((c) => (
+              <Chip key={c} text={regionNames.has(c) ? `${c} (all countries)` : c} on remove disabled={disabled} onClick={() => removeCountry(c)} />
+            ))}
             {cities.map((c) => (
               <Chip key={c} text={c} on remove disabled={disabled} onClick={() => onChange(values.filter((x) => x !== c))} />
             ))}
@@ -542,41 +603,57 @@ export default function StepTwo({ sessionId, track, cards, saved, disabled, miss
     if (strays.length) setAnswers((a) => ({ ...a, ...Object.fromEntries(strays.map((f) => [f.slot, []])) }));
   }, [countries, cards, answers]);
 
-  const problems = problemSlots(cards, answers, countries);
   const labels = new Map(cards.flatMap((c) => c.fields.map((f) => [f.slot, f.label] as const)));
   const titleFor = (c: Card) => (c.id === "geography" && track === "sales" && answers.business_model?.includes("B2C") ? "Where do your customers live?" : c.title);
 
+  // one card per screen
+  const pages = cards.filter((c) => shownFields(c, answers).length > 0);
+  const [page, setPage] = useState(0);
+  const at = Math.min(page, pages.length - 1);
+  const cur = pages[at];
+  const last = at === pages.length - 1;
+  // the server flagged something: go to the screen that holds it
+  useEffect(() => {
+    const i = pages.findIndex((c) => shownFields(c, answers).some((f) => missing.includes(f.slot)));
+    if (i >= 0) setPage(i);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [missing]);
+
+  const problems = problemSlots(cards, answers, countries);
+  const pageProblems = cur ? problemSlots([cur], answers, countries) : [];
+
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (problems.length || disabled) return;
+    if (disabled || pageProblems.length) return;
+    if (!last) return setPage(at + 1);
+    if (problems.length) return;
     // only what is shown goes out; answers behind a skipped branch stay in the draft
     const out: Answers = {};
     for (const c of cards) for (const f of shownFields(c, answers)) if (answered(f, answers)) out[f.slot] = answers[f.slot];
     onSubmit(out);
   }
 
+  const fields = cur ? shownFields(cur, answers) : [];
   return (
-    <form className="flex flex-col gap-4" onSubmit={submit}>
-      {cards.map((c) => {
-        const fields = shownFields(c, answers);
-        if (fields.length === 0) return null;
-        return (
-          <section key={c.id} className={`${card} flex flex-col gap-3`} aria-label={titleFor(c)}>
-            <h3 className="m-0 text-[15px]">{titleFor(c)}</h3>
+    <form className="flex flex-col gap-4 w-full max-w-[640px] mx-auto" onSubmit={submit}>
+      {cur && (
+        <>
+          <h1 className="mt-2 mb-1 text-center text-[clamp(22px,3vw,28px)] leading-[1.15] font-medium tracking-[-.025em]">{titleFor(cur)}</h1>
+          <section key={cur.id} className={`${card} flex flex-col gap-3 text-left`} aria-label={titleFor(cur)}>
             {fields.map((f) => (
-              <div key={f.slot} className="flex flex-col gap-2">
+              <div key={f.slot} className="flex flex-col gap-2.5 not-first:mt-2 not-first:pt-4 not-first:border-t not-first:border-line">
                 {fields.length > 1 && (
-                  <span className={`text-[12px] font-medium ${flagged.includes(f.slot) ? "text-warn" : "text-muted"}`}>
+                  <span className={`text-[14px] font-medium ${flagged.includes(f.slot) ? "text-warn" : "text-ink"}`}>
                     {f.label}
-                    {f.optional ? " (optional)" : " *"}
+                    {f.optional ? <span className="font-normal text-muted"> (optional)</span> : <span className="text-muted"> *</span>}
                   </span>
                 )}
                 <FieldInput field={f} values={answers[f.slot] ?? []} disabled={disabled} countries={country} onChange={(v) => set(f.slot, v)} />
               </div>
             ))}
           </section>
-        );
-      })}
+        </>
+      )}
       {(flagged.length > 0 || error) && (
         <p className="m-0 text-warn text-[14px]" role="alert">
           {error || "Please check:"}
@@ -584,10 +661,15 @@ export default function StepTwo({ sessionId, track, cards, saved, disabled, miss
         </p>
       )}
       <div className={actions}>
-        <button className={primaryBtn} type="submit" disabled={disabled || problems.length > 0}>
+        {at > 0 && (
+          <button type="button" disabled={disabled} onClick={() => setPage(at - 1)}>
+            Back
+          </button>
+        )}
+        <button className={primaryBtn} type="submit" disabled={disabled || pageProblems.length > 0 || (last && problems.length > 0)}>
           Continue
         </button>
-        {problems.length > 0 && <span className="self-center text-[12px] text-muted">Answer every question above to continue.</span>}
+        {pageProblems.length > 0 && <span className="self-center text-[12px] text-muted">Answer every question above to continue.</span>}
       </div>
     </form>
   );

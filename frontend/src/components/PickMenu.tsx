@@ -1,0 +1,113 @@
+import { useId, useRef, useState } from "react";
+import { pillInput } from "../ui";
+import { fuzzyFilter } from "./fuzzy";
+
+interface Props {
+  options: string[];
+  label: string;
+  placeholder: string;
+  value?: string; // shown on the button once something is chosen
+  disabled?: boolean;
+  onPick: (v: string) => void;
+}
+
+// A searchable dropdown that only picks on click or Enter. A native <select> fires change on every
+// arrow key, which would add a value per key press.
+export default function PickMenu({ options, label, placeholder, value, disabled, onPick }: Props) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [active, setActive] = useState(0);
+  const button = useRef<HTMLButtonElement>(null);
+  const base = useId();
+  const results = fuzzyFilter(options, q, (o) => o);
+
+  const close = () => {
+    setOpen(false);
+    setQ("");
+  };
+  const pick = (v: string | undefined) => {
+    if (v === undefined) return;
+    onPick(v);
+    close();
+    button.current?.focus();
+  };
+
+  return (
+    <div
+      className="relative flex-1 min-w-[180px]"
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) close();
+      }}
+    >
+      <button
+        ref={button}
+        type="button"
+        className={`${pillInput} block w-full py-2.5 px-4 text-left text-[14px] font-normal disabled:opacity-50`}
+        aria-label={label}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => {
+          setActive(0);
+          open ? close() : setOpen(true);
+        }}
+      >
+        {value || placeholder}
+        <span aria-hidden="true" className="float-right">⌄</span>
+      </button>
+      {open && (
+        <div className="absolute z-20 left-0 right-0 mt-1 p-1 bg-panel border border-line rounded-[18px] shadow-soft">
+          <input
+            className={`${pillInput} block w-full py-2 px-3 mb-1`}
+            type="text"
+            role="combobox"
+            aria-expanded
+            aria-controls={`${base}-list`}
+            aria-activedescendant={results.length ? `${base}-o${active}` : undefined}
+            aria-autocomplete="list"
+            aria-label={`Search ${label.toLowerCase()}`}
+            autoComplete="off"
+            placeholder="Search..."
+            autoFocus
+            value={q}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setActive(0);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                e.preventDefault();
+                const n = results.length;
+                if (n) setActive((a) => (a + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
+              } else if (e.key === "Enter") {
+                e.preventDefault(); // never submit the form from the search box
+                pick(results[active]);
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                close();
+                button.current?.focus();
+              }
+            }}
+          />
+          <ul id={`${base}-list`} role="listbox" aria-label={label} className="max-h-60 overflow-y-auto list-none m-0 p-0">
+            {results.map((o, i) => (
+              <li
+                key={o}
+                id={`${base}-o${i}`}
+                role="option"
+                aria-selected={o === value}
+                className={`rounded-[12px] py-2 px-3 text-[14px] cursor-pointer ${i === active ? "bg-card" : ""}`}
+                onMouseDown={(e) => e.preventDefault()}
+                onMouseEnter={() => setActive(i)}
+                onClick={() => pick(o)}
+              >
+                {o}
+              </li>
+            ))}
+            {results.length === 0 && <li className="py-2 px-3 text-[14px] text-muted">No matches</li>}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
