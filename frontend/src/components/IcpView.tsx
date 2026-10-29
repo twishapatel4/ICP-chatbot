@@ -1,5 +1,6 @@
 import type { IcpResponse } from "../types";
 import { actions, card, primaryBtn } from "../ui";
+import { profileName } from "../wording";
 
 const H4 = "mt-4 mx-0 mb-1.5 text-[12px] uppercase tracking-[.05em] text-muted";
 const label = (s: string) => s.replace(/_/g, " ");
@@ -15,10 +16,12 @@ interface Props {
 
 export default function IcpView({ icp, approved, busy, readOnly, onApprove, onImprove }: Props) {
   const doc = icp.document;
+  const track = doc.track ?? "sales";
+  const filters = doc.linkedin_filters ?? [];
 
   return (
     <article className={card}>
-      <h3 className="mt-0 mx-0 mb-2 text-[15px]">Your Ideal Customer Profile</h3>
+      <h3 className="mt-0 mx-0 mb-2 text-[15px]">Your {profileName(track)}</h3>
       {doc.partial && (
         <p className="text-muted text-[12px]">
           This profile is incomplete: the chat ended before the basics were covered. "Still unclear" lists what is
@@ -55,6 +58,25 @@ export default function IcpView({ icp, approved, busy, readOnly, onApprove, onIm
             ))}
           </ul>
         </>
+      )}
+
+      {filters.length > 0 && (
+        <section aria-label="LinkedIn filters">
+          <h4 className={H4}>LinkedIn filters</h4>
+          {filters.map((f) => (
+            <div className="flex justify-between gap-3 py-1 border-b border-line last-of-type:border-b-0 max-[520px]:flex-col max-[520px]:gap-0" key={`${f.facet}-${f.slot}`}>
+              <span className="text-muted flex-[0_0_38%] capitalize">{label(f.facet)}</span>
+              <span className="flex-1 text-right [overflow-wrap:anywhere] max-[520px]:text-left">
+                {f.labels.join(", ")}
+                {f.unmapped.length > 0 && (
+                  <span className="block text-[11px] text-warn" title="Not a LinkedIn option, so it will not become a filter">
+                    Not a LinkedIn filter: {f.unmapped.join(", ")}
+                  </span>
+                )}
+              </span>
+            </div>
+          ))}
+        </section>
       )}
 
       {readOnly ? null : approved ? (

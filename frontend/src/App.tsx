@@ -3,7 +3,7 @@ import { BotAvatar } from "bot-avatars";
 import * as api from "./api";
 import Composer from "./components/Composer";
 import FallbackForm from "./components/FallbackForm";
-import Icon, { type IconName } from "./components/Icon";
+import Icon from "./components/Icon";
 import IcpView from "./components/IcpView";
 import ProgressBar from "./components/ProgressBar";
 import InView from "./components/InView";
@@ -11,25 +11,21 @@ import Typewriter from "./components/Typewriter";
 import ScrollProgress from "./components/ScrollProgress";
 import TextShimmer from "./components/TextShimmer";
 import TextEffect from "./components/TextEffect";
+import StepIndicator from "./components/StepIndicator";
+import StepOne from "./components/StepOne";
+import StepTwo, { clearDraft } from "./components/StepTwo";
 import ThemeToggle from "./components/ThemeToggle";
-import type { FormField, IcpResponse, Progress, StartRequest, Turn } from "./types";
-import { app, chip, chipOn, chips, column, gutter, header, iconBtn, pillInput, promptActions, promptBox, promptInput, roundBtn, sendBtn } from "./ui";
+import type { Card, FormField, IcpResponse, Progress, StartRequest, Track, Turn } from "./types";
+import { buildNote, profileName } from "./wording";
+import { app, chip, chipOn, chips, column, gutter, header, iconBtn } from "./ui";
 
-type Stage = "home" | "interview" | "fallback" | "building" | "done";
+type Stage = "step1" | "step2" | "interview" | "fallback" | "building" | "done";
+const STAGES: Stage[] = ["step1", "step2", "interview", "fallback", "building", "done"];
 interface Message {
   id: number;
   role: "bot" | "me" | "note" | "error";
   text: string;
 }
-
-type IntroKey = "company_name" | "website" | "industry" | "role";
-const INTRO_EXTRAS: [IntroKey, string][] = [
-  ["website", "Website (optional)"],
-  ["industry", "Industry (optional)"],
-  ["role", "Your role (optional)"],
-];
-
-const BUILD_NOTE = "Building your ICP. This can take a minute...";
 
 const MSG = "max-w-[min(82%,1100px)] rounded-[22px] whitespace-pre-wrap [overflow-wrap:anywhere] ";
 const MSG_CLASS: Record<Message["role"], string> = {
@@ -41,13 +37,26 @@ const MSG_CLASS: Record<Message["role"], string> = {
 
 const NO_PROGRESS: Progress = { percent: 0, known: 0, total: 0 };
 
-const STEPS: { icon: IconName; title: string; text: string; tag: string }[] = [
-  { icon: "company", title: "Tell us about you", text: "Share your company name and website so I can start from what is already public.", tag: "Step 1" },
-  { icon: "chat", title: "Answer a few questions", text: "A short chat about who you sell to, what they struggle with and how they buy.", tag: "Step 2" },
-  { icon: "profile", title: "Review your ICP", text: "Get a profile and a scoring model you can edit, review and approve.", tag: "Step 3" },
-];
-
 const STORAGE_KEY = "icp-chat-v1";
+
+// The chat snapshot lives in sessionStorage and goes with the tab. A session still waiting at step 2 is
+// also pointed to from localStorage, so closing the tab and coming back lands on step 2 again.
+const PENDING_KEY = "icp-step2-session";
+const readPending = (): string | null => {
+  try {
+    return localStorage.getItem(PENDING_KEY);
+  } catch {
+    return null;
+  }
+};
+const writePending = (id: string | null) => {
+  try {
+    if (id) localStorage.setItem(PENDING_KEY, id);
+    else localStorage.removeItem(PENDING_KEY);
+  } catch {
+    // storage unavailable: step 2 just will not survive closing the tab
+  }
+};
 
 interface Snapshot {
   stage: Stage;
@@ -56,6 +65,8 @@ interface Snapshot {
   multi: boolean;
   picked: string[];
   sessionId: string | null;
+  track?: Track | null;
+  cards?: Card[];
   form: FormField[];
   missing: string[];
   icp: IcpResponse | null;
@@ -72,7 +83,7 @@ function loadSnapshot(): Snapshot | null {
     if (!raw) return null;
     const snap = JSON.parse(raw) as Snapshot;
     // a "building" note left in a chat that is no longer building is stale (saved before it was cleaned up)
-    if (snap.stage !== "building") snap.messages = snap.messages.filter((m) => !(m.role === "note" && m.text === BUILD_NOTE));
+    if (snap.stage !== "building") snap.messages = snap.messages.filter((m) => !(m.role === "note" && [buildNote("sales"), buildNote("hr"), buildNote(null)].includes(m.text)));
     return snap;
   } catch {
     return null;
@@ -95,7 +106,11 @@ function explain(e: unknown): string {
 
 export default function App() {
   const [saved] = useState(loadSnapshot);
-  const [stage, setStage] = useState<Stage>(["signup", "starting"].includes(saved?.stage as string) ? "home" : (saved?.stage ?? "home"));
+  // a stage saved by an older build ("home", "signup", ...) is not one of these: start over at step 1
+  const [stage, setStage] = useState<Stage>(STAGES.includes(saved?.stage as Stage) ? (saved?.stage as Stage) : "step1");
+  const [track, setTrack] = useState<Track | null>(saved?.track ?? null);
+  const [cards, setCards] = useState<Card[]>(saved?.cards ?? []);
+  const [savedAnswers, setSavedAnswers] = useState<Record<string, string[]> | null>(null);
   const [messages, setMessages] = useState<Message[]>(saved?.messages ?? []);
   const [options, setOptions] = useState<string[]>(saved?.options ?? []);
   const [multi, setMulti] = useState(saved?.multi ?? true);
@@ -109,7 +124,6 @@ export default function App() {
   const [revising, setRevising] = useState(saved?.revising ?? false);
   const [progress, setProgress] = useState<Progress>(saved?.progress ?? NO_PROGRESS);
   const [startError, setStartError] = useState("");
-  const [intro, setIntro] = useState<Record<IntroKey, string>>({ company_name: "", website: "", industry: "", role: "" });
   const nextId = useRef(Math.max(0, ...(saved?.messages ?? []).map((m) => m.id)) + 1);
   const firstNewId = useRef(nextId.current); // messages restored after a reload show at once, not typed out
 
@@ -134,13 +148,13 @@ export default function App() {
   }, [messages, stage, icp, options, replyTyped]);
 
   useEffect(() => {
-    const snap: Snapshot = { stage, messages, options, multi, picked, sessionId, form, missing, icp, approved, revising, progress };
+    const snap: Snapshot = { stage, messages, options, multi, picked, sessionId, track, cards, form, missing, icp, approved, revising, progress };
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
     } catch {
       // storage unavailable: the chat just will not survive a reload
     }
-  }, [stage, messages, options, multi, picked, sessionId, form, missing, icp, approved, revising, progress]);
+  }, [stage, messages, options, multi, picked, sessionId, track, cards, form, missing, icp, approved, revising, progress]);
 
   // A reload mid-build loses the in-flight request; ask for the ICP again.
   const resumed = useRef(false);
@@ -151,7 +165,43 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The server knows whether step 2 was submitted: a session still in step 2 resumes there, with
+  // the answers it kept, whatever stage the browser remembered. A session it no longer knows starts over.
+  const checked = useRef(false);
+  useEffect(() => {
+    const id = saved?.sessionId ? (["step2", "interview", "fallback"].includes(saved.stage) ? saved.sessionId : null) : readPending();
+    if (checked.current || !id) return;
+    checked.current = true;
+    api
+      .getSession(id)
+      .then((view) => {
+        setTrack(view.track);
+        if (view.step === "profile" && view.cards) {
+          setSessionId(view.session_id);
+          setCards(view.cards);
+          setSavedAnswers(view.answers);
+          setMessages([]);
+          setOptions([]);
+          setStage("step2");
+        } else {
+          writePending(null);
+        }
+      })
+      .catch((e) => {
+        if (e instanceof api.ApiError && e.status === 404) {
+          writePending(null);
+          newChat();
+        }
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function newChat() {
+    if (sessionId) clearDraft(sessionId);
+    writePending(null);
+    setTrack(null);
+    setCards([]);
+    setSavedAnswers(null);
     setMessages([]);
     setOptions([]);
     setPicked([]);
@@ -164,14 +214,13 @@ export default function App() {
     setRevising(false);
     setProgress(NO_PROGRESS);
     setBusy(false);
-    setIntro({ company_name: "", website: "", industry: "", role: "" });
-    setStage("home");
+    setStage("step1");
   }
 
   async function makeIcp(id: string) {
     setStage("building");
     // the "building" note is removed once the profile is ready
-    push("note", BUILD_NOTE);
+    push("note", buildNote(track));
     try {
       setIcp(await api.buildIcp(id));
       setShowProfile(wide());
@@ -181,7 +230,7 @@ export default function App() {
       if (missing) {
         push(
           "bot",
-          `You have not provided enough information to build an ICP yet. Still missing: ${missing.join(", ")}. Tell me more about these and I will build it.`,
+          `You have not provided enough information to build the ${profileName(track)} yet. Still missing: ${missing.join(", ")}. Tell me more about these and I will build it.`,
         );
         setRevising(true);
         setStage("interview");
@@ -191,7 +240,7 @@ export default function App() {
       setStage("done");
     } finally {
       // the build is over, either way: the "this can take a minute" note no longer applies
-      setMessages((m) => m.filter((x) => !(x.role === "note" && x.text === BUILD_NOTE)));
+      setMessages((m) => m.filter((x) => !(x.role === "note" && x.text === buildNote(track))));
     }
   }
 
@@ -204,7 +253,7 @@ export default function App() {
         : "I could not continue the conversation, so here is a short form instead.",
     );
     try {
-      setForm(await api.getFallbackForm());
+      setForm(await api.getFallbackForm(track ?? "sales"));
       setStage("fallback");
     } catch (e) {
       push("error", explain(e));
@@ -241,14 +290,41 @@ export default function App() {
     }
   }
 
+  // Step 1 creates the session; the website read starts on the server while they fill in step 2.
   const start = (body: StartRequest) =>
     guarded(async () => {
-      // the welcome screen stays up, showing it is working, until the first question arrives: the
-      // chat then opens with that question, not with an echo of what was typed
       setStartError("");
       try {
-        await handleTurn(await api.startSession(body));
+        const created = await api.startSession(body);
+        setSessionId(created.session_id);
+        writePending(created.session_id);
+        setTrack(created.track);
+        setCards(created.cards);
+        setSavedAnswers(null);
+        setMissing([]);
+        setStage("step2");
       } catch (e) {
+        setStartError(explain(e));
+      }
+    });
+
+  const submitProfile = (answers: Record<string, string[]>) =>
+    guarded(async () => {
+      if (!sessionId) return;
+      setMissing([]);
+      setStartError("");
+      try {
+        const turn = await api.submitProfile(sessionId, answers);
+        clearDraft(sessionId);
+        writePending(null);
+        await handleTurn(turn);
+      } catch (e) {
+        const slots = e instanceof api.ApiError && (e.detail as { missing_required?: string[] })?.missing_required;
+        if (slots) {
+          setMissing(slots);
+          setStartError("Please answer the highlighted questions.");
+          return;
+        }
         setStartError(explain(e));
       }
     });
@@ -310,89 +386,77 @@ export default function App() {
     setStage("interview");
   }
 
-  if (stage === "home") {
+  const stepNo = stage === "step1" ? 1 : stage === "step2" ? 2 : 3;
+
+  if (stage === "step1" || stage === "step2") {
     return (
       <main className={app}>
         <header className={header}>
-          <div className="flex items-center gap-2.5" />
+          <div className="flex items-center gap-2.5">
+            {stage === "step2" && (
+              <button onClick={newChat} disabled={busy}>
+                <Icon name="plus" size={18} /> New chat
+              </button>
+            )}
+          </div>
           <ThemeToggle />
         </header>
-        <div className="flex-1 flex flex-col items-center justify-center text-center gap-0 px-[clamp(16px,4vw,48px)] pt-0 pb-10">
-          <span className="inline-flex items-center justify-center size-16 rounded-full bg-panel shadow-[0_10px_28px_rgba(20,24,31,.1),0_0_0_1px_var(--line)]">
-            <Icon name="sparkle" size={26} />
-          </span>
-          <h1 className="mt-[26px] mx-0 mb-0 text-[clamp(26px,3.4vw,34px)] leading-[1.15] font-medium tracking-[-.025em]">
-            <TextEffect preset="fade-in-blur" speedReveal={1.4}>Build your</TextEffect>{" "}
-            <TextEffect preset="fade-in-blur" speedReveal={1.4} delay={0.25} className="text-muted">Ideal Customer Profile</TextEffect>
-          </h1>
-          <p className="text-muted text-[14px] max-w-[520px] mt-[10px] mx-0 mb-0">A short conversation about your business. At the end you get an ICP and a scoring model you can review and approve.</p>
-          <div className="grid grid-cols-3 gap-[18px] mt-11 w-full max-w-[1000px] text-left max-[820px]:grid-cols-1">
-            {STEPS.map((step) => (
-              <div className="flex flex-col bg-card border border-line rounded-[28px] p-[18px] shadow-soft" key={step.title}>
-                <span className="inline-flex size-11 items-center justify-center rounded-[14px] bg-panel shadow-[0_0_0_1px_var(--line),0_1px_2px_rgba(20,24,31,.05)]">
-                  <Icon name={step.icon} size={22} />
+        <div className={`${column} flex-1 flex flex-col gap-5 pt-2 pb-10 ${gutter}`}>
+          <StepIndicator current={stepNo} />
+          {stage === "step1" ? (
+            <>
+              <div className="text-center">
+                <span className="inline-flex items-center justify-center size-16 rounded-full bg-panel shadow-[0_10px_28px_rgba(20,24,31,.1),0_0_0_1px_var(--line)]">
+                  <Icon name="sparkle" size={26} />
                 </span>
-                <h3 className="mt-[22px] mx-0 mb-[10px] text-[17px] font-semibold tracking-[-.015em] leading-[1.2]">{step.title}</h3>
-                <p className="mt-0 mx-0 mb-[18px] text-[13px] leading-[1.55] text-muted max-w-none flex-1">{step.text}</p>
-                <span className="block text-center py-[11px] px-3 rounded-full bg-panel border border-line text-[13px] font-semibold">{step.tag}</span>
+                <h1 className="mt-[26px] mx-0 mb-0 text-[clamp(26px,3.4vw,34px)] leading-[1.15] font-medium tracking-[-.025em]">
+                  <TextEffect preset="fade-in-blur" speedReveal={1.4}>Build your</TextEffect>{" "}
+                  <TextEffect preset="fade-in-blur" speedReveal={1.4} delay={0.25} className="text-muted">{profileName(track)}</TextEffect>
+                </h1>
+                <p className="text-muted text-[14px] max-w-[520px] mt-[10px] mx-auto mb-0">
+                  {track === "hr"
+                    ? "Tell us about your company, pick a few options, then a short chat. At the end you get a candidate profile and a scoring model you can review and approve."
+                    : "Tell us about your company, pick a few options, then a short chat. At the end you get a profile and a scoring model you can review and approve."}
+                </p>
               </div>
-            ))}
-          </div>
-          <form
-            className="w-full max-w-[1000px] mt-14"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const body: Record<string, string> = {};
-              for (const [k, v] of Object.entries(intro)) if (v.trim()) body[k] = v.trim();
-              if (!body.company_name || busy) return;
-              void start(body as unknown as StartRequest);
-            }}
-          >
-            <div className={promptBox}>
-              <input
-                className={promptInput}
-                type="text"
-                maxLength={200}
-                disabled={busy}
-                autoFocus
-                placeholder="Your company name"
-                aria-label="Company name"
-                value={intro.company_name}
-                onChange={(e) => setIntro({ ...intro, company_name: e.target.value })}
-              />
-              <div className={promptActions}>
-                <button className={`${roundBtn} ${sendBtn}`} type="submit" aria-label="Start" title="Start" disabled={busy || !intro.company_name.trim()}>
-                  <Icon name="arrowUp" size={18} />
-                </button>
-              </div>
-            </div>
-            {startError && (
-              <p className="mt-3 mx-0 mb-0 text-warn text-[14px] text-center" role="alert">
-                {startError}
-              </p>
-            )}
-            <div className="grid grid-cols-3 gap-3 mt-3 max-[720px]:grid-cols-1">
-              {INTRO_EXTRAS.map(([k, label]) => (
-                <input
-                  className={`${pillInput} py-3 px-5 shadow-soft placeholder:text-muted`}
-                  key={k}
-                  type="text"
+              <StepOne busy={busy} error={startError} onTrack={setTrack} onSubmit={(body) => void start(body)} />
+              {busy && (
+                <div className="flex items-center justify-center gap-2 text-[16px] text-muted" role="status">
+                  <BotAvatar type="star" state="working" size={34} aria-hidden="true" />
+                  <TextShimmer>Setting things up...</TextShimmer>
+                </div>
+              )}
+            </>
+          ) : (
+            sessionId && (
+              <>
+                <h1 className="m-0 text-[clamp(22px,3vw,28px)] font-medium tracking-[-.02em]">
+                  {track === "hr" ? "Who are you hiring?" : "Who do you sell to?"}
+                </h1>
+                <StepTwo
+                  key={sessionId}
+                  sessionId={sessionId}
+                  track={track ?? "sales"}
+                  cards={cards}
+                  saved={savedAnswers}
                   disabled={busy}
-                  maxLength={200}
-                  placeholder={label}
-                  aria-label={label}
-                  value={intro[k]}
-                  onChange={(e) => setIntro({ ...intro, [k]: e.target.value })}
+                  missing={missing}
+                  onSubmit={(a) => void submitProfile(a)}
                 />
-              ))}
-            </div>
-            {busy && (
-              <div className="flex items-center justify-center gap-2 mt-4 text-[16px] text-muted" role="status">
-                <BotAvatar type="star" state="working" size={34} aria-hidden="true" />
-                <TextShimmer>AI is generating your first question...</TextShimmer>
-              </div>
-            )}
-          </form>
+                {busy && (
+                  <div className="flex items-center gap-2 text-[16px] text-muted" role="status">
+                    <BotAvatar type="star" state="working" size={34} aria-hidden="true" />
+                    <TextShimmer>AI is generating your first question...</TextShimmer>
+                  </div>
+                )}
+                {startError && (
+                  <p className="m-0 text-warn text-[14px]" role="alert">
+                    {startError}
+                  </p>
+                )}
+              </>
+            )
+          )}
         </div>
       </main>
     );
@@ -403,7 +467,7 @@ export default function App() {
   const panelOpen = !!icp && showProfile;
   const profilePanel = icp && panelOpen && (
     <aside
-      aria-label="Ideal Customer Profile"
+      aria-label={profileName(track)}
       className={`border-l border-line w-[min(46%,640px)] min-w-[340px] shrink-0 max-md:fixed max-md:inset-0 max-md:z-30 max-md:w-auto max-md:min-w-0 max-md:border-l-0 max-md:bg-frame ${stage === "done" ? "" : "max-md:hidden"}`}
     >
       <div className="sticky top-[74px] max-h-[calc(100vh-74px)] overflow-y-auto p-4 flex flex-col">
@@ -428,7 +492,7 @@ export default function App() {
       <ScrollProgress />
       <header className={header}>
         <div className="flex items-center gap-2.5">
-          <h1 className="sr-only">ICP Chatbot</h1>
+          <h1 className="sr-only">Profile builder</h1>
           <button onClick={newChat} disabled={busy}>
             <Icon name="plus" size={18} /> New chat
           </button>
@@ -445,6 +509,9 @@ export default function App() {
 
       <div className="flex flex-1 items-stretch">
       <div className="flex-1 min-w-0 flex flex-col">
+      <div className={`${column} ${gutter}`}>
+        <StepIndicator current={3} done={stage === "done"} />
+      </div>
       {sessionId && (stage === "interview" || stage === "building" || stage === "done") && (
         <ProgressBar progress={progress} building={stage === "building"} done={stage === "done"} />
       )}
