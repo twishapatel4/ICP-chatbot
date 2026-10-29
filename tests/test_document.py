@@ -423,3 +423,83 @@ async def test_non_answers_and_any_mixed_with_values_never_enter_the_filter():
     by_slot = {f.slot: f for f in doc.linkedin_filters}
     assert "company_size" not in by_slot
     assert "Any" not in by_slot["industries"].labels and by_slot["industries"].ids
+
+
+# -- preserved, not recomputed: hand-made entries that label resolution cannot reproduce -------------
+
+
+def _handmade(doc):
+    from icp_chatbot.icp.document import FilterEntry
+
+    custom = [
+        FilterEntry(
+            facet="industry", slot="industries", ids=["x-custom"], labels=["Whatever"],
+            unmapped=["foo"],
+        ),
+        FilterEntry(
+            facet="company_size", slot="company_size", ids=["y-custom"], labels=["Big"],
+            unmapped=[],
+        ),
+    ]  # fmt: skip
+    return doc.model_copy(update={"linkedin_filters": custom})
+
+
+async def test_non_field_edits_and_edits_of_other_slots_preserve_handmade_entries():
+    from datetime import date
+
+    from icp_chatbot.icp.review import (
+        DisqualifierEdit,
+        FieldEdit,
+        RequirementEdit,
+        WeightEdit,
+        apply_edit,
+    )
+    from icp_chatbot.icp.scoring import Disqualifier
+
+    doc = _handmade(await _filtered_doc())
+    before = _blocks(doc)
+    weights = {c.key: c.weight for c in doc.scoring_model.criteria}
+    first, second = list(weights)[:2]
+    for edit in (
+        WeightEdit(weights={first: weights[first] + 5, second: weights[second] - 5}),
+        RequirementEdit(criterion=first, requirement="required"),
+        DisqualifierEdit(
+            disqualifiers=[Disqualifier(field="industries", operator="in", values=["Government"])]
+        ),
+        FieldEdit(slot="buyer_roles", values=["CEO"]),
+        FieldEdit(slot="lead_geographies", values=["France"]),
+    ):
+        edited, _ = apply_edit(doc, edit, date.today())
+        kept = [f for f in _blocks(edited) if f["slot"] in ("industries", "company_size")]
+        assert kept == before
+    edited, _ = apply_edit(doc, FieldEdit(slot="lead_geographies", values=["France"]), date.today())
+    assert [f.slot for f in edited.linkedin_filters if f.slot == "lead_geographies"]
+
+
+async def test_field_edit_of_the_handmade_slot_replaces_it_by_catalog_resolution():
+    from datetime import date
+
+    from icp_chatbot.icp.review import FieldEdit, apply_edit
+
+    doc = _handmade(await _filtered_doc())
+    edited, _ = apply_edit(doc, FieldEdit(slot="industries", values=["Insurance"]), date.today())
+    by_slot = {f.slot: f for f in edited.linkedin_filters}
+    assert by_slot["industries"].ids and "x-custom" not in by_slot["industries"].ids
+    assert by_slot["industries"].unmapped == []
+    assert by_slot["company_size"] == {f.slot: f for f in doc.linkedin_filters}["company_size"]
+
+
+async def test_carry_over_keeps_fresh_handmade_ids_and_recomputes_only_the_edited_slot():
+    from datetime import date
+
+    from icp_chatbot.icp.review import FieldEdit, apply_edit, carry_over_edits
+
+    edited, _ = apply_edit(
+        await _filtered_doc(), FieldEdit(slot="company_size", values=["201-500"]), date.today()
+    )
+    fresh = _handmade(await _filtered_doc())  # industries custom id; company_size custom too
+    merged = carry_over_edits(fresh, edited)
+    by_slot = {f.slot: f for f in merged.linkedin_filters}
+    assert by_slot["industries"].ids == ["x-custom"] and by_slot["industries"].unmapped == ["foo"]
+    assert by_slot["company_size"].ids and "y-custom" not in by_slot["company_size"].ids
+    assert by_slot["company_size"].labels == ["201-500"]

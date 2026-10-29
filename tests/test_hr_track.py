@@ -191,9 +191,7 @@ def test_industry_catalog_lists_top_level_groups_only():
     top = [o.label for o in options if o.level == 1]
     nested = next(o.label for o in options if o.level > 1)
     line = next(
-        row
-        for row in render_slot_catalog("hr").splitlines()
-        if row.startswith("- current_industries:")
+        row for row in render_slot_catalog("hr").splitlines() if row.startswith("- current_industries:")
     )
     assert all(label in line for label in top)
     assert nested not in line and "exact LinkedIn industry label" in line
@@ -202,9 +200,7 @@ def test_industry_catalog_lists_top_level_groups_only():
 
 def test_countries_are_not_listed_one_by_one():
     line = next(
-        row
-        for row in render_slot_catalog("hr").splitlines()
-        if row.startswith("- candidate_locations:")
+        row for row in render_slot_catalog("hr").splitlines() if row.startswith("- candidate_locations:")
     )
     assert "English country name" in line and len(line) < 600
 
