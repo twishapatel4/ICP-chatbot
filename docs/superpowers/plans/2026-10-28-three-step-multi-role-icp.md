@@ -21,7 +21,7 @@
 - Step 2 values are `SlotSource.STATED`, confidence 0.9, `source_turn` 0, evidence "step 2 form". **Any** is the exclusive value `"Any"`, only on multi-select and range cards.
 - Session state: `track` (`"sales"` | `"hr"`, default `"sales"`), `step` (`"profile"` | `"chat"`, default `"chat"` for old sessions). Chat endpoints return 409 while `step == "profile"`.
 - HR users never see "ICP", "lead" or "customer" in UI, chat prompts or the document. Route names and identifiers keep their current names.
-- HR scoring uses the same engine with these default criteria and weights (sum 100): Role fit 25 (`target_functions`, `target_roles`), Experience fit 20 (`years_experience`), Skills fit 20 (`required_skills`), Education fit 15 (`education_level`, `field_of_study`, `graduation_year`), Location fit 10 (`candidate_locations`), Background fit 10 (`current_industries`, `current_company_size`). A slot answered **Any** builds no rule.
+- HR and Sales scoring use the same engine with default criteria and weights that each sum to 100; the authoritative lists are the spec's "Scoring (both roles)" section and Task 12c (HR: 11 criteria; Sales: 9; derived criteria at most 5). A slot answered **Any** builds no rule.
 - `track` missing from `POST /sessions` means `"sales"`.
 - Commit messages end with `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`.
 - Out of scope: calling any LinkedIn or Sales Navigator API at runtime; region/state/postal geography; revenue.

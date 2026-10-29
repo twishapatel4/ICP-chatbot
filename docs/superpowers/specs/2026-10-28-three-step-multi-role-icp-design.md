@@ -195,22 +195,31 @@ Step 2 answers are `SlotSource.STATED` at confidence 0.9, `source_turn` 0, evide
 
 `icp/scoring.py` keeps one engine: criteria that read slots, rules built from the slot values, weights summing to 100, and renormalisation over the criteria that apply and have data. Defaults are chosen by track.
 
-HR criteria (defaults, editable like Sales):
+Every slot with a LinkedIn profile path can be scored (Task 12, user decision 2026-10-29: the bot includes the parameters needed for scoring AND for filters). Slots without a profile path (`employment_type`, `work_mode`, `languages`, salary, notice period, relocation, urgency, headcount) are filters or notes, not scores. A mapper (`linkedin/profile_map.py`, `slots_from_profile`) reads the LinkedIn DB profile and company data through each slot's `profile_paths` and never reads photo, premium, member id, names or the about text.
+
+HR criteria (defaults, editable; weights sum to 100):
 
 | Criterion | Weight | Reads | Rule |
 |---|---|---|---|
-| Role fit | 25 | `target_functions`, `target_roles` | list |
-| Experience fit | 20 | `years_experience` | range (`"3-8"`, `"3+"`) |
-| Skills fit | 20 | `required_skills` (asked in the chat) | list |
-| Education fit | 15 | `education_level`, `field_of_study`, `graduation_year` | list, list, range with a narrow tolerance (about 2 years) |
+| Role fit | 20 | `target_roles` | list |
+| Function fit (derived) | 5 | `target_functions` | list |
+| Seniority fit (derived) | 5 | `target_seniority` | list |
+| Experience fit | 15 | `years_experience` | range (`"3-8"`, `"3+"`) |
+| Skills fit | 15 | `required_skills` (primary), `nice_to_have_skills` (half credit); asked in the chat | list |
+| Certifications fit | 5 | `certifications` | list |
+| Education fit | 10 | `education_level`, `field_of_study`, `graduation_year` | list, list, range with a narrow tolerance |
+| School fit | 5 | `target_schools` | list |
 | Location fit | 10 | `candidate_locations` (asked in the chat) | list |
-| Background fit | 10 | `current_industries`, `current_company_size` | list, range |
+| Background fit | 5 | `current_industries`, `current_company_size` | list, range |
+| Employer fit | 5 | `source_companies` | whole-name company match |
 
+Sales criteria (defaults, weights sum to 100): industry fit 25 (`industries`, `customer_segments`), company size 15, company type 5, company age 5 (`years_in_operation`, range), buying signals 10, geographic fit 20 (`lead_geographies`, `company_hq_geographies`), buyer title 10 (`buyer_roles`), seniority fit 5 and department fit 5 (both derived).
+
+- Derived criteria (guessed from the title by keyword rules) never weigh more than 5.
 - A criterion with no rules (a branch that was skipped, or an Any answer) is not applicable, and the rest renormalise. A Fresher profile therefore scores on role, skills, education and location; an Experienced profile on role, experience, skills, location and background.
-- `years_experience` and `graduation_year` join `RANGE_SLOTS`. Range tolerance becomes per slot (default 0.2; `graduation_year` about 0.001), because 20% of a year like 2024 would accept any year.
-- HR disqualifier fields: `candidate_locations`, `current_industries`, `current_company_size`.
-- `validate_model` checks slot names against the model's track, not the Sales registry.
-- Sales criteria are unchanged except `geographic_fit`, which reads `lead_geographies` and `company_hq_geographies` (Task 2).
+- `years_experience`, `graduation_year`, `years_in_operation` and `current_company_size` are range slots. Range tolerance is per slot (default 0.2; `graduation_year` about 0.001), because 20% of a year like 2024 would accept any year.
+- Disqualifier fields: HR `candidate_locations`, `current_industries`, `current_company_size`, `avoid_companies`; Sales as before. Company names (`avoid_companies`, `source_companies`) match whole normalised names (case, punctuation and legal suffixes ignored; a one-word name matches only exactly), never substrings.
+- `validate_model` checks slot names against the model's track, not the Sales registry. Old stored models keep their own criteria.
 
 ### Prompts, labels, output
 
