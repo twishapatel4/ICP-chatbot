@@ -81,12 +81,23 @@ Write evaluation results outside `eval_cases/`: every `.json` file in that folde
 
 An evaluation case sets `track` (`"sales"` by default) and may carry `profile_answers`, the step 2
 form. With them the replay runs the real three-step flow (`create`, then `begin_chat` with the
-form); without them it uses the legacy one-call `start` (Sales, no form). `hr_*.json` cases
-cover Fresher, Experienced, Both and vague HR briefs; `b2c_retail.json` runs the B2C form.
+form); without them it uses the legacy one-call `start` (Sales, no form). `case_problems` flags
+unknown keys in `profile_answers` and any answer the form would reject. `hr_*.json` cover
+Fresher, Experienced, Both and vague HR briefs. `b2c_retail.json` is the chat-only B2C case and
+`b2c_retail_form.json` runs the B2C form (new, no baseline yet).
 
-**Release gate.** Prompt changes must pass the replay against a saved baseline before release:
-`... -m icp_chatbot.cli.replay --baseline base.json` exits 1 on a regression. A failing gate blocks
-the release, not the merge.
+**HR cases leave out education.** The education card is hidden until the degree and
+field-of-study snapshots exist. After `scripts/sync_linkedin_catalogs.py` has been run the card
+becomes required, the HR cases will then fail `case_problems` (and `test_hr_cases_load_and_use_hr_slots`),
+and their `profile_answers` need the education slots added.
+
+**Release gate.** `... -m icp_chatbot.cli.replay --baseline base.json` exits 1 when a candidate
+regresses against a saved run. Last result, found on 2026-10-29 for this branch against `6553a1a`
+(before the Task 7 prompts): FAIL. Mean F1 0.692 baseline vs 0.587 and 0.664 for two candidate
+runs; injection F1 0.4 vs 0.0 and 0.4; one forbidden-value violation in both candidate runs;
+regressions in `misleading_website`, `detail_mode_user` and `b2c_retail`. These were single runs
+with Vertex timeouts, and the root cause is not established. Details:
+`.superpowers/sdd/2026-10-28-three-step-multi-role-icp/task-11-report.md`.
 
 ## Testing without Postgres
 

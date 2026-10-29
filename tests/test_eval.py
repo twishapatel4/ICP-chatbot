@@ -249,10 +249,22 @@ def test_hr_cases_load_and_use_hr_slots():
         "hr_fresher": ["Fresher"],
         "hr_experienced": ["Experienced"],
         "hr_both": ["Both"],
-        "hr_vague": levels["hr_vague"],
+        "hr_vague": ["Both"],
     }
     assert "years_experience" not in cases["hr_fresher"].profile_answers
     assert "years_experience" in cases["hr_both"].profile_answers
+
+
+def test_hr_expectations_list_every_form_value_of_the_slots_they_score():
+    # score_document judges precision over every value in an expected slot, so a form value
+    # left out of `expected` (a city, say) would count as a wrong extra value
+    for name in HR_CASES:
+        c = _shipped(name)
+        for slot, wanted in c.expected.items():
+            given = c.profile_answers.get(slot)
+            if given and given != ["Any"]:
+                assert set(given) <= set(wanted), (name, slot)
+    assert _shipped("hr_vague").expected  # not F1 1.0 by construction
 
 
 def test_required_tags_still_covered():
@@ -262,12 +274,28 @@ def test_required_tags_still_covered():
     assert {c.track for c in cases} == {"sales", "hr"}
 
 
-def test_a_b2c_sales_case_goes_through_the_step_two_form():
+def test_b2c_retail_stays_chat_only_and_the_form_version_is_a_new_case():
     from icp_chatbot.engine.profile_form import validate_profile
 
-    c = _shipped("b2c_retail")
-    assert c.track == "sales" and c.profile_answers["business_model"] == ["B2C"]
-    assert validate_profile("sales", c.profile_answers) == []
+    chat = _shipped("b2c_retail")
+    assert chat.profile_answers is None and "b2c" in chat.tags  # like for like with old runs
+    form = _shipped("b2c_retail_form")
+    assert form.track == "sales" and form.profile_answers["business_model"] == ["B2C"]
+    assert validate_profile("sales", form.profile_answers) == []
+    assert form.expected["lead_geographies"] == form.profile_answers["lead_geographies"]
+
+
+def test_case_problems_flags_a_bad_step_two_form():
+    ok = {"business_model": ["B2C"], "lead_geographies": ["United Kingdom"]}
+    assert case_problems(case(profile_answers=ok)) == []
+    unknown = case_problems(case(profile_answers={**ok, "nope": ["x"]}))
+    assert any("unknown slot nope" in p for p in unknown)
+    incomplete = case_problems(case(profile_answers={"business_model": ["B2C"]}))
+    assert any("lead_geographies" in p for p in incomplete)
+    unresolved = case_problems(
+        case(profile_answers={**ok, "lead_geographies": ["Narnia"]})
+    )
+    assert any("lead_geographies" in p for p in unresolved)
 
 
 async def test_replay_runs_an_hr_case_through_its_track_and_the_step_two_form():

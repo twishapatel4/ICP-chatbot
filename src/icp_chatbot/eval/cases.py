@@ -56,6 +56,11 @@ def case_problems(case: EvalCase) -> list[str]:
             problems.append(f"unknown slot {slot}")
     if case.profile_answers is not None:
         problems.extend(
+            f"unknown slot {slot} in profile_answers"
+            for slot in case.profile_answers
+            if slot not in known
+        )
+        problems.extend(
             f"step 2 form is missing or invalid: {slot}"
             for slot in validate_profile(case.track, case.profile_answers)
         )

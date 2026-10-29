@@ -42,7 +42,14 @@
     "whatever fits the budget",
     "we will see"
   ],
-  "expected": {},
+  "expected": {
+    "target_roles": [
+      "Someone to help the team"
+    ],
+    "required_skills": [
+      "Communication"
+    ]
+  },
   "forbidden": {
     "required_skills": [
       "Java",
@@ -58,5 +65,5 @@
       "100000"
     ]
   },
-  "notes": "Everything is Any or vague; the bot must not invent specifics, and Any must not become a rule."
+  "notes": "Everything is Any or vague; the bot must not invent specifics, and Any must not become a rule. Expected holds only the form answers; the forbidden values carry the test."
 }
