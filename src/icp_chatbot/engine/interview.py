@@ -325,7 +325,7 @@ class InterviewEngine:
                 evidence="given at signup",
             )
         session_id = await self._repo.create_session(tenant_id, config.version, state)
-        if background:
+        if background and self._settings.background_enrichment:
             task = asyncio.create_task(self._background_read(tenant_id, session_id, signup, config))
             self._reads[session_id] = task
             task.add_done_callback(lambda _: self._reads.pop(session_id, None))
@@ -357,10 +357,14 @@ class InterviewEngine:
         state.seed = dict(enrichment.seed)
         standard = slot_map(state.track)
         for key, value in enrichment.seed.items():
-            # never overrides something the user stated; an HR session takes nothing, as the
+            # never overrides something the user stated or confirmed; a DEFAULT (the B2B the form
+            # assumes) gives way to what the site says; an HR session takes nothing, as the
             # website describes the employer, not the people to hire
-            if key in standard:
-                state.slots.setdefault(key, value)
+            if key not in standard:
+                continue
+            current = state.slots.get(key)
+            if current is None or current.source == SlotSource.DEFAULT:
+                state.slots[key] = value
 
         opener = await generate_opener(
             self._llm,

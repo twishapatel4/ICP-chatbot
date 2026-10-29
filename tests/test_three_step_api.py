@@ -249,6 +249,11 @@ async def test_fallback_in_profile_step_sets_chat_and_completes(world):
     assert (record.state.step, record.status) == ("chat", "completed")
     view = (await w.call("GET", f"/sessions/{sid}")).json()
     assert (view["step"], view["status"]) == ("chat", "completed")
+    later = await w.call(
+        "POST", f"/sessions/{sid}/profile", json={"answers": SALES_B2B_PROFILE}
+    )  # the fallback closed the session: the cards cannot be submitted afterwards
+    assert later.status_code == 409 and later.json() == {"detail": "session_closed"}
+    assert w.llm.calls == []
 
 
 async def test_profile_and_session_get_are_tenant_scoped(world):
@@ -673,3 +678,95 @@ async def test_b2b_default_session_still_reaches_the_floor_with_company_size_ask
         values=["Payroll"], confidence=0.9, source=SlotSource.STATED, evidence="chat"
     )
     assert icp_floor_met(state)  # industries, geography and departments are the customer facts
+
+
+# -- website-inferred business model, and where the read runs ---------------------------------
+
+
+def read_with(seed_extra: dict, **kw):
+    seed = {"product": SlotValue(values=["Payroll"], confidence=0.5, source=SlotSource.INFERRED)}
+    seed.update(seed_extra)
+    return EnrichmentOutcome(
+        "ok", website="https://acme.test", pages=["https://acme.test"], seed=seed, **kw
+    )
+
+
+def inferred_b2c():
+    return {
+        "business_model": SlotValue(
+            values=["B2C"], confidence=0.6, source=SlotSource.INFERRED, evidence="site"
+        )
+    }
+
+
+async def test_site_saying_consumers_makes_business_model_inferred_b2c(eng):
+    engine, repo, llm, enrichment, _ = await eng()
+    enrichment.outcome = read_with(inferred_b2c())
+    sid = await engine.create(T, SignupInfo("Acme", website="acme.test"))
+    llm.queue("opener", q("You sell to consumers, right?"))
+    await engine.begin_chat(T, sid, SALES_B2B_PROFILE)
+    state = (await repo.get_session(T, sid)).state
+    model = state.slots["business_model"]
+    assert (model.values, model.source) == (["B2C"], SlotSource.INFERRED)
+    from icp_chatbot.engine.interview import build_message
+
+    assert "business_model" in build_message(state, "hi", limit=10)  # in the confirm list
+    guess_line = [ln for ln in build_message(state, "hi", limit=10).splitlines() if "Guessed" in ln]
+    assert guess_line and "business_model" in guess_line[0]
+
+
+async def test_site_without_business_model_signal_keeps_default_b2b(eng):
+    engine, repo, llm, enrichment, _ = await eng()
+    enrichment.outcome = payroll_read()
+    sid = await engine.create(T, SignupInfo("Acme", website="acme.test"))
+    llm.queue("opener", q("What do you sell?"))
+    await engine.begin_chat(T, sid, SALES_B2B_PROFILE)
+    model = (await repo.get_session(T, sid)).state.slots["business_model"]
+    assert (model.values, model.source) == (["B2B"], SlotSource.DEFAULT)
+
+
+async def test_a_stated_business_model_is_never_overwritten_by_the_site(eng):
+    engine, repo, llm, enrichment, _ = await eng()
+    enrichment.outcome = read_with(inferred_b2c())
+    sid = await engine.create(T, SignupInfo("Acme", website="acme.test"))
+    record = await repo.get_session(T, sid)
+    record.state.slots["business_model"] = SlotValue(
+        values=["B2B"], confidence=0.9, source=SlotSource.STATED, evidence="said so"
+    )
+    await repo.save_state(T, sid, record.state, expected_version=record.row_version)
+    llm.queue("opener", q("What do you sell?"))
+    await engine.begin_chat(T, sid, SALES_B2B_PROFILE)
+    model = (await repo.get_session(T, sid)).state.slots["business_model"]
+    assert (model.values, model.source) == (["B2B"], SlotSource.STATED)
+
+
+async def test_inline_mode_reads_the_site_once_at_step_2_and_counts_the_spend_once(eng):
+    engine, repo, llm, enrichment, _ = await eng(background_enrichment=False)
+    enrichment.outcome = payroll_read(usage=Usage(500, 50, 0, 0), cost_usd=0.01)
+    sid = await engine.create(T, SignupInfo("Acme", website="acme.test"))
+    assert enrichment.calls == 0 and engine._reads == {}  # nothing runs after the response
+    llm.queue("opener", q("You sell payroll, right?"))
+    await engine.begin_chat(T, sid, SALES_B2B_PROFILE)
+    assert enrichment.calls == 1
+    record = await repo.get_session(T, sid)
+    assert record.usage.input_tokens == 600  # the read plus the opener, nothing twice
+    assert record.state.slots["product"].values == ["Payroll"]
+    assert len(await repo.list_enrichment(T, sid)) == 1
+
+
+async def test_task_mode_still_starts_the_read_at_step_1(eng):
+    engine, _, _, enrichment, _ = await eng(background_enrichment=True)
+    enrichment.outcome = payroll_read()
+    await engine.create(T, SignupInfo("Acme", website="acme.test"))
+    await engine.drain()
+    assert enrichment.calls == 1
+
+
+def test_background_enrichment_defaults_off_on_vercel(monkeypatch):
+    monkeypatch.delenv("BACKGROUND_ENRICHMENT", raising=False)
+    monkeypatch.delenv("VERCEL", raising=False)
+    assert Settings(_env_file=None).background_enrichment is True
+    monkeypatch.setenv("VERCEL", "1")
+    assert Settings(_env_file=None).background_enrichment is False
+    monkeypatch.setenv("BACKGROUND_ENRICHMENT", "true")
+    assert Settings(_env_file=None).background_enrichment is True

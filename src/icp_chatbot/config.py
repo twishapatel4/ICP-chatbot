@@ -1,5 +1,6 @@
 """Application settings, read from environment variables or a local .env file."""
 
+import os
 from functools import lru_cache
 from typing import Literal
 
@@ -43,6 +44,11 @@ class Settings(BaseSettings):
 
     # Time budgets.
     enrichment_timeout_seconds: float = Field(40.0, gt=0)
+    # Start the website read as a background task right after step 1. A serverless host (Vercel)
+    # freezes the function once the response is sent, so the task never finishes there and step 2,
+    # on another instance, would read the site a second time. Hence off when VERCEL is set: the
+    # read then happens once, inline, when the chat starts (slower, but paid for once).
+    background_enrichment: bool = Field(default_factory=lambda: not os.environ.get("VERCEL"))
     enrichment_cache_days: int = Field(30, ge=0)  # reuse a site's earlier read; 0 reads it again
     llm_timeout_seconds: float = Field(20.0, gt=0)
 
