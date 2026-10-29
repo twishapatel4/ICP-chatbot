@@ -198,6 +198,9 @@ async def build_icp(
     )
     needed = shell.needed_defs()
     open_questions.extend(missing_slots(entries, defs=needed, track=state.track))
+    # slots a skip rule hides (B2C seller) stay in the stored state, not in the document
+    hidden = {d.key for d in shell.slot_defs() if not state.is_applicable(d)}
+    entries = {k: e for k, e in entries.items() if k not in hidden}
     slot_values = {key: e.values for key, e in entries.items() if e.values}
     document = shell.model_copy(
         update={

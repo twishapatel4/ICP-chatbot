@@ -345,7 +345,7 @@ async def test_field_edit_replaces_only_that_slots_entry():
     assert [f.slot for f in edited.linkedin_filters] == [f.slot for f in doc.linkedin_filters]
 
 
-async def test_field_edit_to_any_or_empty_removes_the_entry_and_non_facet_edit_changes_nothing():
+async def test_field_edit_to_any_or_empty_removes_the_entry_and_filterless_edit_changes_nothing():
     from datetime import date
 
     from icp_chatbot.icp.review import FieldEdit, apply_edit
@@ -355,8 +355,8 @@ async def test_field_edit_to_any_or_empty_removes_the_entry_and_non_facet_edit_c
         edited, _ = apply_edit(doc, FieldEdit(slot="industries", values=values), date.today())
         assert "industries" not in {f.slot for f in edited.linkedin_filters}
         assert len(edited.linkedin_filters) == len(doc.linkedin_filters) - 1
-    edited, _ = apply_edit(doc, FieldEdit(slot="buyer_roles", values=["CEO"]), date.today())
-    assert _blocks(edited) == _blocks(doc)
+    edited, _ = apply_edit(doc, FieldEdit(slot="product", values=["Payroll"]), date.today())
+    assert _blocks(edited) == _blocks(doc)  # a slot with no LinkedIn filter changes nothing
 
 
 async def test_carry_over_keeps_new_ids_for_untouched_slots_and_recomputes_edited_ones():

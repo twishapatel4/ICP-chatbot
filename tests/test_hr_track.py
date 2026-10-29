@@ -365,7 +365,8 @@ async def test_hr_filters_use_the_right_facets_and_ids():
     by_slot = {f.slot: f for f in doc.linkedin_filters}
     assert by_slot["candidate_locations"].facet == "country" and by_slot["candidate_locations"].ids
     assert by_slot["target_functions"].facet == "function" and by_slot["target_functions"].ids
-    assert "required_skills" not in by_slot
+    assert by_slot["required_skills"].facet == "free_text" and by_slot["required_skills"].ids == []
+    assert by_slot["required_skills"].labels == ["Python", "SQL"]
 
 
 def test_hr_gap_notes_and_registry_text_use_no_sales_words():

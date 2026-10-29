@@ -25,7 +25,7 @@ from icp_chatbot.domain.state import (
     resolve_slot_values,
 )
 from icp_chatbot.icp.scoring import ScoringModel
-from icp_chatbot.linkedin.catalog import SLOT_FACETS
+from icp_chatbot.linkedin.catalog import SLOT_FACETS, default_catalog
 
 KNOWN_CONFIDENCE = 0.7
 
@@ -298,6 +298,9 @@ def _filter_name(slot: str, track: Track) -> str | None:
     return definition.linkedin_filter if definition else None
 
 
+FREE_TEXT_FACET = "free_text"  # the facet of a slot LinkedIn takes as typed text, no catalog
+
+
 def _filter_entry(
     slot: str, values: list[str], refs: list, unmapped: list[str], track: Track
 ) -> FilterEntry | None:
@@ -309,6 +312,16 @@ def _filter_entry(
     values = [v for v in real_values(slot, values) if v != ANY]
     if not values:
         return None
+    facet = SLOT_FACETS.get(slot)
+    if facet is None:  # typed text: the values are the filter, there are no catalog ids
+        return FilterEntry(
+            facet=FREE_TEXT_FACET, slot=slot, filter_name=filter_name, labels=list(values)
+        )
+    if not default_catalog().has(facet):  # no catalog yet: nothing can be shown as mapped
+        return FilterEntry(
+            facet=facet, slot=slot, filter_name=filter_name, labels=list(values),
+            unmapped=list(values),
+        )  # fmt: skip
     if not refs and not unmapped:  # inferred or confirmed values were never matched to options
         values, refs, unmapped = resolve_slot_values(slot, values)
     ids: list[str] = []
@@ -316,7 +329,7 @@ def _filter_entry(
         if ref.id not in ids:
             ids.append(ref.id)
     return FilterEntry(
-        facet=SLOT_FACETS[slot],
+        facet=facet,
         slot=slot,
         filter_name=filter_name,
         ids=ids,
@@ -326,14 +339,17 @@ def _filter_entry(
 
 
 def build_linkedin_filters(state: SessionState) -> list[FilterEntry]:
-    """One entry per answered slot that LinkedIn can filter on, in catalog order."""
-    own = slot_map(state.track)
+    """One entry per answered slot of the track that has a LinkedIn filter, in registry order.
+    Slots without a catalog facet become free-text entries. Slots a skip rule hides (B2C) are
+    left out."""
     found = []
-    for slot in SLOT_FACETS:
-        value = state.slots.get(slot)
-        if slot not in own or value is None:
+    for definition in registry(state.track):
+        value = state.slots.get(definition.key)
+        if value is None or not state.is_applicable(definition):
             continue
-        entry = _filter_entry(slot, value.values, value.refs, value.unmapped, state.track)
+        entry = _filter_entry(
+            definition.key, value.values, value.refs, value.unmapped, state.track
+        )
         if entry:
             found.append(entry)
     return found
@@ -343,13 +359,15 @@ def with_slot_filter(
     filters: list[FilterEntry], slot: str, values: list[str], track: Track
 ) -> list[FilterEntry]:
     """The block after one slot was edited: only that slot's entry is replaced (or removed when
-    the slot has no facet or the new values add no filter); every other entry stays as stored.
-    Typed edits carry no refs, so the entry comes from catalog resolution."""
+    the slot has no LinkedIn filter or the new values add none); every other entry stays as
+    stored. Typed edits carry no refs, so a facet entry comes from catalog resolution."""
     kept = [f for f in filters if f.slot != slot]
-    if slot not in SLOT_FACETS or slot not in slot_map(track):
+    if slot not in slot_map(track):
         return kept
     entry = _filter_entry(slot, values, [], [], track)
     if entry is None:
         return kept
     merged = {f.slot: f for f in [*kept, entry]}
-    return [merged[k] for k in SLOT_FACETS if k in merged]
+    order = [s.key for s in registry(track)]
+    known = [merged[k] for k in order if k in merged]
+    return known + [f for f in merged.values() if f.slot not in order]
