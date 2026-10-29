@@ -120,21 +120,20 @@ All fields required:
 
 Submitting step 1 creates the session and starts website enrichment in the background, so it runs while the user fills step 2.
 
-### Step 2: Core profile (5 cards, role-specific)
+### Step 2: Core profile (3 cards for Sales/BDE, 5 for HR)
 
 All cards are taps and chips. Each card is required except where marked. Multi-select and range cards accept an explicit **Any**.
 
-**Sales / BDE**
+**Sales / BDE** (decision 2026-10-29: only industries, geography and buyer roles are asked in the form)
 
 | # | Card | Slots | Input | Shown when |
 |---|---|---|---|---|
-| 1 | Who you sell to | `business_model` | single: B2B / B2C / Both | always |
-| 2 | Target industries | `industries` | LinkedIn industry picker | B2B or Both |
-| 3 | Target company size | `company_size` | multi: LinkedIn codes A to I | B2B or Both |
-| 4 | Geography | `lead_geographies`, `company_hq_geographies` | two country(+city) pickers | always; HQ picker only for B2B or Both |
-| 5 | Buyer roles | `buyer_seniority`, `buyer_departments`, `buyer_roles` | seniority chips, function chips, title chips (titles optional) | B2B or Both |
+| 1 | Target industries | `industries` | LinkedIn industry picker | always |
+| 2 | Geography | `lead_geographies`, `company_hq_geographies` | two country(+city) pickers | always |
+| 3 | Buyer roles | `buyer_seniority`, `buyer_departments`, `buyer_roles` | seniority chips, function chips, title chips (titles optional) | always |
 
-B2C shows only cards 1 and 4, with the geography card relabelled "Where do your customers live?" and one picker. B2C `customer_profile` is asked in the chat.
+- "Who you sell to" is not asked. LinkedIn search targets businesses, so a BDE session is seeded `business_model = "B2B"` with source DEFAULT and confidence 0.5 when the user has not stated otherwise; the chat can still change it (for example to B2C) and the B2C skip rules keep working for that case.
+- Target company size is not in the form. It stays a tier A slot and is asked in the chat when still unknown (it is the LinkedIn "Company headcount" filter and a scoring criterion).
 
 **HR**
 

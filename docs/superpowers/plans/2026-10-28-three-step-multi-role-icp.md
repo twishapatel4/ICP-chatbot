@@ -234,3 +234,77 @@
 
 - Spec coverage: three steps (6, 10), roles (3, 3b, 5, 7, 8, 10), HR scoring (3b, 8), LinkedIn options (1, 4, 5), geography split (2, 5), Any (4, 5), legacy and in-flight sessions (2, 6), HR vocabulary (7, 8, 10), HR education card gating and sync (5, 9), catalog reconciliation test (1), eval gate (11).
 - Not built until access exists: HR degree and field-of-study lists (Task 9 supplies the script; Task 5 hides the card until the snapshots exist).
+
+### Task 12a: Sales step 2 reduced to industries, geography, buyer roles (added 2026-10-29)
+
+**Files:**
+- Modify: `src/icp_chatbot/engine/profile_form.py` (Sales cards), `tests/test_profile_form.py`, `tests/test_three_step_api.py` (the `World.start` helper's Sales profile), `eval_cases/*.json` whose `profile_answers` mention `business_model` or `company_size`, `README.md` flow text
+
+**Decisions (user, 2026-10-29):** the Sales form has three cards only: `target_industries` (`industries`), `geography` (`lead_geographies`, `company_hq_geographies`), `buyer_roles` (`buyer_seniority`, `buyer_departments`, `buyer_roles` optional). The "who you sell to" and "target company size" cards are removed. HR order is unchanged (role you are hiring for first).
+
+- [ ] **Step 1: Write failing tests:** `test_sales_cards_are_industries_geography_buyer_roles`; `test_business_model_is_seeded_b2b_default_not_asked` (after `apply_profile` for Sales: `business_model == ["B2B"]`, source DEFAULT, confidence 0.5, evidence "step 2 form default"); `test_stated_business_model_is_not_overwritten_by_the_default`; `test_company_size_is_not_required_by_the_sales_form`; `test_all_sales_fields_visible_without_a_business_model_answer` (the controlling-slot-answered rule must not hide industries or buyer roles for a Sales form: seed the default before computing visibility); `test_profile_form_endpoint_returns_three_sales_cards`; `test_b2b_default_session_still_reaches_the_floor_with_company_size_asked_in_chat`.
+- [ ] **Step 2: Run them.** Expected: FAIL.
+- [ ] **Step 3: Implement.** Remove the two cards; in `apply_profile` and `validate_profile` treat an unanswered `business_model` as `B2B` for Sales (seed a DEFAULT value, confidence 0.5, evidence "step 2 form default", only when the slot has no value); keep `business_model` and `company_size` in the registry (tier A, asked in chat). The frontend needs no change (cards are backend-driven); confirm in the browser.
+- [ ] **Step 4: Update dependants:** the `World.start` Sales profile in tests, eval cases (`b2c_retail_form` loses the form-level B2C answer: its B2C-ness must come from the chat, so reduce it to a chat-only case or drop it), README flow text; run the full suite.
+- [ ] **Step 5: Commit** `feat: Sales step 2 asks only industries, geography and buyer roles`.
+
+### Task 12b: LinkedIn filter and profile-path metadata on every slot, plus the new slots and option lists (added 2026-10-29)
+
+**Decision (user):** every slot carries two attributes: `linkedin_filter` (the LinkedIn search filter name from the TL's lists, or None) and `profile_path` (where the value is read from the LinkedIn DB profile or company data, or None); a third flag `derived` marks values guessed from other data (seniority and function from the title). Source lists: Sales Navigator lead and account filters for Sales; Recruiter Lite filters for HR (ruling R19, provisional: no Lite filter for seniority and company HQ, so those two are scoring-only).
+
+**Files:**
+- Modify: `src/icp_chatbot/domain/slots.py` (`SlotDef` gains `linkedin_filter: str | None = None`, `profile_path: str | None = None`, `derived: bool = False`; fill them for EVERY slot in both registries; add the new slots below), `src/icp_chatbot/linkedin/catalog.py` (new facets), new data files under `src/icp_chatbot/linkedin/data/`, `tests/test_slots_and_state.py`, `tests/test_linkedin_catalog.py`
+- Not touched here: `engine/profile_form.py`, `icp/scoring.py`, `icp/document.py`, eval cases, frontend (other tasks).
+
+**Slot metadata (pin these):**
+
+| Slot | linkedin_filter | profile_path |
+|---|---|---|
+| `industries` | Industry | `company.industry` |
+| `company_size` | Company headcount | `company.employeeRange` |
+| `company_type` (promote C to B, choices from the LinkedIn company types seen in the DB: Privately Held, Public Company, Partnership, Sole Proprietorship, Self-Employed, Educational Institution, Nonprofit; ruling R20 provisional) | Company type | `company.companyType` |
+| `lead_geographies` | Geography | `profile.country`, `profile.city` |
+| `company_hq_geographies` | Company headquarters location | `company.hqCountry`, `company.hqCity` |
+| `buyer_seniority` | Seniority level | `profile.title` (derived=True) |
+| `buyer_departments` | Function | `profile.title` (derived=True) |
+| `buyer_roles` | Current job title | `profile.title`, `profile.currentPositions[].title` |
+| `buying_triggers` (choices become Sales Navigator options: Changed jobs, Posted on LinkedIn, Mentioned in news, Job opportunities, Recent activities (funding, leadership changes), Buyer intent; open to free text) | Recent updates / Spotlight | None |
+| `years_in_operation` | None | `company.foundedYear` |
+| NEW `revenue_range` (tier B, Sales, filter-only, range-parsed) | Annual revenue | None |
+| NEW `technologies_used` (tier B, Sales, chips) | Technologies used | None |
+| `target_roles` (HR) | Job titles | `profile.title`, `profile.experience[].title` |
+| `target_functions` | Job functions | `profile.title` (derived=True) |
+| `years_experience` | Years of experience | `profile.experience[].period` |
+| `education_level` | Degrees | `profile.education[].degree` |
+| `field_of_study` | Fields of study | `profile.education[].field` |
+| `graduation_year` | Year of graduation | `profile.education[].period` |
+| NEW `target_schools` (HR tier B, chips) | Schools | `profile.education[].school` |
+| `required_skills` | Skills | `profile.skills[]` |
+| `nice_to_have_skills` | Keywords | `profile.skills[]` |
+| `certifications` | Keywords | `profile.certifications[].name` |
+| `languages` | Spoken languages | None (not in the DB) |
+| `candidate_locations` | Locations | `profile.country`, `profile.city` |
+| `current_industries` | Industries | `profile.currentPositions[].industry` |
+| `current_company_size` | Company size | `profile.currentPositions[].employeeRange` |
+| `current_company_hq` | None (no Lite filter, R19) | `company.hqCountry`, `company.hqCity` |
+| `source_companies` | Current companies / Past companies | `profile.experience[].companyName` |
+| `avoid_companies` | Current companies / Past companies (excluded) | `profile.experience[].companyName` |
+| `target_seniority` | None (not in Lite, R19) | `profile.title` (derived=True) |
+| `employment_type` (choices: Full-time, Part-time, Contract, Internship, Temporary, Volunteer, Other) | Employment type | None |
+| `work_mode` (choices: On-site, Hybrid, Remote; rename "Onsite") | Workplace type | None |
+| `salary_range`, `notice_period`, `relocation`, `urgency`, `headcount` | None | None (notes) |
+| `disqualifiers`, `product`, `business_model`, `how_we_work`, `lead_sources`, `value_proposition`, `online_presence`, `customer_profile`, `customer_segments`, `experience_level` | None | None |
+
+- [ ] **Step 1: Write failing tests:** `test_every_slot_declares_filter_and_profile_path_explicitly` (each slot in both registries has the metadata set deliberately: a module-level table `SLOT_LINKEDIN` keyed by slot key must cover every slot key of both registries, no missing and no extra); `test_filter_names_come_from_the_tl_lists` (every non-None `linkedin_filter` is in the allowed set for its track, listed in a constant); `test_derived_slots_are_marked` (buyer_seniority, buyer_departments, target_functions, target_seniority); `test_new_slots_exist_with_tiers` (revenue_range, technologies_used, target_schools tier B; company_type tier B); `test_work_mode_and_employment_type_choices_match_linkedin`; `test_buying_triggers_choices_are_sales_navigator_options`; `test_no_hr_slot_text_contains_sales_words`; `test_fallback_form_and_floor_unchanged`.
+- [ ] **Step 2: Run them.** Expected: FAIL.
+- [ ] **Step 3: Implement.** Keep the metadata in one table `SLOT_LINKEDIN` in `domain/slots.py` and attach it when building the registries (single source of truth); update `SLOT_FACETS` only where a catalog exists; values LinkedIn does not publish (company type list beyond the DB values, revenue ranges) are marked provisional in a comment and left open to free text.
+- [ ] **Step 4: Run the full suite.** Expected: pass. Update existing tests that pin slot counts or tier sets.
+- [ ] **Step 5: Commit** `feat: LinkedIn filter and profile-path metadata on every slot`.
+
+### Task 12c: profile mapper and scoring criteria for every slot with a profile path (added 2026-10-29; starts after 12b is committed)
+
+**Files:** create `src/icp_chatbot/linkedin/profile_map.py`, modify `src/icp_chatbot/icp/scoring.py`, `src/icp_chatbot/icp/document.py` (filters block uses `SlotDef.linkedin_filter`), tests.
+
+- [ ] **Step 1:** `slots_from_profile(profile: dict, company: dict | None, track) -> dict[str, list[str]]` reads the LinkedIn DB shapes (`ProfileDetails`: title, currentPositions[], experience[], education[], skills[], certifications[], city, country; `Company`: industry, employeeRange, companyType, hqCountry, hqCity, foundedYear, specialities) using each slot's `profile_path`; `years_experience` computed from `experience[].period`; derived slots tagged; tests with fixture profiles.
+- [ ] **Step 2:** extend the scoring criteria per track (HR: add certifications_fit, school_fit, employer_fit with avoid companies as disqualifier, nice-to-have skills as the half-credit secondary list; Sales: company_type_fit, company_age_fit; derived criteria weight at most 5 each), keep weights summing to 100, renormalisation unchanged; tests including a fairness test (no protected attribute is read).
+- [ ] **Step 3:** run the full suite and commit `feat: profile mapper and scoring criteria for LinkedIn profile fields`.
