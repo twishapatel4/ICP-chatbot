@@ -13,12 +13,13 @@ interface Props {
   value?: string; // shown on the button once something is chosen
   disabled?: boolean;
   detail?: Record<string, string>; // a muted note after an option, e.g. the region of a country
+  levels?: Record<string, number>; // nesting depth (1 = top): the unsearched list is indented by it, and the note is left out
   onPick: (v: string) => void;
 }
 
 // A searchable dropdown that only picks on click or Enter. A native <select> fires change on every
 // arrow key, which would add a value per key press.
-export default function PickMenu({ options, label, placeholder, value, disabled, detail, onPick }: Props) {
+export default function PickMenu({ options, label, placeholder, value, disabled, detail, levels, onPick }: Props) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
@@ -26,6 +27,7 @@ export default function PickMenu({ options, label, placeholder, value, disabled,
   const button = useRef<HTMLButtonElement>(null);
   const base = useId();
   const results = fuzzyFilter(options, q, (o) => o);
+  const nested = !!levels && q.trim() === "";
 
   // keep the highlighted option in view: the country list is 249 long
   useEffect(() => {
@@ -125,13 +127,14 @@ export default function PickMenu({ options, label, placeholder, value, disabled,
                 id={`${base}-o${i}`}
                 role="option"
                 aria-selected={o === value}
-                className={`rounded-[12px] py-2 px-3 text-[14px] cursor-pointer ${i === active ? "bg-card" : ""}`}
+                className={`rounded-[12px] py-2 pr-3 text-[14px] cursor-pointer ${nested && levels?.[o] === 1 ? "font-medium" : ""} ${i === active ? "bg-card" : ""}`}
+                style={{ paddingLeft: nested ? 12 + ((levels?.[o] ?? 1) - 1) * 16 : 12 }}
                 onMouseDown={(e) => e.preventDefault()}
                 onMouseEnter={() => setActive(i)}
                 onClick={() => pick(o)}
               >
                 {o}
-                {detail?.[o] && <span className="text-muted text-[12px]"> · {detail[o]}</span>}
+                {!nested && detail?.[o] && <span className="text-muted text-[12px]"> · {detail[o]}</span>}
               </li>
             ))}
             {results.length === 0 && <li className="py-2 px-3 text-[14px] text-muted">No matches</li>}

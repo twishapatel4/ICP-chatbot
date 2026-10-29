@@ -1,7 +1,7 @@
 // Text reveal, after motion-primitives' TextEffect (https://motion-primitives.com/docs/text-effect):
 // the text is split per word, char or line and each piece animates in with a preset.
 import { AnimatePresence, motion, type TargetAndTransition, type Transition, type Variants } from "motion/react";
-import { type CSSProperties, type ElementType, useMemo } from "react";
+import { type CSSProperties, type ElementType, useEffect, useMemo, useRef } from "react";
 
 export type Preset = "fade" | "fade-in-blur" | "blur" | "scale" | "slide";
 type Per = "word" | "char" | "line";
@@ -60,6 +60,11 @@ export default function TextEffect({
   speedSegment = 1,
   onAnimationComplete,
 }: Props) {
+  // After the first reveal, a word that changes (Customer to Candidate) animates in by itself
+  const revealed = useRef(false);
+  useEffect(() => {
+    revealed.current = true;
+  }, []);
   const MotionTag = useMemo(() => motion.create(Tag), [Tag]); // a stable component, or every re-render would restart the effect
   const item = PRESETS[preset].item;
   const withTiming = (v: Variants): Variants => ({
@@ -95,9 +100,10 @@ export default function TextEffect({
               seg
             ) : (
               <motion.span
-                key={`${per}-${i}`}
+                key={`${per}-${i}-${seg}`}
                 aria-hidden="true"
                 variants={withTiming(item)}
+                {...(revealed.current && { initial: "hidden", animate: "visible" })}
                 style={{ display: "inline-block", whiteSpace: per === "line" ? "pre-wrap" : "pre" }}
               >
                 {seg}

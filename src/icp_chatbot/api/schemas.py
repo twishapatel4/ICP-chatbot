@@ -41,7 +41,7 @@ class ProfileRequest(BaseModel):
 class FieldOut(BaseModel):
     slot: str
     label: str
-    input: str  # single, multi, chips, range or geo
+    input: str  # single, multi, chips, range, geo or title
     facet: str | None  # options come from GET /options/{facet}
     optional: bool
     any_allowed: bool  # "Any" may be picked, on its own

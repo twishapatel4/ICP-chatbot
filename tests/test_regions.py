@@ -168,8 +168,7 @@ def test_apply_profile_seeds_a_region_from_the_form():
         state,
         {
             "industries": ["Software Development"], "lead_geographies": ["Europe"],
-            "company_hq_geographies": ["India"], "buyer_seniority": ["Entry-level"],
-            "buyer_departments": ["Sales"],
+            "company_hq_geographies": ["India"], "buyer_roles": ["VP Sales"],
         },
     )  # fmt: skip
     geo = state.slots["lead_geographies"]
@@ -219,7 +218,7 @@ async def test_a_field_edit_with_a_region_and_a_document_round_trip():
 def test_profile_form_geo_rule_with_regions():
     answers = {
         "industries": ["Software Development"], "company_hq_geographies": ["India"],
-        "buyer_seniority": ["Entry-level"], "buyer_departments": ["Sales"],
+        "buyer_roles": ["VP Sales"],
     }  # fmt: skip
 
     def ok(geo):

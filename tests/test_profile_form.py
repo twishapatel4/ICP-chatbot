@@ -22,8 +22,7 @@ B2B = {
     "industries": ["Software Development"],
     "lead_geographies": ["India"],
     "company_hq_geographies": ["India"],
-    "buyer_seniority": ["Entry-level"],
-    "buyer_departments": ["Sales"],
+    "buyer_roles": ["VP Sales"],
 }
 
 HR_EXPERIENCED = {
@@ -64,12 +63,10 @@ def test_sales_cards_are_industries_geography_buyer_roles():
 def test_all_sales_fields_visible_without_a_business_model_answer():
     shown = {f.slot for c in visible_cards("sales", {}) for f in c.fields}
     assert shown == {
-        "industries", "lead_geographies", "company_hq_geographies",
-        "buyer_seniority", "buyer_departments", "buyer_roles",
+        "industries", "lead_geographies", "company_hq_geographies", "buyer_roles",
     }  # fmt: skip
     assert validate_profile("sales", {}) == [
-        "industries", "lead_geographies", "company_hq_geographies",
-        "buyer_seniority", "buyer_departments",
+        "industries", "lead_geographies", "company_hq_geographies", "buyer_roles",
     ]  # fmt: skip
 
 
@@ -270,9 +267,7 @@ def test_company_size_slots_are_not_single_choice():
 )
 def test_garbage_values_are_reported_not_raised(garbage):
     assert validate_profile("sales", {**B2B, "industries": garbage}) == ["industries"]
-    assert validate_profile("sales", {**B2B, "buyer_departments": garbage}) == [
-        "buyer_departments"
-    ]
+    assert validate_profile("sales", {**B2B, "buyer_roles": garbage}) == ["buyer_roles"]
 
 
 def test_huge_list_is_rejected_cheaply():
@@ -399,7 +394,7 @@ def test_injection_text_is_stored_verbatim_as_data():
 
 def test_newline_only_value_counts_as_empty():
     assert validate_profile("sales", {**B2B, "industries": ["\n\t "]}) == ["industries"]
-    assert validate_profile("sales", {**B2B, "buyer_roles": ["\n"]}) == []
+    assert validate_profile("sales", {**B2B, "buyer_roles": ["\n"]}) == ["buyer_roles"]
 
 
 def test_parse_years_more_bad_inputs():
@@ -407,3 +402,25 @@ def test_parse_years_more_bad_inputs():
     for bad in ("5-3", "abc"):
         with pytest.raises(ValueError):
             parse_years(bad)
+
+
+@pytest.fixture
+def catalog_has_titles(monkeypatch, tmp_path):
+    data = tmp_path / "data"
+    shutil.copytree(DATA_DIR, data)
+    (data / "titles.json").write_text(json.dumps([{"id": "t1", "label": "Software Engineer"}]))
+    catalog = OptionCatalog(data)
+    monkeypatch.setattr(profile_form, "default_catalog", lambda: catalog)
+    monkeypatch.setattr(state_module, "default_catalog", lambda: catalog)
+
+
+def test_job_titles_are_free_text_until_the_title_catalog_is_synced():
+    field = next(f for c in profile_cards("hr") for f in c.fields if f.slot == "target_roles")
+    assert field.input == "chips" and validate_profile("hr", HR_EXPERIENCED) == []
+
+
+def test_job_titles_must_be_linkedin_titles_once_synced(catalog_has_titles):
+    field = next(f for c in profile_cards("hr") for f in c.fields if f.slot == "target_roles")
+    assert field.input == "title" and field.facet == "title"
+    assert validate_profile("hr", {**HR_EXPERIENCED, "target_roles": ["Software Engineer"]}) == []
+    assert validate_profile("hr", {**HR_EXPERIENCED, "target_roles": ["Wizard"]}) == ["target_roles"]

@@ -654,6 +654,15 @@ export default function App() {
           </div>
         )}
 
+        {stage === "interview" && revising && icp && !busy && (
+          <InView className="flex flex-col items-end gap-1.5">
+            <button className={primaryBtn} onClick={approve}>
+              {"\u2713"} Looks good, continue
+            </button>
+            <span className="text-right text-[12px] text-muted">Happy with the profile? Move on to scoring. Or type a change below.</span>
+          </InView>
+        )}
+
         {busy && stage !== "building" && <div className={`${MSG}p-0 self-start flex items-center gap-2 text-[16px] text-muted`}>
             <BotAvatar type="star" state="working" size={34} aria-hidden="true" />
             <TextShimmer>Thinking...</TextShimmer>

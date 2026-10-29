@@ -7,7 +7,7 @@ apply_profile seeds it as a default the chat can still change. Answers come from
 reported against its slot key."""
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 from icp_chatbot.domain.slots import Track, slot_map
@@ -31,7 +31,7 @@ DEFAULT_EVIDENCE = "step 2 form default"
 _CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 _DASHES = str.maketrans({"–": "-", "—": "-"})
 
-Input = Literal["single", "multi", "chips", "range", "geo"]
+Input = Literal["single", "multi", "chips", "range", "geo", "title"]
 
 
 @dataclass(frozen=True)
@@ -57,31 +57,29 @@ class Card:
 
 
 _SALES_CARDS = (
-    Card("target_industries", "Target industries",
+    Card("target_industries", "What are your Target Industries?",
          (CardField("industries", "multi", "industry", any_allowed=True),)),
-    Card("geography", "Geography", (
+    Card("geography", "Where do you serve?", (
         CardField("lead_geographies", "geo", "country", any_allowed=True),
         CardField("company_hq_geographies", "geo", "country", any_allowed=True),
     )),
-    Card("buyer_roles", "Buyer roles", (
-        CardField("buyer_seniority", "multi", "seniority", any_allowed=True),
-        CardField("buyer_departments", "multi", "function", any_allowed=True),
-        CardField("buyer_roles", "chips", optional=True),
+    Card("buyer_roles", "Which job titles do you want to reach?", (
+        CardField("buyer_roles", "chips"),
     )),
 )  # fmt: skip
 
 _HR_CARDS = (
-    Card("role_hiring_for", "Role you're hiring for", (
+    Card("role_hiring_for", "Which departments and roles are you hiring for?", (
         CardField("target_functions", "multi", "function", any_allowed=True),
         CardField("target_roles", "chips"),
     )),
-    Card("experience_level", "Experience level", (CardField("experience_level", "single"),)),
-    Card("education", "Education", (
+    Card("experience_level", "What experience level are you hiring for?", (CardField("experience_level", "single"),)),
+    Card("education", "What education should candidates have?", (
         CardField("education_level", "multi", "degree"),
         CardField("field_of_study", "multi", "field_of_study"),
         CardField("graduation_year", "range"),
     ), requires_catalog=("degree", "field_of_study")),
-    Card("background", "Background", (
+    Card("background", "What background should candidates come from?", (
         CardField("years_experience", "range", any_allowed=True),
         CardField("current_industries", "multi", "industry", any_allowed=True),
         CardField("current_company_size", "multi", "company_size", any_allowed=True),
@@ -92,8 +90,23 @@ _HR_CARDS = (
 # candidate_locations are asked in the chat like any other unknown must-ask slot.
 
 
+_TITLE_SLOTS = ("buyer_roles", "target_roles")  # the job-title slots, one per track
+
+
 def profile_cards(track: Track) -> list[Card]:
-    return list(_HR_CARDS if track == "hr" else _SALES_CARDS)
+    cards = _HR_CARDS if track == "hr" else _SALES_CARDS
+    if not default_catalog().has("title"):
+        return list(cards)  # no title list yet: job titles stay free text
+    return [
+        replace(
+            c,
+            fields=tuple(
+                replace(f, input="title", facet="title") if f.slot in _TITLE_SLOTS else f
+                for f in c.fields
+            ),
+        )
+        for c in cards
+    ]
 
 
 def _clean(raw: Any, any_allowed: bool = False) -> list[str] | None:

@@ -1,4 +1,4 @@
-"""Pull LinkedIn's standardized degrees and fields of study into the repo snapshots.
+"""Pull LinkedIn's standardized degrees, fields of study and job titles into the repo snapshots.
 
 LinkedIn serves these lists only through the Standardized Data API, which needs an approved
 developer token. The token is read from an environment variable, never an argument or a file:
@@ -31,6 +31,8 @@ KINDS = {
     "degree": ("/degrees", "degrees.json"),
     "field_of_study": ("/fieldsOfStudy", "fields_of_study.json"),
 }
+# fetched only with --titles: a token without access to /titles must not fail the other two
+TITLES = {"title": ("/titles", "titles.json")}
 
 
 class SyncError(Exception):
@@ -99,10 +101,10 @@ def _id(value: Any) -> str | None:
 
 
 def to_options(kind: str, rows: list[dict]) -> list[Option]:
-    """Catalog options for `kind` ("degree" or "field_of_study"). Rows without an id or an
+    """Catalog options for `kind` ("degree", "field_of_study" or "title"). Rows without an id or an
     English name are skipped. A degree's parent is its rollup id; a field of study's is the
     first of its rollup ids. The first row for an id wins."""
-    if kind not in KINDS:
+    if kind not in KINDS and kind not in TITLES:
         raise ValueError(f"unknown kind: {kind}")
     options: list[Option] = []
     seen: set[str] = set()
@@ -115,6 +117,8 @@ def to_options(kind: str, rows: list[dict]) -> list[Option]:
         if kind == "degree":
             parent = _id(row.get("rollup"))
             aliases = tuple(a for a in (_text(x) for x in row.get("aliases") or []) if a)
+        elif kind == "title":
+            parent, aliases = None, ()
         else:
             rollups = row.get("rollupIds") or []
             parent = _id(rollups[0]) if rollups else None
@@ -146,6 +150,9 @@ def main(argv: list[str] | None = None) -> int:
         default="LINKEDIN_TOKEN",
         help="name of the environment variable holding the LinkedIn API token",
     )
+    parser.add_argument(
+        "--titles", action="store_true", help="also fetch LinkedIn's standardized job titles"
+    )
     parser.add_argument("--out-dir", type=Path, default=DATA_DIR, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
@@ -156,11 +163,12 @@ def main(argv: list[str] | None = None) -> int:
         # Never echo the value: it is a secret and may not even be one.
         sys.exit(f"{args.token_env} holds whitespace or control characters; fix the token.")
 
+    kinds = {**KINDS, **(TITLES if args.titles else {})}
     try:
         with httpx.Client() as client:
             fetched = {
                 kind: to_options(kind, fetch_all(path, token, client))
-                for kind, (path, _) in KINDS.items()
+                for kind, (path, _) in kinds.items()
             }
     except httpx.HTTPStatusError as exc:
         status = exc.response.status_code
@@ -178,7 +186,7 @@ def main(argv: list[str] | None = None) -> int:
         if not options:
             sys.exit(f"LinkedIn returned no usable {kind} rows; nothing written.")
     files = {
-        args.out_dir / KINDS[kind][1]: json.dumps(option_rows(options), indent=2) + "\n"
+        args.out_dir / kinds[kind][1]: json.dumps(option_rows(options), indent=2) + "\n"
         for kind, options in fetched.items()
     }
     try:
@@ -186,7 +194,7 @@ def main(argv: list[str] | None = None) -> int:
     except OSError as exc:
         sys.exit(redact(f"Could not write the snapshots, old files kept: {exc}", token))
     for kind, options in fetched.items():
-        print(f"{args.out_dir / KINDS[kind][1]}: {len(options)} rows")
+        print(f"{args.out_dir / kinds[kind][1]}: {len(options)} rows")
     return 0
 
 

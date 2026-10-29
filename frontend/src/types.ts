@@ -22,7 +22,7 @@ export interface ProfileOption {
   selectable?: boolean; // false: a heading only (e.g. the region "Other territories"); missing means true
 }
 
-export type FieldInput = "single" | "multi" | "chips" | "range" | "geo";
+export type FieldInput = "single" | "multi" | "chips" | "range" | "geo" | "title";
 
 export interface CardField {
   slot: string;

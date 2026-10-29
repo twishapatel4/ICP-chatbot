@@ -38,8 +38,7 @@ SALES_B2B_PROFILE = {
     "industries": ["Any"],
     "lead_geographies": ["Any"],
     "company_hq_geographies": ["Any"],
-    "buyer_seniority": ["Any"],
-    "buyer_departments": ["Any"],
+    "buyer_roles": ["VP Sales"],
 }
 
 
@@ -293,7 +292,7 @@ async def test_the_fallback_form_completes_a_session_without_the_model(world):
         "POST", f"/sessions/{sid}/fallback", json={"answers": {"industries": ["Fintech"]}}
     )
     assert (
-        partial.status_code == 422 and "buyer_roles" in partial.json()["detail"]["missing_required"]
+        partial.status_code == 422 and "buyer_seniority" in partial.json()["detail"]["missing_required"]
     )
     answers = {key: [f"value for {key}"] for key in required}
     done = await w.call("POST", f"/sessions/{sid}/fallback", json={"answers": answers})

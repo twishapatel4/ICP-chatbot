@@ -20,6 +20,7 @@ FACETS = (
     "country",
     "degree",
     "field_of_study",
+    "title",
 )
 
 SLOT_FACETS: dict[str, str] = {
@@ -47,10 +48,11 @@ _FILES = {
     "country": "countries.json",
     "degree": "degrees.json",
     "field_of_study": "fields_of_study.json",
+    "title": "titles.json",
 }
 
 # Snapshots that only exist after scripts/sync_linkedin_catalogs.py ran with a LinkedIn token.
-_OPTIONAL = frozenset({"degree", "field_of_study"})
+_OPTIONAL = frozenset({"degree", "field_of_study", "title"})
 
 # Two industry labels differ between LinkedIn's Label column and its Hierarchy path.
 _INDUSTRY_ALIASES = {

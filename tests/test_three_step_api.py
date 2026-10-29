@@ -108,9 +108,9 @@ async def test_cards_carry_labels_choices_and_skip_rules(world):
     )  # fmt: skip
     # business_model is not a form field, so the browser must not wait for an answer to it
     assert industries["depends_on"] == []
-    assert fields["buyer_seniority"]["depends_on"] == []
+    assert fields["buyer_roles"]["depends_on"] == []
     assert fields["lead_geographies"]["depends_on"] == []
-    assert fields["buyer_roles"]["optional"] is True and fields["buyer_roles"]["input"] == "chips"
+    assert fields["buyer_roles"]["optional"] is False and fields["buyer_roles"]["input"] == "chips"
     assert {c["id"]: c["required"] for c in sales} == {
         c.id: c.required for c in profile_cards("sales")
     }
@@ -132,8 +132,7 @@ async def test_profile_submit_seeds_slots_and_returns_first_question(world):
         "industries": ["Software Development"],
         "lead_geographies": ["India"],
         "company_hq_geographies": ["Any"],
-        "buyer_seniority": ["Director"],
-        "buyer_departments": ["Finance"],
+        "buyer_roles": ["VP Sales"],
         "buyer_roles": ["CFO"],
     }
     w.llm.queue("opener", q("What do you sell?"))
@@ -172,8 +171,7 @@ async def test_profile_missing_required_is_422(world):
     response = await w.call("POST", f"/sessions/{sid}/profile", json={"answers": partial})
     assert response.status_code == 422
     assert response.json()["detail"]["missing_required"] == [
-        "industries", "lead_geographies", "company_hq_geographies",
-        "buyer_seniority", "buyer_departments",
+        "industries", "lead_geographies", "company_hq_geographies", "buyer_roles",
     ]  # fmt: skip
     malformed = await w.call(
         "POST", f"/sessions/{sid}/profile", json={"answers": {"industries": "Any"}}
@@ -590,7 +588,7 @@ async def test_begin_chat_rejects_invalid_answers_and_keeps_them(eng):
     with pytest.raises(InvalidProfile) as caught:
         await engine.begin_chat(T, sid, {"lead_geographies": ["India"]})
     assert caught.value.missing == [
-        "industries", "company_hq_geographies", "buyer_seniority", "buyer_departments",
+        "industries", "company_hq_geographies", "buyer_roles",
     ]  # fmt: skip
     state = (await repo.get_session(T, sid)).state
     assert state.step == "profile" and state.profile_answers == {"lead_geographies": ["India"]}
@@ -655,8 +653,7 @@ async def test_profile_form_endpoint_returns_three_sales_cards(world):
     assert [c["id"] for c in cards] == ["target_industries", "geography", "buyer_roles"]
     slots = [f["slot"] for c in cards for f in c["fields"]]
     assert slots == [
-        "industries", "lead_geographies", "company_hq_geographies",
-        "buyer_seniority", "buyer_departments", "buyer_roles",
+        "industries", "lead_geographies", "company_hq_geographies", "buyer_roles",
     ]  # fmt: skip
     # no field waits on a slot the form does not ask
     assert all(f["depends_on"] == [] for c in cards for f in c["fields"])

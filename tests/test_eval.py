@@ -303,8 +303,7 @@ def test_case_problems_flags_a_bad_step_two_form():
         "industries": ["Any"],
         "lead_geographies": ["United Kingdom"],
         "company_hq_geographies": ["Any"],
-        "buyer_seniority": ["Any"],
-        "buyer_departments": ["Any"],
+        "buyer_roles": ["VP Sales"],
     }
     assert case_problems(case(profile_answers=ok)) == []
     unknown = case_problems(case(profile_answers={**ok, "nope": ["x"]}))
