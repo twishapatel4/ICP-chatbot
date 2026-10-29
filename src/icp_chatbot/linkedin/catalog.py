@@ -67,6 +67,9 @@ class Option:
     level: int = 1
     parent: str | None = None
     match: tuple[str, ...] = ()
+    # False for a row the data marks `"pick": false`: kept for matching, not offered as a
+    # quick-pick in a picker (the "Other territories" region).
+    selectable: bool = True
 
 
 def _norm(text: str) -> str:
@@ -133,6 +136,7 @@ class OptionCatalog:
             level=int(row.get("level", 1)),
             parent=row.get("parent"),
             match=match,
+            selectable=bool(row.get("pick", True)),
         )
 
     def has(self, facet: str) -> bool:

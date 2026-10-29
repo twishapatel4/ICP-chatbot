@@ -25,7 +25,7 @@ Three changes ship together:
 
 - Calling Sales Navigator or any LinkedIn API. That comes once access exists.
 - Our own taxonomies. No UN M49 geography, no custom industry or role lists.
-- Sales Navigator-only facets in this release: geographic divisions (EMEA, APAC), region/state, postal code, annual revenue, department headcount, and Sales Navigator's own seniority and function lists.
+- Sales Navigator-only facets in this release: LinkedIn's own geographic divisions (EMEA, APAC, DACH, MENA), state, postal code, annual revenue, department headcount, and Sales Navigator's own seniority and function lists.
 - Any role beyond Sales/BDE and HR.
 - Job-description output for HR.
 - A separate engine for HR.
@@ -99,10 +99,11 @@ The old bands (`201-1,000`, `1,001-5,000`, `5,000+`) are replaced by these nine.
 
 **Degrees and fields of study:** LinkedIn's standardized degrees (`urn:li:degree:N`, each with a `rollup` to a broader category; for example Bachelor of Architecture 258, Bachelor of Applied Science 259 and Bachelor of Business Administration 450 all roll up to 200) and fields of study (`urn:li:fieldOfStudy:N` with `rollupIds`, a nested list). **LinkedIn does not publish these lists. They are only served by the Standardized Data API (`GET_ALL`), which needs an approved developer token.** We therefore cannot save them with this spec. A sync script (see "Left to the builder") pulls both lists into the repo snapshots once a token exists. The degree card shows the rollup categories; the field-of-study card is a searchable nested list. Until the snapshots exist the HR education card cannot be built.
 
-**Geography:** two levels, the ones the LinkedIn DB stores for both people and company HQs.
-- **Country**: ISO 3166-1 list. Required level.
+**Geography (the geography picker):** Region (optional), Country, City. Country and City are the levels the LinkedIn DB stores for both people and company HQs.
+- **Region**: an optional first level above country, **provisional and not LinkedIn's published list**. Provisional grouping of the ISO 3166-1 countries into 7 regions defined by this project; LinkedIn does not publish its geography list (Sales Navigator offers continents and geographic divisions such as EMEA, APAC, DACH, MENA); replace with the TL's list when available. The regions are Europe, Asia-Pacific, Africa, Latin America & Caribbean, Middle East, North America and Other territories (kept as data but not offered as a quick-pick: `selectable: false`). A region is a quick-pick for all its countries: the stored value stays "Europe", the LinkedIn filter block lists the country ids, and scoring expands it to its countries. Country names are matched whole (after case, whitespace and ISO-2 code normalisation), never by substring. The grouping is documented next to the data in `src/icp_chatbot/linkedin/data/regions.md`.
+- **Country**: ISO 3166-1 list. Required level (a region counts as a country for this rule).
 - **City**: optional free-text chips under a selected country. LinkedIn has no static city list we can use.
-- Region/state, geographic divisions and postal code arrive with Sales Navigator.
+- LinkedIn's own geographic divisions (EMEA, APAC, DACH, MENA), state and postal code arrive with Sales Navigator; the project's provisional regions above do not replace them.
 - Two pickers where the role needs both: person location and company HQ location. Always asked separately, no "same as" shortcut.
 
 ## Flow
@@ -261,7 +262,7 @@ Sales criteria (defaults, weights sum to 100): industry fit 25 (`industries`, `c
 - Exact HR chat slot keys, tiers and importance values.
 - **Prerequisite, needs the user:** a LinkedIn developer app and token with Standardized Data access. With it, a sync script (`scripts/sync_linkedin_catalogs.py`) calls `GET /v2/degrees` and `GET /v2/fieldsOfStudy` with pagination (and can also refresh industries, seniorities, functions) and writes the repo snapshots. The same call can later fill `skills` and `titles` typeahead. Without a token the HR education card stays unbuilt.
 - The saved snapshot format for the reference tables and how they are refreshed.
-- Which of LinkedIn's `locations` entity levels (country group, country, state, region) the later geography catalog uses.
+- Which of LinkedIn's `locations` entity levels (country group, country, state, region) the later geography catalog uses, and whether it replaces the provisional project regions.
 - How a lead's free-text `Lead.location` is matched to a country (the DB stores a line, not a code).
 - Skill and field-of-study suggestions per role, and the degree-keyword match against `education[].degree`.
 - Whether `track` is also a DB column for metrics.
@@ -269,7 +270,7 @@ Sales criteria (defaults, weights sum to 100): industry fit 25 (`industries`, `c
 
 ## Calls made without the user (marked for review)
 
-- Geography levels are Country then City, because those are the levels the LinkedIn DB stores. Region/state and divisions wait for Sales Navigator.
+- Geography levels are Country then City, because those are the levels the LinkedIn DB stores, plus an optional provisional Region above country (project-defined, not LinkedIn's list). LinkedIn's divisions and state wait for Sales Navigator.
 - Company size uses LinkedIn's nine codes, matched to the DB's stored strings (including `2-10` for code B).
 - Buyer roles card becomes Seniority + Function + Title chips, because those are LinkedIn's three facets. Seniority and function are not stored in the DB, so they are kept for the Sales Navigator filter and cannot be matched yet.
 - Titles and skills are free-text chips: LinkedIn has no static list for either.

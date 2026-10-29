@@ -603,7 +603,7 @@ def test_avoid_companies_uses_whole_name_matching():
     assert score_lead(model, {"avoid_companies": ["Tata Consultancy Services"]}).disqualified_by
 
 
-def test_other_disqualifier_fields_keep_loose_matching():
+def test_location_line_disqualifier_matches_by_whole_part():
     d = make_disqualifier("candidate_locations", "in", ["Germany"])
     model = _hr_model({}, disqualifiers=[d])
     assert score_lead(model, {"candidate_locations": ["Berlin, Germany"]}).disqualified_by

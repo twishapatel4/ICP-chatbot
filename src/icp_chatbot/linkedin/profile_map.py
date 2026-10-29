@@ -72,7 +72,8 @@ def _country(text: str) -> str:
     option = catalog.resolve("country", text)
     if option is None and len(text) == 2:
         option = catalog.resolve("country", text.upper())  # DB codes may be lower case
-    return option.label if option else text
+    # a profile's country is a country: regions (level 1) are project groupings, not data
+    return option.label if option is not None and option.level == 2 else text
 
 
 def _facet(facet: str) -> Callable[[str], str]:

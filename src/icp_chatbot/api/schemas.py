@@ -90,10 +90,16 @@ class OptionOut(BaseModel):
     label: str
     level: int
     parent: str | None
+    # False for a row that stays valid data but should not be offered as a quick-pick (the
+    # "Other territories" region); pickers may hide it or show it without a "select all" action.
+    selectable: bool = True
 
     @classmethod
     def of(cls, option: Option) -> "OptionOut":
-        return cls(id=option.id, label=option.label, level=option.level, parent=option.parent)
+        return cls(
+            id=option.id, label=option.label, level=option.level, parent=option.parent,
+            selectable=option.selectable,
+        )
 
 
 class SessionCreated(BaseModel):

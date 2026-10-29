@@ -32,7 +32,8 @@
  {
   "id": "region-other-territories",
   "label": "Other territories",
-  "level": 1
+  "level": 1,
+  "pick": false
  },
  {
   "id": "AD",

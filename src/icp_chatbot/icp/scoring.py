@@ -187,8 +187,42 @@ def company_match(candidate: str, avoided: str) -> bool:
 COMPANY_NAME_FIELDS = frozenset({"source_companies", "avoid_companies"})
 
 
+# Geography fields: a value is a country (name, alias or ISO-2 code), a region, or free text
+# such as a city. Matched by whole name, never by substring ("Oman" is not in "Romania").
+COUNTRY_FIELDS = frozenset(
+    {"lead_geographies", "company_hq_geographies", "candidate_locations", "current_company_hq"}
+)
+
+
+def country_match(candidate: str, wanted: str) -> bool:
+    """Whole-name match of a lead's geography against a rule value. Both sides are resolved
+    through the country catalog ("US", "United States" and "united states" are one option). They
+    match when they resolve to the same option, or when `wanted` is a region and `candidate` is
+    one of its countries. Values the catalog does not know (cities) match only when equal
+    after case and whitespace normalisation. A location line such as "Berlin, Germany" matches
+    when any of its comma-separated parts matches as a whole."""
+    parts = [p for p in (x.strip() for x in candidate.split(",")) if p]
+    if len(parts) > 1:
+        return any(_country_match_one(p, wanted) for p in parts) or _country_match_one(
+            candidate, wanted
+        )
+    return _country_match_one(candidate, wanted)
+
+
+def _country_match_one(candidate: str, wanted: str) -> bool:
+    catalog = default_catalog()
+    have, want = catalog.resolve("country", candidate), catalog.resolve("country", wanted)
+    if have is None and want is None:
+        return _norm(candidate) == _norm(wanted)
+    if have is None or want is None:
+        return False
+    return have.id == want.id or (want.level == 1 and have.level == 2 and have.parent == want.label)
+
+
 def _matcher(slot: str):
-    return company_match if slot in COMPANY_NAME_FIELDS else loose_equal
+    if slot in COMPANY_NAME_FIELDS:
+        return company_match
+    return country_match if slot in COUNTRY_FIELDS else loose_equal
 
 
 def list_match(lead_values: list[str], rule: MatchRule, slot: str = "") -> float:
