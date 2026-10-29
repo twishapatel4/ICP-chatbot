@@ -18,9 +18,7 @@ from icp_chatbot.icp.scoring import parse_range
 from icp_chatbot.linkedin.catalog import DATA_DIR, SLOT_FACETS, OptionCatalog
 
 B2B = {
-    "business_model": ["B2B"],
     "industries": ["Software Development"],
-    "company_size": ["11-50"],
     "lead_geographies": ["India"],
     "company_hq_geographies": ["India"],
     "buyer_seniority": ["Entry-level"],
@@ -56,27 +54,59 @@ def catalog_has_degrees(monkeypatch, tmp_path):
     monkeypatch.setattr(state_module, "default_catalog", lambda: catalog)
 
 
-def test_sales_b2b_cards_in_order():
-    assert ids(visible_cards("sales", B2B)) == [
-        "who_you_sell_to",
-        "target_industries",
-        "target_company_size",
-        "geography",
-        "buyer_roles",
-    ]
+def test_sales_cards_are_industries_geography_buyer_roles():
+    assert ids(profile_cards("sales")) == ["target_industries", "geography", "buyer_roles"]
+    assert ids(visible_cards("sales", B2B)) == ["target_industries", "geography", "buyer_roles"]
     assert validate_profile("sales", B2B) == []
+    slots = {s for c in profile_cards("sales") for s in c.slots}
+    assert "business_model" not in slots and "company_size" not in slots
 
 
-def test_unanswered_business_model_hides_dependent_cards():
-    assert ids(visible_cards("sales", {})) == ["who_you_sell_to", "geography"]
-    assert "company_hq_geographies" not in validate_profile("sales", {})
+def test_all_sales_fields_visible_without_a_business_model_answer():
+    shown = {f.slot for c in visible_cards("sales", {}) for f in c.fields}
+    assert shown == {
+        "industries", "lead_geographies", "company_hq_geographies",
+        "buyer_seniority", "buyer_departments", "buyer_roles",
+    }  # fmt: skip
+    assert validate_profile("sales", {}) == [
+        "industries", "lead_geographies", "company_hq_geographies",
+        "buyer_seniority", "buyer_departments",
+    ]  # fmt: skip
 
 
-def test_b2c_shows_only_model_and_geography_and_hq_hidden():
-    answers = {"business_model": ["B2C"], "lead_geographies": ["India"]}
-    assert ids(visible_cards("sales", answers)) == ["who_you_sell_to", "geography"]
-    assert validate_profile("sales", answers) == []
-    assert validate_profile("sales", {"business_model": ["B2C"]}) == ["lead_geographies"]
+def test_company_size_is_not_required_by_the_sales_form():
+    assert "company_size" not in B2B
+    assert validate_profile("sales", B2B) == []
+    state = SessionState(track="sales", step="profile")
+    apply_profile(state, B2B)
+    assert "company_size" not in state.slots
+
+
+def test_business_model_is_seeded_b2b_default_not_asked():
+    state = SessionState(track="sales", step="profile")
+    written = apply_profile(state, B2B)
+    assert "business_model" not in written
+    v = state.slots["business_model"]
+    assert v.values == ["B2B"] and v.source == SlotSource.DEFAULT
+    assert v.confidence == 0.5 and v.evidence == "step 2 form default"
+    assert apply_profile(state, B2B) == written  # idempotent
+    assert state.slots["business_model"].source == SlotSource.DEFAULT
+
+
+def test_stated_business_model_is_not_overwritten_by_the_default():
+    state = SessionState(track="sales", step="profile")
+    state.slots["business_model"] = SlotValue(
+        values=["B2C"], confidence=0.9, source=SlotSource.STATED, evidence="chat"
+    )
+    apply_profile(state, {"lead_geographies": ["India"]})
+    assert state.slots["business_model"].values == ["B2C"]
+    assert state.slots["business_model"].source == SlotSource.STATED
+
+
+def test_hr_session_gets_no_business_model_default():
+    state = SessionState(track="hr", step="profile")
+    apply_profile(state, HR_EXPERIENCED)
+    assert "business_model" not in state.slots
 
 
 def test_missing_required_card_is_reported():
@@ -89,10 +119,6 @@ def test_any_cannot_mix_with_other_values():
     assert validate_profile("sales", {**B2B, "industries": ["Any", "Software Development"]}) == [
         "industries"
     ]
-
-
-def test_any_rejected_on_business_model():
-    assert validate_profile("sales", {**B2B, "business_model": ["Any"]}) == ["business_model"]
 
 
 def test_title_chips_optional_for_sales():
@@ -190,14 +216,13 @@ def test_hr_card_titles_avoid_sales_words():
 def test_apply_profile_writes_stated_0_9_with_refs():
     state = SessionState(track="sales", step="profile")
     written = apply_profile(state, B2B)
-    assert set(written) == set(B2B)
+    assert set(written) == set(B2B)  # the business model default is not a form answer
     v = state.slots["industries"]
     assert v.source == SlotSource.STATED and v.confidence == 0.9
     assert v.source_turn == 0 and v.evidence == "step 2 form"
     assert v.refs and v.refs[0].facet == "industry"
-    assert state.slots["company_size"].refs[0].id == "C"
     assert apply_profile(state, B2B) == written  # idempotent
-    assert len(state.slots) == len(B2B)
+    assert set(state.slots) == set(B2B) | {"business_model"}
 
 
 def test_apply_profile_rejects_invalid():
@@ -213,7 +238,10 @@ def test_apply_profile_drops_hidden_form_values_only():
     state.slots["customer_profile"] = SlotValue(
         values=["x"], confidence=0.5, source=SlotSource.INFERRED, evidence="chat"
     )
-    apply_profile(state, {"business_model": ["B2C"], "lead_geographies": ["India"]})
+    state.slots["business_model"] = SlotValue(
+        values=["B2C"], confidence=0.9, source=SlotSource.STATED, evidence="chat"
+    )
+    apply_profile(state, {"lead_geographies": ["India"]})
     assert set(state.slots) == {"business_model", "lead_geographies", "customer_profile"}
 
 
@@ -228,7 +256,9 @@ def test_company_size_slots_are_not_single_choice():
 )
 def test_garbage_values_are_reported_not_raised(garbage):
     assert validate_profile("sales", {**B2B, "industries": garbage}) == ["industries"]
-    assert validate_profile("sales", {**B2B, "business_model": garbage}) == ["business_model"]
+    assert validate_profile("sales", {**B2B, "buyer_departments": garbage}) == [
+        "buyer_departments"
+    ]
 
 
 def test_huge_list_is_rejected_cheaply():
@@ -246,8 +276,8 @@ def test_unknown_keys_with_garbage_are_ignored():
 
 @pytest.mark.parametrize("answers", [None, [], "B2B", 5])
 def test_non_dict_answers_mean_everything_missing(answers):
-    assert validate_profile("sales", answers) == ["business_model", "lead_geographies"]
-    assert ids(visible_cards("sales", answers)) == ["who_you_sell_to", "geography"]
+    assert validate_profile("sales", answers) == validate_profile("sales", {})
+    assert ids(visible_cards("sales", answers)) == ids(visible_cards("sales", {}))
     with pytest.raises(ValueError):
         apply_profile(SessionState(track="sales"), answers)
 

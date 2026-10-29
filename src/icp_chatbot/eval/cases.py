@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from icp_chatbot.domain.slots import Track, slot_map
-from icp_chatbot.engine.profile_form import validate_profile
+from icp_chatbot.engine.profile_form import profile_cards, validate_profile
 
 MIN_LAUNCH_CASES = 30
 
@@ -55,10 +55,11 @@ def case_problems(case: EvalCase) -> list[str]:
         if slot not in known:
             problems.append(f"unknown slot {slot}")
     if case.profile_answers is not None:
-        problems.extend(
+        asked = {s for card in profile_cards(case.track) for s in card.slots}
+        problems.extend(  # a slot the form does not ask (Sales business_model) is no answer
             f"unknown slot {slot} in profile_answers"
             for slot in case.profile_answers
-            if slot not in known
+            if slot not in known or slot not in asked
         )
         problems.extend(
             f"step 2 form is missing or invalid: {slot}"

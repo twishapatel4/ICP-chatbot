@@ -274,23 +274,31 @@ def test_required_tags_still_covered():
     assert {c.track for c in cases} == {"sales", "hr"}
 
 
-def test_b2c_retail_stays_chat_only_and_the_form_version_is_a_new_case():
-    from icp_chatbot.engine.profile_form import validate_profile
-
+def test_b2c_retail_stays_chat_only_and_has_no_form_version():
     chat = _shipped("b2c_retail")
     assert chat.profile_answers is None and "b2c" in chat.tags  # like for like with old runs
-    form = _shipped("b2c_retail_form")
-    assert form.track == "sales" and form.profile_answers["business_model"] == ["B2C"]
-    assert validate_profile("sales", form.profile_answers) == []
-    assert form.expected["lead_geographies"] == form.profile_answers["lead_geographies"]
+    # the Sales form no longer asks the business model, so B2C can only come from the chat
+    assert not (CASES_DIR / "b2c_retail_form.json").exists()
+    assert all(
+        "business_model" not in (c.profile_answers or {}) for c in load_cases(CASES_DIR)
+    )
 
 
 def test_case_problems_flags_a_bad_step_two_form():
-    ok = {"business_model": ["B2C"], "lead_geographies": ["United Kingdom"]}
+    ok = {
+        "industries": ["Any"],
+        "lead_geographies": ["United Kingdom"],
+        "company_hq_geographies": ["Any"],
+        "buyer_seniority": ["Any"],
+        "buyer_departments": ["Any"],
+    }
     assert case_problems(case(profile_answers=ok)) == []
     unknown = case_problems(case(profile_answers={**ok, "nope": ["x"]}))
     assert any("unknown slot nope" in p for p in unknown)
-    incomplete = case_problems(case(profile_answers={"business_model": ["B2C"]}))
+    for removed in ("business_model", "company_size"):  # real slots, but not asked by the form
+        flagged = case_problems(case(profile_answers={**ok, removed: ["B2B"]}))
+        assert any(f"unknown slot {removed}" in p for p in flagged)
+    incomplete = case_problems(case(profile_answers={"industries": ["Any"]}))
     assert any("lead_geographies" in p for p in incomplete)
     unresolved = case_problems(
         case(profile_answers={**ok, "lead_geographies": ["Narnia"]})

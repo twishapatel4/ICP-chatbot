@@ -9,7 +9,7 @@ from icp_chatbot.domain.slots import Track, slot_map
 from icp_chatbot.engine.fallback import FormField
 from icp_chatbot.engine.interview import TurnResult
 from icp_chatbot.engine.planner import Progress
-from icp_chatbot.engine.profile_form import Card, CardField
+from icp_chatbot.engine.profile_form import Card, CardField, profile_cards
 from icp_chatbot.engine.questions import Question
 from icp_chatbot.icp.document import ICPDocument
 from icp_chatbot.linkedin.catalog import Option, default_catalog
@@ -52,6 +52,7 @@ class FieldOut(BaseModel):
     @classmethod
     def of(cls, field: CardField, track: Track) -> "FieldOut":
         slot = slot_map(track)[field.slot]
+        asked = {s for c in profile_cards(track) for s in c.slots}
         return cls(
             slot=field.slot,
             label=slot.label,
@@ -60,7 +61,8 @@ class FieldOut(BaseModel):
             optional=field.optional,
             any_allowed=field.any_allowed,
             choices=[] if field.facet else list(slot.choices),
-            depends_on=[[key, value] for key, value in slot.skip_if],
+            # a controlling slot the form does not ask (Sales business_model) must not hide the field
+            depends_on=[[key, value] for key, value in slot.skip_if if key in asked],
         )
 
 

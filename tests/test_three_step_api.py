@@ -103,15 +103,14 @@ async def test_cards_carry_labels_choices_and_skip_rules(world):
     w = await world()
     sales = (await w.call("GET", "/profile-form?track=sales")).json()
     fields = {f["slot"]: f for c in sales for f in c["fields"]}
-    model = fields["business_model"]
-    assert model["label"] == slot_map("sales")["business_model"].label
-    assert model["choices"] == ["B2B", "B2C", "Both"]
-    assert (model["input"], model["facet"], model["any_allowed"]) == ("single", None, False)
+    assert "business_model" not in fields and "company_size" not in fields
     industries = fields["industries"]
     assert (industries["facet"], industries["any_allowed"], industries["choices"]) == (
         "industry", True, [],
     )  # fmt: skip
-    assert industries["depends_on"] == [["business_model", "B2C"]]
+    # business_model is not a form field, so the browser must not wait for an answer to it
+    assert industries["depends_on"] == []
+    assert fields["buyer_seniority"]["depends_on"] == []
     assert fields["lead_geographies"]["depends_on"] == []
     assert fields["buyer_roles"]["optional"] is True and fields["buyer_roles"]["input"] == "chips"
     assert {c["id"]: c["required"] for c in sales} == {
@@ -132,9 +131,7 @@ async def test_profile_submit_seeds_slots_and_returns_first_question(world):
     w = await world()
     sid = (await w.create())["session_id"]
     answers = {
-        "business_model": ["B2B"],
         "industries": ["Software Development"],
-        "company_size": ["11-50", "51-200"],
         "lead_geographies": ["India"],
         "company_hq_geographies": ["Any"],
         "buyer_seniority": ["Director"],
@@ -173,18 +170,18 @@ async def test_profile_cannot_be_submitted_twice(world):
 async def test_profile_missing_required_is_422(world):
     w = await world()
     sid = (await w.create())["session_id"]
-    partial = {"business_model": ["B2B"], "industries": ["Not an industry"]}
+    partial = {"industries": ["Not an industry"]}
     response = await w.call("POST", f"/sessions/{sid}/profile", json={"answers": partial})
     assert response.status_code == 422
     assert response.json()["detail"]["missing_required"] == [
-        "industries", "company_size", "lead_geographies", "company_hq_geographies",
+        "industries", "lead_geographies", "company_hq_geographies",
         "buyer_seniority", "buyer_departments",
     ]  # fmt: skip
     malformed = await w.call(
-        "POST", f"/sessions/{sid}/profile", json={"answers": {"business_model": "B2B"}}
+        "POST", f"/sessions/{sid}/profile", json={"answers": {"industries": "Any"}}
     )
     assert malformed.status_code == 422
-    assert "business_model" in malformed.json()["detail"]["missing_required"]
+    assert "industries" in malformed.json()["detail"]["missing_required"]
     assert w.llm.calls == []
     assert (await w.repo.get_session(T, sid)).state.step == "profile"
 
@@ -500,7 +497,8 @@ async def test_create_runs_the_guard_and_reads_the_site_in_the_background(eng):
     assert guard.calls == 1 and enrichment.calls == 1
     record = await repo.get_session(T, sid)
     assert record.state.slots["product"].source == SlotSource.INFERRED
-    assert record.state.slots["business_model"].source == SlotSource.STATED
+    assert record.state.slots["business_model"].values == ["B2B"]
+    assert record.state.slots["business_model"].source == SlotSource.DEFAULT
     assert record.usage.input_tokens == 600  # the read plus the opener, nothing twice
     assert "Payroll" in llm.calls_for("opener")[0].user
     assert len(await repo.list_enrichment(T, sid)) == 1
@@ -575,13 +573,15 @@ async def test_begin_chat_rejects_invalid_answers_and_keeps_them(eng):
     engine, repo, llm, _, _ = await eng()
     sid = await engine.create(T, SignupInfo("Acme"))
     with pytest.raises(InvalidProfile) as caught:
-        await engine.begin_chat(T, sid, {"business_model": ["B2C"]})
-    assert caught.value.missing == ["lead_geographies"]
+        await engine.begin_chat(T, sid, {"lead_geographies": ["India"]})
+    assert caught.value.missing == [
+        "industries", "company_hq_geographies", "buyer_seniority", "buyer_departments",
+    ]  # fmt: skip
     state = (await repo.get_session(T, sid)).state
-    assert state.step == "profile" and state.profile_answers == {"business_model": ["B2C"]}
+    assert state.step == "profile" and state.profile_answers == {"lead_geographies": ["India"]}
     assert llm.calls == []
     llm.queue("opener", q("What do you sell?"))
-    answers = {"business_model": ["B2C"], "lead_geographies": ["India", "Mumbai"]}
+    answers = SALES_B2B_PROFILE
     await engine.begin_chat(T, sid, answers)
     with pytest.raises(InvalidTransition):
         await engine.begin_chat(T, sid, answers)
@@ -632,3 +632,34 @@ async def test_api_approve_hr_document_passes_track(world):
     approved = await w.call("POST", f"/sessions/{sid}/approve")
     assert approved.status_code == 200, approved.text
     assert approved.json()["document"]["track"] == "hr"
+
+
+async def test_profile_form_endpoint_returns_three_sales_cards(world):
+    w = await world()
+    cards = (await w.call("GET", "/profile-form?track=sales")).json()
+    assert [c["id"] for c in cards] == ["target_industries", "geography", "buyer_roles"]
+    slots = [f["slot"] for c in cards for f in c["fields"]]
+    assert slots == [
+        "industries", "lead_geographies", "company_hq_geographies",
+        "buyer_seniority", "buyer_departments", "buyer_roles",
+    ]  # fmt: skip
+    # no field waits on a slot the form does not ask
+    assert all(f["depends_on"] == [] for c in cards for f in c["fields"])
+
+
+async def test_b2b_default_session_still_reaches_the_floor_with_company_size_asked_in_chat(eng):
+    from icp_chatbot.engine.planner import icp_floor_met, missing_core_slots
+
+    engine, repo, llm, _, _ = await eng()
+    sid = await engine.create(T, SignupInfo("Acme"))
+    llm.queue("opener", q("What do you sell?"))
+    await engine.begin_chat(T, sid, SALES_B2B_PROFILE)
+    state = (await repo.get_session(T, sid)).state
+    assert state.slots["business_model"].source == SlotSource.DEFAULT
+    assert "company_size" not in state.slots
+    assert "company_size" in [s.key for s in missing_core_slots(state)]  # still asked in the chat
+    assert not icp_floor_met(state)  # nothing told about the product yet
+    state.slots["product"] = SlotValue(
+        values=["Payroll"], confidence=0.9, source=SlotSource.STATED, evidence="chat"
+    )
+    assert icp_floor_met(state)  # industries, geography and departments are the customer facts

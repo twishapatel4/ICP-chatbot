@@ -35,9 +35,7 @@ def q(text):
 # A valid step 2 for a B2B seller that pins nothing down: every card answered "Any", so the
 # chat still gathers the specifics the way it did before step 2 existed.
 SALES_B2B_PROFILE = {
-    "business_model": ["B2B"],
     "industries": ["Any"],
-    "company_size": ["Any"],
     "lead_geographies": ["Any"],
     "company_hq_geographies": ["Any"],
     "buyer_seniority": ["Any"],

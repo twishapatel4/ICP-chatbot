@@ -2,7 +2,8 @@
 
 Cards are data only. Each CardField carries how its slot is answered; which fields show follows
 the slot registry's skip rules, and a slot whose controlling slot is still unanswered stays
-hidden. Answers come from the browser, so nothing here raises on malformed input: a bad value is
+hidden. The Sales form does not ask the business model: an unanswered one counts as B2B, and
+apply_profile seeds it as a default the chat can still change. Answers come from the browser, so nothing here raises on malformed input: a bad value is
 reported against its slot key."""
 
 import re
@@ -25,6 +26,9 @@ MAX_RAW_ITEMS = 50  # more than this is rejected without looking at the items
 MAX_RAW_CHARS = 1000  # a longer raw string is rejected without cleaning it
 FORM_EVIDENCE = "step 2 form"
 FORM_CONFIDENCE = 0.9
+DEFAULT_BUSINESS_MODEL = "B2B"  # LinkedIn search targets businesses
+DEFAULT_CONFIDENCE = 0.5
+DEFAULT_EVIDENCE = "step 2 form default"
 _CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 _DASHES = str.maketrans({"–": "-", "—": "-"})
 
@@ -54,11 +58,8 @@ class Card:
 
 
 _SALES_CARDS = (
-    Card("who_you_sell_to", "Who you sell to", (CardField("business_model", "single"),)),
     Card("target_industries", "Target industries",
          (CardField("industries", "multi", "industry", any_allowed=True),)),
-    Card("target_company_size", "Target company size",
-         (CardField("company_size", "multi", "company_size", any_allowed=True),)),
     Card("geography", "Geography", (
         CardField("lead_geographies", "geo", "country", any_allowed=True),
         CardField("company_hq_geographies", "geo", "country", any_allowed=True),
@@ -127,10 +128,22 @@ def _answer(answers: dict, field: CardField) -> list[str] | None:
     return _clean(answers.get(field.slot), field.any_allowed)
 
 
-def _state_for(track: Track, answers: Any) -> SessionState:
-    """A session holding the answers to known slots, for the registry's skip rules."""
+def _default_business_model() -> SlotValue:
+    return SlotValue(
+        values=[DEFAULT_BUSINESS_MODEL],
+        confidence=DEFAULT_CONFIDENCE,
+        source=SlotSource.DEFAULT,
+        evidence=DEFAULT_EVIDENCE,
+    )
+
+
+def _state_for(track: Track, answers: Any, business_model: SlotValue | None = None) -> SessionState:
+    """A session holding the answers to known slots, for the registry's skip rules. For Sales
+    the business model is the one given, else B2B: the form never asks it."""
     answers = _as_dict(answers)
     state = SessionState(track=track)
+    if track != "hr":
+        state.slots["business_model"] = business_model or _default_business_model()
     known = {f.slot: f for c in profile_cards(track) for f in c.fields}
     for key, field in known.items():
         values = _answer(answers, field)
@@ -161,8 +174,8 @@ def _visible_fields(track: Track, card: Card, state: SessionState) -> list[CardF
     return out
 
 
-def visible_cards(track: Track, answers: Any) -> list[Card]:
-    state = _state_for(track, answers)
+def visible_cards(track: Track, answers: Any, business_model: SlotValue | None = None) -> list[Card]:
+    state = _state_for(track, answers, business_model)
     return [c for c in profile_cards(track) if _visible_fields(track, c, state)]
 
 
@@ -242,11 +255,13 @@ def _field_valid(track: Track, field: CardField, values: list[str]) -> bool:
     return all(catalog.resolve(field.facet, v) is not None for v in values)
 
 
-def validate_profile(track: Track, answers: Any) -> list[str]:
+def validate_profile(
+    track: Track, answers: Any, business_model: SlotValue | None = None
+) -> list[str]:
     """The visible slots that are missing or invalid, in card order. Empty means valid. Never
     raises on malformed answers."""
     answers = _as_dict(answers)
-    state = _state_for(track, answers)
+    state = _state_for(track, answers, business_model)
     problems: list[str] = []
     for card in profile_cards(track):
         for field in _visible_fields(track, card, state):
@@ -273,11 +288,14 @@ def clean_answers(track: Track, answers: Any) -> dict[str, list[str]]:
 
 def apply_profile(state: SessionState, answers: Any, turn_no: int = 0) -> list[str]:
     """Seed the session with the step 2 answers. Returns the slot keys written."""
-    problems = validate_profile(state.track, answers)
+    model = state.slots.get("business_model") if state.track != "hr" else None
+    if model is not None and not model.values:
+        model = None
+    problems = validate_profile(state.track, answers, model)
     if problems:
         raise ValueError(f"invalid profile answers: {', '.join(problems)}")
     answers = _as_dict(answers)
-    form_state = _state_for(state.track, answers)
+    form_state = _state_for(state.track, answers, model)
     visible: set[str] = set()
     written: list[str] = []
     for card in profile_cards(state.track):
@@ -304,6 +322,8 @@ def apply_profile(state: SessionState, answers: Any, turn_no: int = 0) -> list[s
         for slot in card.slots:
             if slot not in visible:
                 _drop_form_value(state, slot)
+    if model is None and state.track != "hr":
+        state.slots["business_model"] = _default_business_model()
     return written
 
 

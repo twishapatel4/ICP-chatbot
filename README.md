@@ -31,8 +31,8 @@ A session has three steps and one of two roles (`track`).
 | | Sales / BDE | HR |
 |---|---|---|
 | Output | Ideal Customer Profile | Ideal Candidate Profile |
-| Form cards | business model, industries, company size, geography, buyer roles | role hiring for, experience level (Fresher, Experienced, Both), education, background, candidate location, must-have skills |
-| Skipped when | B2C: industry, company size and buyer cards are hidden and not required | Fresher: background hidden; Experienced or Both: graduation year and field of study hidden |
+| Form cards | industries, geography, buyer roles (the business model is seeded B2B and company size is asked in the chat) | role hiring for, experience level (Fresher, Experienced, Both), education, background, candidate location, must-have skills |
+| Skipped when | nothing in the form; a B2C answer in the chat skips the industry and buyer questions | Fresher: background hidden; Experienced or Both: graduation year and field of study hidden |
 | Scoring | six default criteria, weights sum to 100 | Role 25, Experience 20, Skills 20, Education 15, Location 10, Background 10 |
 
 The education card stays hidden until the degree and field-of-study snapshots exist; build them
@@ -83,8 +83,8 @@ An evaluation case sets `track` (`"sales"` by default) and may carry `profile_an
 form. With them the replay runs the real three-step flow (`create`, then `begin_chat` with the
 form); without them it uses the legacy one-call `start` (Sales, no form). `case_problems` flags
 unknown keys in `profile_answers` and any answer the form would reject. `hr_*.json` cover
-Fresher, Experienced, Both and vague HR briefs. `b2c_retail.json` is the chat-only B2C case and
-`b2c_retail_form.json` runs the B2C form (new, no baseline yet).
+Fresher, Experienced, Both and vague HR briefs. `b2c_retail.json` is the chat-only B2C case: the Sales form
+does not ask the business model, so B2C can only come from the chat.
 
 **HR cases leave out education.** The education card is hidden until the degree and
 field-of-study snapshots exist. After `scripts/sync_linkedin_catalogs.py` has been run the card
