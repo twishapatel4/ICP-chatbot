@@ -87,7 +87,7 @@ export default function PickMenu({ options, label, placeholder, value, disabled,
         {open ? (results.length ? `${results.length} ${results.length === 1 ? "match" : "matches"}` : "No matches") : ""}
       </div>
       {open && (
-        <div className={`absolute z-20 left-0 right-0 p-1 flex bg-panel border border-line rounded-[18px] shadow-soft ${up ? "bottom-full mb-1 flex-col-reverse" : "mt-1 flex-col"}`}>
+        <div className={`absolute z-20 left-0 right-0 p-1 flex bg-pop border border-line rounded-[18px] shadow-soft ${up ? "bottom-full mb-1 flex-col-reverse" : "mt-1 flex-col"}`}>
           <input
             className={`${pillInput} block w-full py-2 px-3 ${up ? "mt-1" : "mb-1"}`}
             type="text"
@@ -127,7 +127,7 @@ export default function PickMenu({ options, label, placeholder, value, disabled,
                 id={`${base}-o${i}`}
                 role="option"
                 aria-selected={o === value}
-                className={`rounded-[12px] py-2 pr-3 text-[14px] cursor-pointer ${nested && levels?.[o] === 1 ? "font-medium" : ""} ${i === active ? "bg-card" : ""}`}
+                className={`rounded-[12px] py-2 pr-3 text-[14px] cursor-pointer ${nested && levels?.[o] === 1 ? "font-medium" : ""} ${i === active ? "bg-line" : ""}`}
                 style={{ paddingLeft: nested ? 12 + ((levels?.[o] ?? 1) - 1) * 16 : 12 }}
                 onMouseDown={(e) => e.preventDefault()}
                 onMouseEnter={() => setActive(i)}

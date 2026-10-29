@@ -83,6 +83,7 @@ class OptionCatalog:
         self._options: dict[str, list[Option]] = {}
         self._lookup: dict[str, dict[str, Option]] = {}
         self._by_id: dict[str, dict[str, Option]] = {}
+        self._norms: dict[str, list[str]] = {}
         for facet, filename in _FILES.items():
             path = data_dir / filename
             if not path.exists():
@@ -101,6 +102,7 @@ class OptionCatalog:
                     lookup.setdefault(_norm(key), opt)
             self._lookup[facet] = lookup
             self._by_id[facet] = {opt.id: opt for opt in opts}
+            self._norms[facet] = [_norm(opt.label) for opt in opts]
 
     @classmethod
     def _load_optional(cls, facet: str, path: Path) -> list[Option]:
@@ -148,12 +150,23 @@ class OptionCatalog:
         return list(self._options.get(facet, []))
 
     def search(self, facet: str, q: str, limit: int = 50) -> list[Option]:
+        """Options whose label starts with q, then those that contain it, in catalog order. One
+        pass over precomputed lower-case labels, so a one-letter query over tens of thousands of
+        job titles stays instant."""
         needle = _norm(q)
         opts = self._options.get(facet, [])
         if not needle:
             return opts[:limit]
-        starts = [o for o in opts if _norm(o.label).startswith(needle)]
-        rest = [o for o in opts if needle in _norm(o.label) and o not in starts]
+        norms = self._norms[facet]
+        starts: list[Option] = []
+        rest: list[Option] = []
+        for opt, label in zip(opts, norms):
+            if label.startswith(needle):
+                starts.append(opt)
+                if len(starts) >= limit:
+                    break  # enough prefix matches to fill the page
+            elif needle in label:
+                rest.append(opt)
         return (starts + rest)[:limit]
 
     def region_countries(self, text: str) -> list[Option] | None:

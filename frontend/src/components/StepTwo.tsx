@@ -297,10 +297,12 @@ function SearchPicker({
   disabled,
   onToggle,
   onQuery,
+  pending,
   onEnd,
   keepOpen,
 }: {
   onQuery?: (q: string) => void; // the options come from the server: it is asked on every keystroke
+  pending?: boolean; // the server has not answered the current text yet: meanwhile the list is filtered here
   onEnd?: () => void; // the list was scrolled to its end: ask the server for more
   keepOpen?: boolean; // stay open after a pick, to tick several in a row
   options: ProfileOption[];
@@ -316,7 +318,13 @@ function SearchPicker({
   const base = useId();
   const searching = q.trim() !== "";
   const results = onQuery
-    ? options
+    ? pending && searching
+      ? // until the server answers: what already matches here, else the list as it was (never a blank flash)
+        (() => {
+          const near = fuzzyFilter(options, q, (o) => o.label);
+          return near.length > 0 ? near : options;
+        })()
+      : options
     : searching
       ? fuzzyFilter(options, q, (o) => o.label)
       : suggest;
@@ -391,7 +399,7 @@ function SearchPicker({
           if (onEnd && el.scrollTop + el.clientHeight >= el.scrollHeight - 40)
             onEnd();
         }}
-        className="absolute z-20 left-0 right-0 mt-1 max-h-60 overflow-y-auto list-none m-0 p-1 bg-panel border border-line rounded-[18px] shadow-soft"
+        className="absolute z-20 left-0 right-0 mt-1 max-h-60 overflow-y-auto list-none m-0 p-1 bg-pop border border-line rounded-[18px] shadow-soft"
       >
         {results.map((o, i) => (
           <li
@@ -399,7 +407,7 @@ function SearchPicker({
             id={optionId(i)}
             role="option"
             aria-selected={values.includes(o.label)}
-            className={`rounded-[12px] py-2 pr-3 text-[14px] cursor-pointer ${!searching && o.level === 1 ? "font-medium" : ""} ${i === active ? "bg-card" : ""}`}
+            className={`rounded-[12px] py-2 pr-3 text-[14px] cursor-pointer ${!searching && o.level === 1 ? "font-medium" : ""} ${i === active ? "bg-line" : ""}`}
             style={{ paddingLeft: searching ? 12 : 12 + (o.level - 1) * 16 }} // the whole list, nested by level
             onMouseDown={(e) => e.preventDefault()} // keep focus in the input
             onMouseEnter={() => setActive(i)}
@@ -432,6 +440,8 @@ export function TitleField({
   const [found, setFound] = useState<ProfileOption[]>([]);
   const [failed, setFailed] = useState(false);
   const asked = useRef({ q: "", limit: TITLE_PAGE });
+  const [typed, setTyped] = useState("");
+  const [foundFor, setFoundFor] = useState("");
   const last = useRef(0);
   const timer = useRef<number>();
   const load = (q: string, limit: number) => {
@@ -439,12 +449,17 @@ export function TitleField({
     const mine = ++last.current;
     api
       .getOptions(facet, q.trim(), limit)
-      .then((r) => mine === last.current && (setFound(r), setFailed(false)))
+      .then(
+        (r) =>
+          mine === last.current &&
+          (setFound(r), setFoundFor(q.trim()), setFailed(false)),
+      )
       .catch(() => mine === last.current && setFailed(true));
   };
   const query = (q: string) => {
+    setTyped(q.trim());
     window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => load(q, TITLE_PAGE), 200);
+    load(q, TITLE_PAGE); // no wait: a newer keystroke makes the older answer stale
   };
   // scrolling to the end of the list asks for the next page, up to what the server will give
   const more = () => {
@@ -486,6 +501,7 @@ export function TitleField({
         disabled={disabled}
         keepOpen
         onQuery={query}
+        pending={typed !== foundFor}
         onEnd={more}
         onToggle={(l) => onChange(toggle(values, l))}
       />
@@ -1159,7 +1175,9 @@ export default function StepTwo({
                   (!isOff(f, answers) &&
                     (answered(f, answers) || yes.includes(f.slot)))) && (
                   <FieldInput
-                    field={switchable(f, fields) ? { ...f, any_allowed: false } : f}
+                    field={
+                      switchable(f, fields) ? { ...f, any_allowed: false } : f
+                    }
                     values={answers[f.slot] ?? []}
                     disabled={disabled}
                     countries={country}
