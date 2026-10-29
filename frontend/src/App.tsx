@@ -124,6 +124,8 @@ export default function App() {
   const [revising, setRevising] = useState(saved?.revising ?? false);
   const [progress, setProgress] = useState<Progress>(saved?.progress ?? NO_PROGRESS);
   const [startError, setStartError] = useState("");
+  const [step2Error, setStep2Error] = useState(""); // a failed step 2 submit that is not about a missing answer
+  const working = useRef(false); // set at once, so a fast double click cannot start a second request
   const nextId = useRef(Math.max(0, ...(saved?.messages ?? []).map((m) => m.id)) + 1);
   const firstNewId = useRef(nextId.current); // messages restored after a reload show at once, not typed out
 
@@ -184,12 +186,16 @@ export default function App() {
           setOptions([]);
           setStage("step2");
         } else {
+          // step 2 was already submitted (maybe in another tab): the cards are stale
           writePending(null);
+          clearDraft(id);
+          if (saved?.stage === "step2" || !saved?.sessionId) newChat();
         }
       })
       .catch((e) => {
         if (e instanceof api.ApiError && e.status === 404) {
           writePending(null);
+          clearDraft(id);
           newChat();
         }
       });
@@ -199,6 +205,7 @@ export default function App() {
   function newChat() {
     if (sessionId) clearDraft(sessionId);
     writePending(null);
+    setStep2Error("");
     setTrack(null);
     setCards([]);
     setSavedAnswers(null);
@@ -280,12 +287,15 @@ export default function App() {
   }
 
   async function guarded(run: () => Promise<void>) {
+    if (working.current) return;
+    working.current = true;
     setBusy(true);
     try {
       await run();
     } catch (e) {
       push("error", explain(e));
     } finally {
+      working.current = false;
       setBusy(false);
     }
   }
@@ -312,7 +322,7 @@ export default function App() {
     guarded(async () => {
       if (!sessionId) return;
       setMissing([]);
-      setStartError("");
+      setStep2Error("");
       try {
         const turn = await api.submitProfile(sessionId, answers);
         clearDraft(sessionId);
@@ -322,17 +332,16 @@ export default function App() {
         const slots = e instanceof api.ApiError && (e.detail as { missing_required?: string[] })?.missing_required;
         if (slots) {
           setMissing(slots);
-          setStartError("Please answer the highlighted questions.");
           return;
         }
-        setStartError(explain(e));
+        setStep2Error(explain(e));
       }
     });
 
   // Picked chips and typed text go out as one answer.
   const send = (typed: string) => {
     const text = [...picked, typed].filter(Boolean).join(", ");
-    if (!sessionId || !text) return;
+    if (!sessionId || !text || working.current) return;
     setOptions([]);
     setPicked([]);
     push("me", text);
@@ -434,13 +443,14 @@ export default function App() {
                   {track === "hr" ? "Who are you hiring?" : "Who do you sell to?"}
                 </h1>
                 <StepTwo
-                  key={sessionId}
+                  key={`${sessionId}-${savedAnswers ? "saved" : "none"}`}
                   sessionId={sessionId}
                   track={track ?? "sales"}
                   cards={cards}
                   saved={savedAnswers}
                   disabled={busy}
                   missing={missing}
+                  error={step2Error}
                   onSubmit={(a) => void submitProfile(a)}
                 />
                 {busy && (
@@ -448,11 +458,6 @@ export default function App() {
                     <BotAvatar type="star" state="working" size={34} aria-hidden="true" />
                     <TextShimmer>AI is generating your first question...</TextShimmer>
                   </div>
-                )}
-                {startError && (
-                  <p className="m-0 text-warn text-[14px]" role="alert">
-                    {startError}
-                  </p>
                 )}
               </>
             )

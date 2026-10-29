@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import * as api from "../api";
 import type { Card, CardField, ProfileOption, Track } from "../types";
 import { actions, card, chip, chipOn, pillInput, primaryBtn } from "../ui";
@@ -52,10 +52,21 @@ function shownFields(c: Card, answers: Answers): CardField[] {
 
 const answered = (f: CardField, answers: Answers) => (answers[f.slot]?.length ?? 0) > 0;
 
-function missingSlots(cards: Card[], answers: Answers): string[] {
+// The same checks the server makes, so Continue is only enabled for answers it will take.
+// `countries` is the country catalog (lower-cased labels), or null while it is not loaded.
+function valid(f: CardField, values: string[], countries: Set<string> | null): boolean {
+  if (values.length === 0) return false;
+  if (values.includes(ANY)) return f.any_allowed && values.length === 1;
+  if (values.length > MAX_VALUES || values.some((v) => v.length > MAX_CHARS)) return false;
+  if (f.input === "geo") return !!countries && values.some((v) => countries.has(v.toLowerCase()));
+  return true;
+}
+
+// Visible fields that block Continue: a required one left empty, or any one holding a bad answer.
+function problemSlots(cards: Card[], answers: Answers, countries: Set<string> | null): string[] {
   return cards.flatMap((c) =>
     shownFields(c, answers)
-      .filter((f) => c.required && !f.optional && !answered(f, answers))
+      .filter((f) => (answered(f, answers) ? !valid(f, answers[f.slot], countries) : c.required && !f.optional))
       .map((f) => f.slot),
   );
 }
@@ -64,8 +75,15 @@ function missingSlots(cards: Card[], answers: Answers): string[] {
 
 const cache = new Map<string, Promise<ProfileOption[]>>();
 
-function useOptions(facet: string | null): ProfileOption[] {
-  const [options, setOptions] = useState<ProfileOption[]>([]);
+interface Loaded {
+  options: ProfileOption[];
+  error: boolean;
+  retry: () => void;
+}
+
+function useOptions(facet: string | null): Loaded {
+  const [state, setState] = useState<{ facet: string | null; options: ProfileOption[]; error: boolean }>({ facet: null, options: [], error: false });
+  const [tries, setTries] = useState(0);
   useEffect(() => {
     if (!facet) return;
     let live = true;
@@ -73,14 +91,29 @@ function useOptions(facet: string | null): ProfileOption[] {
     if (!pending) {
       pending = api.getOptions(facet);
       cache.set(facet, pending);
-      pending.catch(() => cache.delete(facet)); // a failed load is tried again next time
+      pending.catch(() => cache.delete(facet)); // a failed load is tried again on Retry
     }
-    pending.then((o) => live && setOptions(o)).catch(() => undefined);
+    pending
+      .then((options) => live && setState({ facet, options, error: false }))
+      .catch(() => live && setState({ facet, options: [], error: true }));
     return () => {
       live = false;
     };
-  }, [facet]);
-  return options;
+  }, [facet, tries]);
+  // never show the previous facet's options while a new one loads
+  const now = state.facet === facet ? state : { options: [], error: false };
+  return { options: now.options, error: now.error, retry: () => setTries((t) => t + 1) };
+}
+
+function LoadError({ retry }: { retry: () => void }) {
+  return (
+    <p className="m-0 text-[13px] text-warn" role="alert">
+      Could not load the options.{" "}
+      <button type="button" className="underline border-0 bg-transparent p-0 text-warn" onClick={retry}>
+        Retry
+      </button>
+    </p>
+  );
 }
 
 // ---- small pieces ----
@@ -104,14 +137,23 @@ function AnyChip({ values, onChange, disabled }: { values: string[]; onChange: (
 
 // Picking something specific clears Any, and Any clears the specific picks.
 const without = (values: string[]) => values.filter((v) => v !== ANY);
-const toggle = (values: string[], v: string) => (values.includes(v) ? values.filter((x) => x !== v) : [...without(values), v]);
+const toggle = (values: string[], v: string) => {
+  if (values.includes(v)) return values.filter((x) => x !== v);
+  const rest = without(values);
+  return rest.length >= MAX_VALUES ? values : [...rest, v];
+};
+const atCap = (values: string[]) => without(values).length >= MAX_VALUES;
+const CAP_HINT = <span className="text-[12px] text-muted">Up to {MAX_VALUES}</span>;
 
+// An ARIA combobox: type to filter, ArrowUp/ArrowDown to move, Enter to pick, Escape to close.
+// Enter never submits the form from here. Mouse and touch picks work too.
 function SearchPicker({
   options,
   values,
   suggest,
   placeholder,
   disabled,
+  full,
   onToggle,
 }: {
   options: ProfileOption[];
@@ -119,47 +161,88 @@ function SearchPicker({
   suggest: ProfileOption[]; // shown before anything is typed
   placeholder: string;
   disabled: boolean;
+  full: boolean; // no more values may be added
   onToggle: (label: string) => void;
 }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const base = useId();
   const needle = q.trim().toLowerCase();
   const results = needle ? options.filter((o) => o.label.toLowerCase().includes(needle)).slice(0, 12) : suggest.slice(0, 20);
+  const shown = open && results.length > 0;
+  const blocked = (o: ProfileOption) => full && !values.includes(o.label);
+  const optionId = (i: number) => `${base}-o${i}`;
+
+  function pick(o: ProfileOption | undefined) {
+    if (!o || blocked(o)) return;
+    onToggle(o.label);
+    setQ("");
+    setOpen(false);
+  }
+
   return (
     <div className="relative">
       <input
         className={`${pillInput} block w-full py-2.5 px-[18px]`}
-        type="search"
+        type="text"
+        role="combobox"
+        aria-expanded={shown}
+        aria-controls={`${base}-list`}
+        aria-activedescendant={shown ? optionId(active) : undefined}
+        aria-autocomplete="list"
         autoComplete="off"
         placeholder={placeholder}
         aria-label={placeholder}
         disabled={disabled}
         value={q}
-        onChange={(e) => setQ(e.target.value)}
+        onChange={(e) => {
+          setQ(e.target.value);
+          setActive(0);
+          setOpen(true);
+        }}
         onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onBlur={() => setOpen(false)}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            e.preventDefault();
+            if (!open) return setOpen(true);
+            const n = results.length;
+            if (n) setActive((a) => (a + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
+          } else if (e.key === "Enter") {
+            e.preventDefault(); // never submit the form from the search box
+            if (shown) pick(results[active]);
+          } else if (e.key === "Escape" && open) {
+            e.preventDefault();
+            setOpen(false);
+          }
+        }}
       />
-      {open && results.length > 0 && (
-        <ul className="absolute z-20 left-0 right-0 mt-1 max-h-60 overflow-y-auto list-none m-0 p-1 bg-panel border border-line rounded-[18px] shadow-soft" role="listbox">
-          {results.map((o) => (
-            <li key={o.id} role="option" aria-selected={values.includes(o.label)}>
-              <button
-                type="button"
-                className="w-full text-left rounded-[12px] border-0 bg-transparent py-2 px-3 text-[14px] hover:bg-card"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  onToggle(o.label);
-                  setQ("");
-                }}
-              >
-                {values.includes(o.label) ? "✓ " : ""}
-                {o.label}
-                {o.parent && <span className="text-muted text-[12px]"> · {o.parent}</span>}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <ul
+        id={`${base}-list`}
+        role="listbox"
+        aria-label={placeholder}
+        hidden={!shown}
+        className="absolute z-20 left-0 right-0 mt-1 max-h-60 overflow-y-auto list-none m-0 p-1 bg-panel border border-line rounded-[18px] shadow-soft"
+      >
+        {results.map((o, i) => (
+          <li
+            key={o.id}
+            id={optionId(i)}
+            role="option"
+            aria-selected={values.includes(o.label)}
+            aria-disabled={blocked(o) || undefined}
+            className={`rounded-[12px] py-2 px-3 text-[14px] cursor-pointer ${i === active ? "bg-card" : ""} ${blocked(o) ? "opacity-50 cursor-not-allowed" : ""}`}
+            onMouseDown={(e) => e.preventDefault()} // keep focus in the input
+            onMouseEnter={() => setActive(i)}
+            onClick={() => pick(o)}
+          >
+            {values.includes(o.label) ? "\u2713 " : ""}
+            {o.label}
+            {o.parent && <span className="text-muted text-[12px]"> · {o.parent}</span>}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -180,6 +263,7 @@ function FreeChips({ values, disabled, onChange }: { values: string[]; disabled:
           ))}
         </div>
       )}
+      {values.length >= MAX_VALUES && CAP_HINT}
       <input
         className={`${pillInput} block w-full py-2.5 px-[18px]`}
         type="text"
@@ -207,23 +291,29 @@ interface FieldProps {
   field: CardField;
   values: string[];
   disabled: boolean;
+  countries: Loaded; // the country catalog, loaded once by the form and shared with geo fields
   onChange: (v: string[]) => void;
 }
 
 function ChoiceField({ field, values, disabled, onChange }: FieldProps) {
-  const options = useOptions(field.facet);
+  const { options, error, retry } = useOptions(field.facet);
   const labels = field.facet ? options.map((o) => o.label) : field.choices;
   const single = field.input === "single";
   const big = !!field.facet && options.length > SEARCH_ABOVE;
   const top = options.filter((o) => o.level === 1);
+  const full = !single && atCap(values);
   return (
     <div className="flex flex-col gap-2">
+      {error && <LoadError retry={retry} />}
       <div className={WRAP}>
         {field.any_allowed && <AnyChip values={values} onChange={onChange} disabled={disabled} />}
         {big
           ? without(values).map((v) => <Chip key={v} text={v} on remove disabled={disabled} onClick={() => onChange(values.filter((x) => x !== v))} />)
-          : labels.map((l) => <Chip key={l} text={l} on={values.includes(l)} disabled={disabled} onClick={() => onChange(single ? [l] : toggle(values, l))} />)}
+          : labels.map((l) => (
+              <Chip key={l} text={l} on={values.includes(l)} disabled={disabled || (full && !values.includes(l))} onClick={() => onChange(single ? [l] : toggle(values, l))} />
+            ))}
       </div>
+      {full && CAP_HINT}
       {big && (
         <SearchPicker
           options={options}
@@ -231,6 +321,7 @@ function ChoiceField({ field, values, disabled, onChange }: FieldProps) {
           suggest={top}
           placeholder="Search to add more..."
           disabled={disabled}
+          full={full}
           onToggle={(l) => onChange(toggle(values, l))}
         />
       )}
@@ -239,23 +330,29 @@ function ChoiceField({ field, values, disabled, onChange }: FieldProps) {
 }
 
 // Countries come from the catalog; anything else in the list is a city typed by the user.
-function GeoField({ field, values, disabled, onChange }: FieldProps) {
-  const options = useOptions(field.facet);
+function GeoField({ values, disabled, countries: { options, error, retry }, field, onChange }: FieldProps) {
   const countryNames = useMemo(() => new Map(options.map((o) => [o.label.toLowerCase(), o.label])), [options]);
   const countries = values.filter((v) => countryNames.has(v.toLowerCase()));
   const cities = values.filter((v) => v !== ANY && !countryNames.has(v.toLowerCase()));
   const [city, setCity] = useState("");
+  const full = atCap(values);
   const addCity = () => {
     const t = city.trim().slice(0, MAX_CHARS);
     setCity("");
-    if (t && values.length < MAX_VALUES && !values.some((v) => v.toLowerCase() === t.toLowerCase())) onChange([...values, t]);
+    if (t && !full && !values.some((v) => v.toLowerCase() === t.toLowerCase())) onChange([...values, t]);
+  };
+  // cities only make sense under a country: removing the last country takes them with it
+  const removeCountry = (c: string) => {
+    const rest = values.filter((x) => x !== c);
+    onChange(rest.some((v) => countryNames.has(v.toLowerCase())) ? rest : []);
   };
   return (
     <div className="flex flex-col gap-2">
+      {error && <LoadError retry={retry} />}
       <div className={WRAP}>
         {field.any_allowed && <AnyChip values={values} onChange={onChange} disabled={disabled} />}
         {countries.map((c) => (
-          <Chip key={c} text={c} on remove disabled={disabled} onClick={() => onChange(values.filter((x) => x !== c))} />
+          <Chip key={c} text={c} on remove disabled={disabled} onClick={() => removeCountry(c)} />
         ))}
       </div>
       <SearchPicker
@@ -264,7 +361,8 @@ function GeoField({ field, values, disabled, onChange }: FieldProps) {
         suggest={[]}
         placeholder="Search for a country..."
         disabled={disabled}
-        onToggle={(l) => onChange(toggle(values, l))}
+        full={full}
+        onToggle={(l) => onChange(countries.includes(l) ? values.filter((x) => x !== l) : toggle(values, l))}
       />
       {countries.length > 0 && (
         <>
@@ -277,7 +375,7 @@ function GeoField({ field, values, disabled, onChange }: FieldProps) {
             className={`${pillInput} block w-full py-2.5 px-[18px]`}
             type="text"
             maxLength={MAX_CHARS}
-            disabled={disabled}
+            disabled={disabled || full}
             placeholder="Add a city (optional), then press Enter"
             aria-label="Add a city"
             value={city}
@@ -292,6 +390,7 @@ function GeoField({ field, values, disabled, onChange }: FieldProps) {
           />
         </>
       )}
+      {full && CAP_HINT}
     </div>
   );
 }
@@ -413,24 +512,31 @@ interface Props {
   saved: Answers | null; // the last submitted answers, from the server
   disabled: boolean;
   missing: string[]; // slots the server found missing
+  error: string; // any other problem with the last submit
   onSubmit: (answers: Answers) => void;
 }
 
-export default function StepTwo({ sessionId, track, cards, saved, disabled, missing, onSubmit }: Props) {
+export default function StepTwo({ sessionId, track, cards, saved, disabled, missing, error, onSubmit }: Props) {
   const [answers, setAnswers] = useState<Answers>(() => loadDraft(sessionId) ?? saved ?? {});
-  const set = (slot: string, values: string[]) =>
-    setAnswers((a) => {
-      const next = { ...a, [slot]: values };
-      saveDraft(sessionId, next);
-      return next;
-    });
+  const [flagged, setFlagged] = useState<string[]>(missing);
+  useEffect(() => setFlagged(missing), [missing]);
+  useEffect(() => saveDraft(sessionId, answers), [sessionId, answers]);
+  const set = (slot: string, values: string[]) => {
+    setAnswers((a) => ({ ...a, [slot]: values }));
+    setFlagged((f) => f.filter((x) => x !== slot)); // an edited field is no longer flagged
+  };
 
-  const required = missingSlots(cards, answers);
+  const hasGeo = cards.some((c) => c.fields.some((f) => f.input === "geo"));
+  const country = useOptions(hasGeo ? "country" : null);
+  const countries = useMemo(() => (hasGeo && country.options.length ? new Set(country.options.map((o) => o.label.toLowerCase())) : null), [hasGeo, country.options]);
+
+  const problems = problemSlots(cards, answers, countries);
+  const labels = new Map(cards.flatMap((c) => c.fields.map((f) => [f.slot, f.label] as const)));
   const titleFor = (c: Card) => (c.id === "geography" && track === "sales" && answers.business_model?.includes("B2C") ? "Where do your customers live?" : c.title);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (required.length || disabled) return;
+    if (problems.length || disabled) return;
     // only what is shown goes out; answers behind a skipped branch stay in the draft
     const out: Answers = {};
     for (const c of cards) for (const f of shownFields(c, answers)) if (answered(f, answers)) out[f.slot] = answers[f.slot];
@@ -448,23 +554,28 @@ export default function StepTwo({ sessionId, track, cards, saved, disabled, miss
             {fields.map((f) => (
               <div key={f.slot} className="flex flex-col gap-2">
                 {fields.length > 1 && (
-                  <span className={`text-[12px] font-medium ${missing.includes(f.slot) ? "text-warn" : "text-muted"}`}>
+                  <span className={`text-[12px] font-medium ${flagged.includes(f.slot) ? "text-warn" : "text-muted"}`}>
                     {f.label}
                     {f.optional ? " (optional)" : " *"}
                   </span>
                 )}
-                {fields.length === 1 && missing.includes(f.slot) && <span className="text-[12px] text-warn">Please answer this.</span>}
-                <FieldInput field={f} values={answers[f.slot] ?? []} disabled={disabled} onChange={(v) => set(f.slot, v)} />
+                <FieldInput field={f} values={answers[f.slot] ?? []} disabled={disabled} countries={country} onChange={(v) => set(f.slot, v)} />
               </div>
             ))}
           </section>
         );
       })}
+      {(flagged.length > 0 || error) && (
+        <p className="m-0 text-warn text-[14px]" role="alert">
+          {error || "Please check:"}
+          {flagged.length > 0 && ` ${flagged.map((s) => labels.get(s) ?? s).join(", ")}`}
+        </p>
+      )}
       <div className={actions}>
-        <button className={primaryBtn} type="submit" disabled={disabled || required.length > 0}>
+        <button className={primaryBtn} type="submit" disabled={disabled || problems.length > 0}>
           Continue
         </button>
-        {required.length > 0 && <span className="self-center text-[12px] text-muted">Answer every question above to continue.</span>}
+        {problems.length > 0 && <span className="self-center text-[12px] text-muted">Answer every question above to continue.</span>}
       </div>
     </form>
   );
