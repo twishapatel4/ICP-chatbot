@@ -112,7 +112,7 @@ PERFECT_LEAD = {
 def test_default_model_has_the_spec_weights_and_is_valid():
     model = default_scoring_model(FULL)
     assert [(c.key, c.weight) for c in model.criteria] == [(k, w) for k, _, w, _ in CRITERIA_DEFS]
-    assert [c.weight for c in model.criteria] == [25, 15, 5, 5, 10, 20, 10, 5, 5]
+    assert [c.weight for c in model.criteria] == [25, 15, 5, 5, 5, 5, 20, 10, 5, 5]
     assert sum(c.weight for c in model.criteria) == 100
     assert validate_model(model) == []
     assert {c.key for c in model.criteria if c.applicable} == {
@@ -131,7 +131,7 @@ def test_a_perfect_lead_scores_100_and_a_poor_one_scores_low():
     perfect = score_lead(model, PERFECT_LEAD)
     assert perfect.score == 100.0 and perfect.qualified and perfect.completeness == 1.0
     poor = score_lead(model, {**PERFECT_LEAD, "industries": ["Retail"], "lead_geographies": ["Asia"]})
-    assert poor.score == pytest.approx(100 * (25 / 2 + 15 + 10) / 70)  # segments half-fit industry
+    assert poor.score == pytest.approx(100 * (25 / 2 + 15 + 5) / 65)  # segments half-fit industry
 
 
 def test_unknown_lead_data_drops_the_criterion_and_renormalizes():
@@ -160,7 +160,7 @@ def test_required_criteria_decide_qualification_not_the_score():
     model = set_requirement(default_scoring_model(FULL), "geographic_fit", "required")
     wrong_place = score_lead(model, {**PERFECT_LEAD, "lead_geographies": ["Asia"]})
     assert not wrong_place.qualified and wrong_place.failed_required == ["geographic_fit"]
-    assert wrong_place.score == pytest.approx(100 * 50 / 70)  # still scored, but not qualified
+    assert wrong_place.score == pytest.approx(100 * 45 / 65)  # still scored, but not qualified
     unknown_place = {k: v for k, v in PERFECT_LEAD.items() if k != "lead_geographies"}
     assert score_lead(model, unknown_place).failed_required == ["geographic_fit"]
     assert score_lead(model, PERFECT_LEAD).qualified
@@ -288,7 +288,8 @@ HR_WEIGHTS = [
 ]
 SALES_WEIGHTS = [
     ("industry_fit", 25.0), ("company_size", 15.0), ("company_type_fit", 5.0),
-    ("company_age_fit", 5.0), ("buying_signals", 10.0), ("geographic_fit", 20.0),
+    ("company_age_fit", 5.0), ("services_fit", 5.0), ("buying_signals", 5.0),
+    ("geographic_fit", 20.0),
     ("buyer_fit", 10.0), ("seniority_fit", 5.0), ("department_fit", 5.0),
 ]
 
@@ -305,7 +306,7 @@ def test_hr_default_weights_sum_to_100_and_use_the_eleven_criteria():
     assert validate_model(model, track="hr") == []
 
 
-def test_sales_default_weights_sum_to_100_and_use_the_nine_criteria():
+def test_sales_default_weights_sum_to_100_and_use_the_ten_criteria():
     model = default_scoring_model({})
     assert [(c.key, c.weight) for c in model.criteria] == SALES_WEIGHTS
     assert sum(c.weight for c in model.criteria) == 100.0
@@ -315,6 +316,7 @@ def test_sales_default_weights_sum_to_100_and_use_the_nine_criteria():
     assert reads["department_fit"] == ["buyer_departments"]
     assert reads["company_type_fit"] == ["company_type"]
     assert reads["company_age_fit"] == ["years_in_operation"]
+    assert reads["services_fit"] == ["services_offered"]
     assert validate_model(model) == []
 
 
@@ -347,9 +349,10 @@ def test_nice_to_have_skills_give_half_credit_to_required_skills():
     assert score_lead(model, {"required_skills": ["Go"]}).breakdown["skills_fit"] == 0.0
 
 
-def test_nice_to_have_alone_builds_no_skills_rule_and_any_builds_none():
+def test_nice_to_have_alone_builds_no_skills_rule_and_any_builds_an_open_one():
     assert not _crit(_hr_model({"nice_to_have_skills": ["Docker"]}), "skills_fit").applicable
-    assert not _crit(_hr_model({"required_skills": ["Any"]}), "skills_fit").applicable
+    open_skills = _crit(_hr_model({"required_skills": ["Any"]}), "skills_fit")
+    assert open_skills.applicable and open_skills.rules["required_skills"].kind == "open"
     only_required = _crit(_hr_model({"required_skills": ["Python"]}), "skills_fit")
     assert only_required.rules["required_skills"].secondary == []
 
@@ -524,13 +527,18 @@ def test_graduation_year_far_outside_range_scores_zero():
     assert build_rule("company_size", ["50-500"]).tolerance == 0.2
 
 
-def test_any_answer_builds_no_rule():
-    assert build_rule("industries", ["Any"]) is None
-    assert build_rule("candidate_locations", ["Any"]) is None
-    sales = default_scoring_model({"industries": ["Any"]})
-    assert not _crit(sales, "industry_fit").applicable
-    hr = _hr_model({"candidate_locations": ["Any"]})
-    assert not _crit(hr, "location_fit").applicable
+def test_any_answer_builds_an_open_rule_that_keeps_its_priority():
+    assert build_rule("industries", ["Any"]) == MatchRule(kind="open")
+    assert build_rule("industries", ["Anyone"]) == MatchRule(kind="open")
+    assert build_rule("industries", []) is None  # unknown is not open
+    sales = default_scoring_model({"industries": ["Any"], "lead_geographies": ["India"]})
+    assert _crit(sales, "industry_fit").applicable
+    assert not _crit(sales, "company_size").applicable
+    # an open criterion gives every lead full credit, even one with no data for it
+    geo_miss = score_lead(sales, {"lead_geographies": ["Germany"]})
+    geo_hit = score_lead(sales, {"lead_geographies": ["India"]})
+    assert geo_hit.breakdown["industry_fit"] == 1.0 and geo_hit.score == 100.0
+    assert geo_miss.breakdown["industry_fit"] == 1.0 and geo_miss.score < geo_hit.score
 
 
 def test_hr_candidate_scores_skills_by_loose_match():

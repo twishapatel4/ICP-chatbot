@@ -1,7 +1,7 @@
-const STEPS = ["About you", "Core profile", "Chat"];
+const STEPS = ["About you", "Core profile", "Chat", "Scoring"];
 
 interface Props {
-  current: 1 | 2 | 3;
+  current: 1 | 2 | 3 | 4;
   done?: boolean; // the last step is finished too
 }
 

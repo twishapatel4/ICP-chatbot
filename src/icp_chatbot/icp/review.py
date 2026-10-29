@@ -24,6 +24,7 @@ from icp_chatbot.icp.scoring import (
     make_disqualifier,
     refresh_model,
     set_requirement,
+    set_threshold,
     set_weights,
     validate_model,
     weights_from_priorities,
@@ -48,6 +49,11 @@ class PriorityEdit(BaseModel):
     answers: list[PriorityAnswer]  # "which matters more" answers; the server turns them into weights
 
 
+class ThresholdEdit(BaseModel):
+    kind: Literal["threshold"] = "threshold"
+    threshold: float  # leads scoring at or above this go into the sequence
+
+
 class RequirementEdit(BaseModel):
     kind: Literal["requirement"] = "requirement"
     criterion: str
@@ -60,7 +66,7 @@ class DisqualifierEdit(BaseModel):
 
 
 Edit = Annotated[
-    FieldEdit | WeightEdit | PriorityEdit | RequirementEdit | DisqualifierEdit, Field(discriminator="kind")
+    FieldEdit | WeightEdit | PriorityEdit | ThresholdEdit | RequirementEdit | DisqualifierEdit, Field(discriminator="kind")
 ]
 
 
@@ -131,6 +137,13 @@ def apply_edit(
             if after[k] != before[k]
         ]
         return _rebuild(document, entries, model), specs
+
+    if isinstance(edit, ThresholdEdit):
+        before = model.threshold
+        model = set_threshold(model, edit.threshold)
+        return _rebuild(document, entries, model), [
+            FeedbackSpec("threshold_edit", None, before, model.threshold)
+        ]
 
     if isinstance(edit, RequirementEdit):
         before = next((c.requirement for c in model.criteria if c.key == edit.criterion), None)

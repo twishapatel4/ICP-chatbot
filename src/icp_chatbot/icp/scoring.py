@@ -39,7 +39,8 @@ SALES_CRITERIA: Criteria = (
     ("company_size", "Company size", 15.0, ("company_size",)),
     ("company_type_fit", "Company type fit", 5.0, ("company_type",)),
     ("company_age_fit", "Company age fit", 5.0, ("years_in_operation",)),
-    ("buying_signals", "Buying signals", 10.0, ("buying_triggers",)),
+    ("services_fit", "Services fit", 5.0, ("services_offered",)),
+    ("buying_signals", "Buying signals", 5.0, ("buying_triggers",)),
     ("geographic_fit", "Geographic fit", 20.0, ("lead_geographies", "company_hq_geographies")),
     ("buyer_fit", "Buyer fit", 10.0, ("buyer_roles",)),
     ("seniority_fit", "Seniority fit", 5.0, ("buyer_seniority",)),
@@ -73,11 +74,12 @@ SECONDARY_READS: dict[str, dict[str, str]] = {
 CRITERIA_BY_TRACK: dict[Track, Criteria] = {"sales": SALES_CRITERIA, "hr": HR_CRITERIA}
 CRITERIA_DEFS = SALES_CRITERIA  # kept for callers that predate tracks
 WEIGHT_TOTAL = 100.0
+DEFAULT_THRESHOLD = 70.0
 EPSILON = 1e-6
 
 
 class MatchRule(BaseModel):
-    kind: Literal["list", "range"]
+    kind: Literal["list", "range", "open"]  # open: no preference, every lead matches
     primary: list[str] = Field(default_factory=list)  # list rules: full match scores 1
     secondary: list[str] = Field(default_factory=list)  # list rules: match scores 0.5
     min: float | None = None  # range rules: inside scores 1
@@ -104,6 +106,7 @@ class Disqualifier(BaseModel):
 class ScoringModel(BaseModel):
     criteria: list[Criterion]
     disqualifiers: list[Disqualifier] = Field(default_factory=list)
+    threshold: float = Field(default=DEFAULT_THRESHOLD, ge=0, le=100)  # leads at or above this score go on
 
 
 # -- parsing and matching ----------------------------------------------------------------------
@@ -257,6 +260,8 @@ def range_match(value: float, rule: MatchRule) -> float:
 
 def _slot_score(rule: MatchRule, lead_values: list[str], slot: str = "") -> float | None:
     """Score for one slot, or None when the lead's data cannot be read."""
+    if rule.kind == "open":
+        return 1.0
     if rule.kind == "list":
         return list_match(lead_values, rule, slot)
     # text values kept next to the range ("Self-employed") match the lead's text as a list would
@@ -273,13 +278,26 @@ def _slot_score(rule: MatchRule, lead_values: list[str], slot: str = "") -> floa
 # -- building and editing the model --------------------------------------------------------------
 
 
+_OPEN_ANSWERS = frozenset(
+    {"any", "anyone", "anybody", "anything", "all", "everyone", "everybody", "no preference",
+     "not particular", "open to anyone", "open to all", "any one"}
+)  # fmt: skip
+
+
+def _is_open(value: str) -> bool:
+    """"Any" or a free-text way of saying the same ("Anyone"): it builds no rule."""
+    return _norm(value) in _OPEN_ANSWERS
+
+
 def build_rule(
     slot_key: str, values: list[str], secondary: list[str] | None = None
 ) -> MatchRule | None:
     """A rule for one slot; `secondary` (list rules only) earns half credit."""
     values = [v for v in values if v.strip()]
-    if not values or any(v.strip().lower() == ANY.lower() for v in values):
+    if not values:
         return None
+    if any(_is_open(v) for v in values):
+        return MatchRule(kind="open")  # open to all, but the criterion still has a priority
     if slot_key in RANGE_SLOTS:
         ranges = [r for r in (parse_range(v) for v in values) if r]
         if ranges:
@@ -349,6 +367,21 @@ def default_scoring_model(
     return ScoringModel(criteria=criteria, disqualifiers=list(disqualifiers or []))
 
 
+def rescaled(criteria: list[Criterion]) -> list[Criterion]:
+    """Weights of the criteria that apply, scaled to sum to 100 (the rest get 0), so the model is
+    valid before the user answers any priority question."""
+    live = [c for c in criteria if c.applicable]
+    total = sum(c.weight for c in live)
+    if not live or total <= 0:
+        return criteria
+    exact = {c.key: c.weight * WEIGHT_TOTAL / total for c in live}
+    whole = {k: math.floor(v + EPSILON) for k, v in exact.items()}
+    leftover = round(WEIGHT_TOTAL - sum(whole.values()))
+    for k in sorted(exact, key=lambda k: -(exact[k] - whole[k]))[:leftover]:
+        whole[k] += 1
+    return [c.model_copy(update={"weight": float(whole.get(c.key, 0))}) for c in criteria]
+
+
 def refresh_model(model: ScoringModel, slot_values: dict[str, list[str]]) -> ScoringModel:
     """Rebuild rules and applicability after the ICP's values changed; keep weights, requirement
     flags and disqualifiers as the user set them."""
@@ -377,25 +410,9 @@ def set_weights(model: ScoringModel, weights: dict[str, float]) -> ScoringModel:
 
 # -- priority questions -----------------------------------------------------------------------------
 
-# "Which matters more, A or B?" pairs per track. The answers turn into weights (weights_from_priorities).
-PRIORITY_DUELS: dict[Track, tuple[tuple[str, str], ...]] = {
-    "sales": (
-        ("industry_fit", "geographic_fit"),
-        ("company_type_fit", "buying_signals"),
-        ("buyer_fit", "company_size"),
-        ("buyer_fit", "industry_fit"),
-        ("company_type_fit", "industry_fit"),
-    ),
-    "hr": (
-        ("role_fit", "skills_fit"),
-        ("experience_fit", "education_fit"),
-        ("role_fit", "experience_fit"),
-        ("skills_fit", "location_fit"),
-        ("background_fit", "employer_fit"),
-    ),
-}
 PRIORITY_STEP = 0.5  # each step of preference multiplies a weight by e^0.5, about 1.65x
 MAX_PREFERENCE = 2  # answers run from -2 (B much more) to +2 (A much more)
+MIN_QUESTIONS_FOR_BRIDGE = 5  # below this many pairs, one extra pair links two neighbouring pairs
 
 
 class PriorityQuestion(BaseModel):
@@ -416,7 +433,9 @@ class PriorityAnswer(BaseModel):
 def _looks_for(criterion: Criterion) -> str:
     parts: list[str] = []
     for rule in criterion.rules.values():
-        if rule.kind == "list":
+        if rule.kind == "open":
+            parts.append("Any")
+        elif rule.kind == "list":
             parts.extend(rule.primary)
         else:
             lo = "" if rule.min is None else f"{rule.min:g}"
@@ -425,42 +444,65 @@ def _looks_for(criterion: Criterion) -> str:
     return ", ".join(parts)
 
 
+def _prior(key: str, track: Track) -> float:
+    return next((w for k, _, w, _ in CRITERIA_BY_TRACK[track] if k == key), 1.0)
+
+
+def _ranked(model: ScoringModel, track: Track) -> list[Criterion]:
+    """The criteria this ICP has values for, heaviest default first (ties keep the ICP's order)."""
+    return sorted((c for c in model.criteria if c.applicable), key=lambda c: -_prior(c.key, track))
+
+
 def priority_questions(model: ScoringModel, track: Track = "sales") -> list[PriorityQuestion]:
-    """The pairs worth asking: both criteria apply, so the ICP has values for them."""
-    by_key = {c.key: c for c in model.criteria if c.applicable}
+    """Pairs built from the criteria the ICP actually has: every one of them appears in at least
+    one question, neighbours in the default ranking are compared with each other, and a bridge pair
+    links two of the pairs when there are only a few. A thin ICP gets few questions, a rich one more."""
+    ranked = _ranked(model, track)
+    pairs = [(ranked[i], ranked[i + 1]) for i in range(0, len(ranked) - 1, 2)]
+    if len(ranked) % 2 and len(ranked) > 1:
+        pairs.append((ranked[-2], ranked[-1]))  # the odd one out is compared with its neighbour
+    if len(ranked) >= 4 and len(pairs) < MIN_QUESTIONS_FOR_BRIDGE:
+        pairs.append((ranked[1], ranked[2]))
     return [
         PriorityQuestion(
-            a=a, b=b, a_label=by_key[a].label, b_label=by_key[b].label,
-            a_looks=_looks_for(by_key[a]), b_looks=_looks_for(by_key[b]),
+            a=a.key, b=b.key, a_label=a.label, b_label=b.label,
+            a_looks=_looks_for(a), b_looks=_looks_for(b),
         )
-        for a, b in PRIORITY_DUELS[track]
-        if a in by_key and b in by_key
+        for a, b in pairs
     ]  # fmt: skip
 
 
 def weights_from_priorities(
     model: ScoringModel, answers: list[PriorityAnswer], track: Track = "sales"
 ) -> dict[str, float]:
-    """Weights for every criterion, summing to 100. Criteria in no question keep their weight; the
-    rest share what is left in proportion to e^(step * preference), as whole numbers."""
+    """Weights summing to 100 over the criteria that apply (the rest get 0, they cannot be scored).
+    Each starts from its default weight and is scaled by e^(step * preference) from the answers,
+    then rounded to whole numbers."""
     asked_pairs = {(q.a, q.b) for q in priority_questions(model, track)}
-    score: dict[str, float] = {k: 0.0 for pair in asked_pairs for k in pair}
+    ranked = _ranked(model, track)
+    score = {c.key: 0.0 for c in ranked}
     for ans in answers:
         if (ans.a, ans.b) not in asked_pairs:
             raise ValueError(f"not a priority question: {ans.a} vs {ans.b}")
         score[ans.a] += ans.value
         score[ans.b] -= ans.value
-    weights = {c.key: c.weight for c in model.criteria}
-    keys = sorted(score, key=lambda k: [c.key for c in model.criteria].index(k))
-    pool = WEIGHT_TOTAL - sum(w for k, w in weights.items() if k not in score)
-    raw = {k: math.exp(PRIORITY_STEP * score[k]) for k in keys}
+    weights = {c.key: 0.0 for c in model.criteria}
+    if not ranked:
+        return {c.key: c.weight for c in model.criteria}
+    raw = {c.key: _prior(c.key, track) * math.exp(PRIORITY_STEP * score[c.key]) for c in ranked}
     total = sum(raw.values())
-    exact = {k: raw[k] * pool / total for k in keys}
-    whole = {k: math.floor(exact[k] + EPSILON) for k in keys}
-    leftover = round(pool - sum(whole.values()))
-    for k in sorted(keys, key=lambda k: -(exact[k] - whole[k]))[:leftover]:
-        whole[k] += 1  # largest remainders get the leftover points; ties keep the ICP's order
+    exact = {k: v * WEIGHT_TOTAL / total for k, v in raw.items()}
+    whole = {k: math.floor(v + EPSILON) for k, v in exact.items()}
+    leftover = round(WEIGHT_TOTAL - sum(whole.values()))
+    for k in sorted(exact, key=lambda k: -(exact[k] - whole[k]))[:leftover]:
+        whole[k] += 1  # largest remainders get the leftover points
     return {**weights, **{k: float(v) for k, v in whole.items()}}
+
+
+def set_threshold(model: ScoringModel, threshold: float) -> ScoringModel:
+    if not 0 <= threshold <= 100:
+        raise ValueError(f"threshold must be between 0 and 100, got {threshold:g}")
+    return model.model_copy(update={"threshold": threshold})
 
 
 def set_requirement(model: ScoringModel, key: str, requirement: str) -> ScoringModel:
@@ -538,6 +580,7 @@ class ScoreResult:
     disqualified_by: str | None = None
     failed_required: list[str] = field(default_factory=list)
     completeness: float = 0.0  # share of applicable criteria that could be scored
+    meets_threshold: bool = False  # qualified and scoring at or above the model's threshold
     breakdown: dict[str, float] = field(default_factory=dict)  # criterion key -> s between 0 and 1
 
 
@@ -568,7 +611,8 @@ def score_lead(model: ScoringModel, lead: dict[str, list[str]]) -> ScoreResult:
         parts = [
             s
             for slot, rule in c.rules.items()
-            if lead.get(slot) and (s := _slot_score(rule, lead[slot], slot)) is not None
+            if (rule.kind == "open" or lead.get(slot))
+            and (s := _slot_score(rule, lead.get(slot, []), slot)) is not None
         ]
         if parts:
             scored.append((c, sum(parts) / len(parts)))
@@ -585,6 +629,7 @@ def score_lead(model: ScoringModel, lead: dict[str, list[str]]) -> ScoreResult:
     return ScoreResult(
         score=round(score, 4),
         qualified=not failed,
+        meets_threshold=not failed and score >= model.threshold,
         failed_required=failed,
         completeness=len(known) / len(applicable) if applicable else 0.0,
         breakdown={c.key: s for c, s in scored},

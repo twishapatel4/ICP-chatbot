@@ -113,8 +113,16 @@ export interface FieldEntry {
   requirement: "required" | "preferred" | "none";
 }
 
+export interface MatchRule {
+  kind: "list" | "range" | "open";
+  primary: string[];
+  min: number | null;
+  max: number | null;
+}
+
 export interface Criterion {
   key: string;
+  rules: Record<string, MatchRule>;
   label: string;
   weight: number;
   applicable: boolean;
@@ -147,6 +155,7 @@ export type IcpEdit =
   | { kind: "field"; slot: string; values: string[] }
   | { kind: "weights"; weights: Record<string, number> }
   | { kind: "priorities"; answers: PriorityAnswer[] }
+  | { kind: "threshold"; threshold: number }
   | { kind: "requirement"; criterion: string; requirement: "required" | "preferred" }
   | { kind: "disqualifiers"; disqualifiers: Disqualifier[] };
 
@@ -163,7 +172,7 @@ export interface IcpDocument {
   track?: Track;
   linkedin_filters?: FilterEntry[];
   sections: Record<string, Record<string, FieldEntry>>;
-  scoring_model: { criteria: Criterion[]; disqualifiers: Disqualifier[] };
+  scoring_model: { criteria: Criterion[]; disqualifiers: Disqualifier[]; threshold: number };
   summary: string;
   completeness: { tier_a: number; tier_b: number };
   open_questions: string[];

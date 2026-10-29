@@ -121,6 +121,8 @@ SLOT_LINKEDIN: dict[str, tuple[str | None, tuple[str, ...], bool]] = {
     ),
     "buying_triggers": ("Recent updates / Spotlight", (), False),
     "years_in_operation": (None, ("company.foundedYear",), False),
+    # not scraped yet: the lead has no services until it is, and unknown data is never penalised
+    "services_offered": (None, ("profile.services[]",), False),
     "revenue_range": ("Annual revenue", (), False),
     "technologies_used": ("Technologies used", (), False),
     "how_we_work": _NONE,
@@ -309,6 +311,16 @@ SLOT_LIST: tuple[SlotDef, ...] = _linked((
             "Privately Held", "Public Company", "Partnership", "Sole Proprietorship",
             "Self-Employed", "Educational Institution", "Nonprofit",
         ),
+    ),
+    _s(
+        "services_offered",
+        "target_firmographics",
+        "Services the buyers offer",
+        "For buyers who are service providers or consultants: the services they list on their "
+        "own profile (for example IT consulting, executive coaching)",
+        "B",
+        0.4,
+        skip_if=_B2C,
     ),
     _s(
         "years_in_operation",

@@ -25,7 +25,12 @@ from icp_chatbot.icp.document import (
     render_summary,
     sync_field_requirements,
 )
-from icp_chatbot.icp.scoring import DISQUALIFIER_FIELDS, default_scoring_model, make_disqualifier
+from icp_chatbot.icp.scoring import (
+    DISQUALIFIER_FIELDS,
+    default_scoring_model,
+    make_disqualifier,
+    rescaled,
+)
 from icp_chatbot.llm.types import LLM, LLMError, Usage
 from icp_chatbot.versions import ConfigVersionData
 
@@ -201,10 +206,12 @@ async def build_icp(
     hidden = {d.key for d in shell.slot_defs() if not state.is_applicable(d)}
     entries = {k: e for k, e in entries.items() if k not in hidden}
     slot_values = {key: e.values for key, e in entries.items() if e.values}
+    model = default_scoring_model(slot_values, disqualifiers, track=state.track)
+    model = model.model_copy(update={"criteria": rescaled(model.criteria)})  # sums to 100
     document = shell.model_copy(
         update={
             "sections": group_by_section(entries, shell.slot_defs(), state.track),
-            "scoring_model": default_scoring_model(slot_values, disqualifiers, track=state.track),
+            "scoring_model": model,
             "summary": render_summary(entries, shell.slot_defs(), state.track),
             "completeness": compute_completeness(entries, needed, state.track),
             "linkedin_filters": build_linkedin_filters(state),

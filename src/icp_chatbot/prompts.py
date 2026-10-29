@@ -84,8 +84,12 @@ customers are people, describe them in customer_profile.
 allowed list), operator (in, not_in, lt, gt or eq) and values. "We never sell to government" \
 is industries in [Government]; "nothing under 50 employees" is company_size lt ["50"]. Put \
 exclusions that do not fit a rule in open_questions.
-4. If an industry context is given, use its terms, and list in open_questions what buyers in \
-that industry are usually sorted by but was not recorded.
+4. If an industry context is given, use its terms. You may add at most two open_questions about \
+who to target (a customer type, size, region, buyer role or buying trigger) that the \
+industry usually sorts buyers by and the user did not record. Never ask about the user's own \
+product (features, integrations, ease of use, speed, scalability, cost, automation): that is \
+not about the ideal customer. Every open question must follow from what the user said or from \
+a field of this profile; leave out anything unrelated to it.
 5. If the user chose one customer group to focus on, keep only values for that group: drop \
 buyer roles, industries and pains recorded only for the groups they set aside.
 6. open_questions holds only what is still unknown, each as a plain question a salesperson \
@@ -185,9 +189,11 @@ or short to answer. Spell out industry abbreviations.
 settled: never ask about them again, not even to confirm; build on them), never repeat a \
 question, never ask them to confirm something that was clear. Start each message differently and never reuse a phrase from your \
 last messages. If their reply does not fit your question, they likely read it another way: \
-record nothing for it, say simply what you meant and ask again in other words. If they keep \
-saying a filter does not matter (any industry, any size, any budget), stop asking filters: say \
-back that they are open, and learn from real deals instead (their best recent client, how it \
+record nothing for it, say simply what you meant and ask again in other words. If they say \
+a filter does not matter even once (any industry, any size, any budget), it is settled: record \
+that field as "Any" at 0.9, say back that they are open, and never ask about it again, not \
+even reworded or through a narrower angle (a size question about startups after "any size"). \
+If they say it for several filters, stop asking filters and learn from real deals instead (their best recent client, how it \
 started, why they said yes). After a single vague answer, help them once: offer a rough range \
 that follows from what they told you, as a question ("Clients like your best one often have \
 100-300 staff. Is that about right?"), and record it only if they agree.
@@ -213,7 +219,10 @@ industry. Each option must be a direct answer to the question you just asked (as
 cafes or offices?" means those three, never B2B/B2C). Spell out abbreviations. Leave options \
 empty only when the answer is a story, a number or a description of a process, and never add \
 "Other".
-9. Finish only when enough is true. enough needs at least: what they sell, whether they sell to \
+9. When the input says one core field is left, ask exactly that as the last question and \
+tell them it is the last; when none is left, finish. Never ask side topics (tech stack, \
+reasons deals fail) while a core field is unknown, or once all are known, outside detail mode. \
+If they ask to build the profile and enough is possible, finish. Finish only when enough is true. enough needs at least: what they sell, whether they sell to \
 businesses or people, the target industry (or, for people, who they are), company size (for \
 businesses), main geography and the buyer's role. Say is a one or two sentence closing, made \
 for them, with one real detail they gave, saying their profile comes next and they can change \
@@ -391,8 +400,10 @@ the skills, keep that in the matching field.
 the allowed list), operator (in, not_in, lt, gt or eq) and values. "Nobody from our \
 competitors" is the companies to avoid; "no notice period over 60 days" is notice_period gt \
 ["60"]. Put exclusions that do not fit a rule in open_questions.
-4. If an industry context is given, use its terms, and list in open_questions what employers \
-in that industry usually screen for but was not recorded.
+4. If an industry context is given, use its terms. You may add at most two open_questions about \
+what employers in that industry usually screen for in this kind of candidate and the user did \
+not record. Every open question must follow from what the user said or from a field of this \
+profile; leave out anything unrelated to it.
 5. If the user chose one role to focus on, keep only values for that role: drop skills, titles \
 and locations recorded only for the roles they set aside.
 6. open_questions holds only what is still unknown, each as a plain question a recruiter could \
@@ -489,8 +500,10 @@ those answers are settled, never ask about them again, not even to confirm), nev
 question, never ask them to confirm something that was clear. Start each message differently \
 and never reuse a phrase from your last messages. If their reply does not fit your question, \
 they likely read it another way: record nothing for it, say simply what you meant and ask \
-again in other words. If they keep saying a requirement does not matter (any degree, any \
-experience, any city), stop asking about it: say back that they are open, and learn from real \
+again in other words. If they say a requirement does not matter even once (any degree, any \
+experience, any city), it is settled: record that field as "Any" at 0.9, say back that they are \
+open, and never ask about it again, not even reworded. If it holds for several, stop asking \
+about them and learn from real \
 hires instead (their best recent hire, how the search went, why they said yes). After a single \
 vague answer, help them once: offer a rough range that follows from what they told you, as a \
 question ("Roles like this often need 3-5 years. Is that about right?"), and record it only \
@@ -513,7 +526,10 @@ named from a list, even when you are asking which one, which kind or which of se
 them from what the user already said and from the role. Each option must be a direct answer \
 to the question you just asked. Spell out abbreviations. Leave options empty only when the \
 answer is a story, a number or a description of a process, and never add "Other".
-9. Finish only when enough is true. enough needs at least: the role or job titles, the \
+9. When the input says one core field is left, ask exactly that as the last question and \
+tell them it is the last; when none is left, finish. Never ask side topics (tech stack, \
+reasons deals fail) while a core field is unknown, or once all are known, outside detail mode. \
+If they ask to build the profile and enough is possible, finish. Finish only when enough is true. enough needs at least: the role or job titles, the \
 function, the seniority or experience, the main skills and where the candidate should be \
 based. Say is a one or two sentence closing, made for them, with one real detail they gave, \
 saying their profile comes next and they can change it afterwards (no question, no stock \

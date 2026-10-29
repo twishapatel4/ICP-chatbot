@@ -12,19 +12,22 @@ import ScrollProgress from "./components/ScrollProgress";
 import TextShimmer from "./components/TextShimmer";
 import TextEffect from "./components/TextEffect";
 import StepIndicator from "./components/StepIndicator";
+import ScoringSetup, { type ScoringProgress } from "./components/ScoringSetup";
+import ScoringSummary from "./components/ScoringSummary";
 import StepOne from "./components/StepOne";
 import StepTwo, { clearDraft } from "./components/StepTwo";
 import ThemeToggle from "./components/ThemeToggle";
 import type { Card, FormField, IcpResponse, Progress, StartRequest, Track, Turn } from "./types";
 import { buildNote, profileName } from "./wording";
-import { app, chip, chipOn, chips, column, gutter, header, iconBtn } from "./ui";
+import { app, primaryBtn, chip, chipOn, chips, column, gutter, header, iconBtn } from "./ui";
 
-type Stage = "step1" | "step2" | "interview" | "fallback" | "building" | "done";
-const STAGES: Stage[] = ["step1", "step2", "interview", "fallback", "building", "done"];
+type Stage = "step1" | "step2" | "interview" | "fallback" | "building" | "scoring" | "result" | "done";
+const STAGES: Stage[] = ["step1", "step2", "interview", "fallback", "building", "scoring", "result", "done"];
 interface Message {
   id: number;
   role: "bot" | "me" | "note" | "error";
   text: string;
+  live?: boolean; // just written by the AI: typed out once. Fixed texts and restored history show at once
 }
 
 const MSG = "max-w-[min(82%,1100px)] rounded-[22px] whitespace-pre-wrap [overflow-wrap:anywhere] ";
@@ -64,6 +67,8 @@ const writePending = (id: string | null) => {
   }
 };
 
+const NO_SCORING: ScoringProgress = { done: false, picked: {} };
+
 interface Snapshot {
   stage: Stage;
   messages: Message[];
@@ -79,6 +84,7 @@ interface Snapshot {
   approved: boolean;
   revising: boolean;
   progress?: Progress;
+  scoring?: ScoringProgress;
 }
 
 // The page can be reloaded under us (dev-server HMR reconnect, discarded background tab),
@@ -129,6 +135,7 @@ export default function App() {
   const [approved, setApproved] = useState(saved?.approved ?? false);
   const [revising, setRevising] = useState(saved?.revising ?? false);
   const [progress, setProgress] = useState<Progress>(saved?.progress ?? NO_PROGRESS);
+  const [scoring, setScoring] = useState<ScoringProgress>(saved?.scoring ?? NO_SCORING);
   const [startError, setStartError] = useState("");
   const [step2Error, setStep2Error] = useState(""); // a failed step 2 submit that is not about a missing answer
   const [cardsError, setCardsError] = useState(false); // the step 2 cards could not be fetched on resume
@@ -136,8 +143,8 @@ export default function App() {
   const nextId = useRef(Math.max(0, ...(saved?.messages ?? []).map((m) => m.id)) + 1);
   const firstNewId = useRef(nextId.current); // messages restored after a reload show at once, not typed out
 
-  const push = useCallback((role: Message["role"], text: string) => {
-    setMessages((m) => [...m, { id: nextId.current++, role, text }]);
+  const push = useCallback((role: Message["role"], text: string, live = false) => {
+    setMessages((m) => [...m, { id: nextId.current++, role, text, ...(live && { live }) }]);
   }, []);
 
   // The profile panel beside the chat. On a phone-sized screen it covers the chat, so it starts
@@ -149,7 +156,7 @@ export default function App() {
   const [typed, setTyped] = useState<Set<number>>(new Set());
   const markTyped = useCallback((id: number) => setTyped((t) => (t.has(id) ? t : new Set(t).add(id))), []);
   const lastBot = [...messages].reverse().find((m) => m.role === "bot");
-  const replyTyped = !lastBot || lastBot.id < firstNewId.current || typed.has(lastBot.id);
+  const replyTyped = !lastBot || !lastBot.live || lastBot.id < firstNewId.current || typed.has(lastBot.id);
 
   useEffect(() => {
     // the forms of steps 1 and 2 start at the top, under the step indicator
@@ -162,13 +169,13 @@ export default function App() {
   }, [messages, stage, icp, options, replyTyped]);
 
   useEffect(() => {
-    const snap: Snapshot = { stage, messages, options, multi, picked, sessionId, track, cards, form, missing, icp, approved, revising, progress };
+    const snap: Snapshot = { stage, messages, options, multi, picked, sessionId, track, cards, form, missing, icp, approved, revising, progress, scoring };
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
     } catch {
       // storage unavailable: the chat just will not survive a reload
     }
-  }, [stage, messages, options, multi, picked, sessionId, track, cards, form, missing, icp, approved, revising, progress]);
+  }, [stage, messages, options, multi, picked, sessionId, track, cards, form, missing, icp, approved, revising, progress, scoring]);
 
   // A reload mid-build loses the in-flight request; ask for the ICP again.
   const resumed = useRef(false);
@@ -248,6 +255,7 @@ export default function App() {
     setShowProfile(wide());
     setApproved(false);
     setRevising(false);
+    setScoring(NO_SCORING);
     setProgress(NO_PROGRESS);
     setBusy(false);
     setStage("step1");
@@ -304,7 +312,7 @@ export default function App() {
     if (turn.status === "fallback" || turn.fallback_form) return showFallback(turn.stop_reason);
     if (turn.notice) push("error", turn.notice);
     if (turn.question) {
-      push("bot", turn.question.text);
+      push("bot", turn.question.text, true);
       setOptions(turn.status === "active" ? turn.question.options : []);
       setMulti(turn.question.multi);
       setPicked([]);
@@ -413,6 +421,7 @@ export default function App() {
       setIcp(await api.approveIcp(sessionId));
       await api.sendVerdict(sessionId, true);
       setApproved(true);
+      setStage("scoring");
     });
 
   // The current profile stays on the page (collapsed) while they explain what to change.
@@ -422,6 +431,63 @@ export default function App() {
     setApproved(false);
     setRevising(true);
     setStage("interview");
+  }
+
+  if (stage === "scoring" && icp && sessionId) {
+    return (
+      <main className={app}>
+        <header className={header}>
+          <span className="inline-flex items-center justify-center size-[42px] rounded-full bg-panel shadow-[0_0_0_1px_var(--line),0_2px_8px_rgba(20,24,31,.08)]">
+            <Icon name="sparkle" size={20} />
+          </span>
+          <ThemeToggle />
+        </header>
+        <div className={`${column} flex-1 flex flex-col gap-5 pt-2 pb-10 ${gutter}`}>
+          <StepIndicator current={4} />
+          <div className="text-center">
+            <h1 className="mt-2 mx-0 mb-0 text-[clamp(26px,3.4vw,34px)] leading-[1.15] font-medium tracking-[-.025em]">Your scoring table</h1>
+          </div>
+          <div className="w-full max-w-[760px] mx-auto">
+            <ScoringSetup progress={scoring} onProgress={setScoring} sessionId={sessionId} icp={icp} busy={busy} onIcp={setIcp} onBack={() => setStage("result")} onDone={() => setStage("result")} />
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // The finished result: the profile and the scoring model, with nothing left to answer.
+  if (stage === "result" && icp && sessionId) {
+    return (
+      <main className={app}>
+        <header className={header}>
+          <span className="inline-flex items-center justify-center size-[42px] rounded-full bg-panel shadow-[0_0_0_1px_var(--line),0_2px_8px_rgba(20,24,31,.08)]">
+            <Icon name="sparkle" size={20} />
+          </span>
+          <ThemeToggle />
+        </header>
+        <div className={`${column} flex-1 flex flex-col gap-5 pt-2 pb-10 ${gutter}`}>
+          <StepIndicator current={4} done />
+          <h1 className="mt-2 mx-0 mb-0 text-center text-[clamp(26px,3.4vw,34px)] leading-[1.15] font-medium tracking-[-.025em]">
+            Your {profileName(track)} is ready
+          </h1>
+          <div className="w-full max-w-[760px] mx-auto flex flex-col gap-4">
+            <IcpView icp={icp} onScoring={() => setStage("scoring")} approved={approved} busy={busy} readOnly onApprove={approve} onImprove={improve} />
+            <ScoringSummary icp={icp} />
+            <div className="flex flex-wrap justify-center gap-2.5">
+              <button disabled={busy} onClick={() => setStage("scoring")}>
+                Edit scoring
+              </button>
+              <button disabled={busy} onClick={improve}>
+                Refine the profile
+              </button>
+              <button className={primaryBtn} disabled={busy} onClick={newChat}>
+                <Icon name="plus" size={18} /> New chat
+              </button>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
   }
 
   const stepNo = stage === "step1" ? 1 : stage === "step2" ? 2 : 3;
@@ -515,7 +581,7 @@ export default function App() {
         {stage !== "done" && <p className="mt-0 mx-0 mb-2 text-[12px] text-muted">The current profile, being updated from your answer.</p>}
         <IcpView
           icp={icp}
-          onIcp={setIcp}
+          onScoring={() => setStage("scoring")}
           approved={approved}
           busy={busy || stage !== "done"}
           readOnly={stage !== "done"}
@@ -560,7 +626,7 @@ export default function App() {
             <InView key={m.id} className={MSG_CLASS[m.role]}>
               {m.role === "note" && stage === "building" && i === messages.length - 1 ? (
                 <TextShimmer>{m.text}</TextShimmer>
-              ) : m.role === "bot" && m.id >= firstNewId.current ? (
+              ) : m.role === "bot" && m.live && m.id >= firstNewId.current && !typed.has(m.id) ? (
                 <Typewriter text={m.text} onDone={() => markTyped(m.id)} />
               ) : (
                 m.text

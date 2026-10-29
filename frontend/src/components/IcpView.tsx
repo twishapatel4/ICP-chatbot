@@ -1,5 +1,4 @@
 import type { IcpResponse } from "../types";
-import ScoringSetup from "./ScoringSetup";
 import { actions, card, primaryBtn } from "../ui";
 import { profileName } from "../wording";
 
@@ -8,7 +7,7 @@ const label = (s: string) => s.replace(/_/g, " ");
 
 interface Props {
   icp: IcpResponse;
-  onIcp: (icp: IcpResponse) => void;
+  onScoring: () => void;
   approved: boolean;
   busy: boolean;
   readOnly?: boolean; // shown for reference while they ask for changes
@@ -16,7 +15,7 @@ interface Props {
   onImprove: () => void;
 }
 
-export default function IcpView({ icp, onIcp, approved, busy, readOnly, onApprove, onImprove }: Props) {
+export default function IcpView({ icp, onScoring, approved, busy, readOnly, onApprove, onImprove }: Props) {
   const doc = icp.document;
   const track = doc.track ?? "sales";
   const filters = doc.linkedin_filters ?? [];
@@ -81,8 +80,6 @@ export default function IcpView({ icp, onIcp, approved, busy, readOnly, onApprov
         </section>
       )}
 
-      {!readOnly && <ScoringSetup sessionId={icp.session_id} icp={icp} busy={busy} onIcp={onIcp} />}
-
       {readOnly ? null : approved ? (
         <p className="text-[#4ade80]">Thanks. You confirmed this profile is correct. You can still continue the conversation to refine it.</p>
       ) : (
@@ -100,6 +97,9 @@ export default function IcpView({ icp, onIcp, approved, busy, readOnly, onApprov
       )}
       {!readOnly && approved && (
         <div className={actions}>
+          <button disabled={busy} onClick={onScoring}>
+            Scoring weights
+          </button>
           <button disabled={busy} onClick={onImprove}>
             Continue the conversation
           </button>
