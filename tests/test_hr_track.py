@@ -31,7 +31,7 @@ def _applicable(state: SessionState, key: str) -> bool:
 def test_hr_registry_keys_are_unique_and_have_sections():
     slots = registry("hr")
     keys = [s.key for s in slots]
-    assert len(keys) == len(set(keys)) == 26
+    assert len(keys) == len(set(keys)) == 27
     assert {s.section for s in slots} <= set(HR_SECTION_ORDER)
     assert all(s.tier in (Tier.A, Tier.B) for s in slots)
     assert section_order("hr") == HR_SECTION_ORDER
