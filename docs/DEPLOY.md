@@ -28,6 +28,7 @@ Hosting is free (Hobby); only Vertex AI calls cost money.
    - `GOOGLE_CREDENTIALS_JSON` = the whole contents of the JSON key
    - `DATABASE_URL` = Neon string from step 1
    - `AUTO_CREATE_TABLES` = `false`
+   - `BACKGROUND_ENRICHMENT` = leave unset: it defaults to true, but is switched to false automatically when `VERCEL` is set. With false, the step 1 website read is not started in the background and step 2 reads the site inline, because a serverless function freezes after it responds and a background task would never finish.
 4. Deploy. Check `https://<project>.vercel.app/health` -> `{"status":"ok"}`.
 5. Name the project `icp-chatbot-api` for the URL below, or edit `frontend/vercel.json`.
 

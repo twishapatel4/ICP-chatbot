@@ -17,14 +17,14 @@
 - Company size options are exactly LinkedIn's nine: A Self-employed, B 1-10 (DB `2-10`), C 11-50, D 51-200, E 201-500, F 501-1000 (DB `501-1000`), G 1001-5000, H 5001-10,000 (DB `5001-10000`), I 10,001+ (DB `10001+`).
 - Seniority options (10): Unpaid, Training, Entry-level, Senior, Manager, Director, Vice President (VP), Chief X Officer (CxO), Partner, Owner. Function options: the 35 job function codes in the spec.
 - Industry options: the 434 active nodes in `docs/superpowers/specs/data/linkedin-industries-v2.json`; stored value is the label.
-- Geography has two levels only: Country (ISO 3166-1, required) then City (free-text chips under a country).
+- Geography is Country (ISO 3166-1, required) then City (free-text chips under a country), plus an optional provisional Region above country (project-defined).
 - Step 2 values are `SlotSource.STATED`, confidence 0.9, `source_turn` 0, evidence "step 2 form". **Any** is the exclusive value `"Any"`, only on multi-select and range cards.
 - Session state: `track` (`"sales"` | `"hr"`, default `"sales"`), `step` (`"profile"` | `"chat"`, default `"chat"` for old sessions). Chat endpoints return 409 while `step == "profile"`.
 - HR users never see "ICP", "lead" or "customer" in UI, chat prompts or the document. Route names and identifiers keep their current names.
 - HR and Sales scoring use the same engine with default criteria and weights that each sum to 100; the authoritative lists are the spec's "Scoring (both roles)" section and Task 12c (HR: 11 criteria; Sales: 9; derived criteria at most 5). A slot answered **Any** builds no rule.
 - `track` missing from `POST /sessions` means `"sales"`.
 - Commit messages end with `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`.
-- Out of scope: calling any LinkedIn or Sales Navigator API at runtime; region/state/postal geography; revenue.
+- Out of scope: calling any LinkedIn or Sales Navigator API at runtime; LinkedIn's own geographic divisions, state and postal geography; revenue as a scored criterion (`revenue_range` is a filter-only chat slot).
 
 ## Review Focus
 

@@ -1,6 +1,6 @@
 # Three-step, multi-role profile builder, aligned to LinkedIn: design
 
-Date: 2026-10-28. Status: draft for approval. Supersedes the earlier draft of this file (UN M49 geography and our own option lists are gone).
+Date: 2026-10-28. Status: draft for approval. Supersedes the earlier draft of this file (UN M49 geography and our own option lists are gone, except the provisional geography regions; see the geography call under "Calls made without the user").
 
 ## Intent
 
@@ -24,7 +24,7 @@ Three changes ship together:
 ## Non-goals
 
 - Calling Sales Navigator or any LinkedIn API. That comes once access exists.
-- Our own taxonomies. No UN M49 geography, no custom industry or role lists.
+- Our own taxonomies. No UN M49 geography, no custom industry or role lists, except the provisional geography regions (see the geography call under "Calls made without the user").
 - Sales Navigator-only facets in this release: LinkedIn's own geographic divisions (EMEA, APAC, DACH, MENA), state, postal code, annual revenue, department headcount, and Sales Navigator's own seniority and function lists.
 - Any role beyond Sales/BDE and HR.
 - Job-description output for HR.
@@ -32,7 +32,7 @@ Three changes ship together:
 
 ## Anti-goals (failures even if it technically works)
 
-- Step 2 feeling like a long form. Five cards, mostly taps.
+- Step 2 feeling like a long form. Three cards for Sales, up to four for HR, mostly taps.
 - The chat re-asking something already answered in step 2.
 - A profile that looks right but cannot be mapped to a filter (an industry that is not a LinkedIn industry, a size band that matches no LinkedIn bucket).
 - HR users seeing sales vocabulary ("ICP", "leads", "customers") anywhere in the UI, chat or output.
@@ -59,10 +59,10 @@ Every option is `{facet, id, label, level, parent, match}`:
 |---|---|---|---|
 | `industries`, `current_industries` | Industry | Industry codes v2 (hierarchy; groups such as Manufacturing, Financial Services contain sub-industries) | `Company.industry`, `CurrentPosition.industry` (label strings such as "IT Services and IT Consulting", "Software Development") |
 | `company_size`, `current_company_size` | Company headcount | Company size codes A to I | `Company.employeeRange`, `CurrentPosition.employeeRange` |
-| `company_hq_geographies`, `current_company_hq` | Headquarter location | ISO country list, then city | `Company.hqCountry` (ISO-2, e.g. IN, US), `Company.hqCity` |
-| `lead_geographies`, `candidate_locations` (HR: asked in the chat) | Geography | ISO country list, then city | `LinkedInProfile.details.country` and `.city`; `Lead.location` (free-text line) |
-| `buyer_seniority` (new) | Seniority level | Seniority codes (10) | not stored; kept for the Sales Navigator filter |
-| `buyer_departments` (Sales), `target_functions` (HR, new) | Function | Job function codes (35) | not stored; kept for the Sales Navigator filter |
+| `company_hq_geographies`, `current_company_hq` | Headquarter location | Region (provisional, optional), then ISO country, then city | `Company.hqCountry` (ISO-2, e.g. IN, US), `Company.hqCity` |
+| `lead_geographies`, `candidate_locations` (HR: asked in the chat) | Geography | Region (provisional, optional), then ISO country, then city | `LinkedInProfile.details.country` and `.city`; `Lead.location` (free-text line) |
+| `buyer_seniority` (new) | Seniority level | Seniority codes (10) | derived from `profile.title` by keyword rules (`linkedin/profile_map.py`); scored at weight 5 |
+| `buyer_departments` (Sales), `target_functions` (HR, new) | Function | Job function codes (35) | derived from `profile.title` by keyword rules (`linkedin/profile_map.py`); scored at weight 5 |
 | `buyer_roles` (Sales), `target_roles` (HR) | Title | no static list; free-text chips | `Lead.headline`, `details.title`, `currentPositions[].title` |
 | `required_skills` (asked in the chat) | Skills | no static list; free-text chips | `details.skills[]` |
 | `education_level` | Degrees (`urn:li:degree:N`, with a `rollup` category such as Bachelor's) | Standardized Data API `GET /v2/degrees` (API only, see below) | `details.education[].degree` (free text, matched via the degree's aliases) |
@@ -110,7 +110,7 @@ The old bands (`201-1,000`, `1,001-5,000`, `5,000+`) are replaced by these nine.
 
 ### Step 1: About you (both roles)
 
-All fields required:
+All fields required except the website (decision R28: the wizard UI makes it optional, and the backend accepts an empty website and skips the site read):
 
 | Field | Input |
 |---|---|
@@ -155,8 +155,8 @@ The existing interviewer, started after step 2 is submitted. Step 2 slots arrive
 
 Chat slots, asked only if still unknown:
 
-- **Sales/BDE:** the registry was already trimmed to LinkedIn-matchable fields (commit `a25725c`: no pain points, outcomes, revenue, budget, technology or tier D). The chat asks what step 2 does not cover: `customer_profile` (B2C), `customer_segments`, `buying_triggers`, `disqualifiers`, the tier B seller-context slots (`how_we_work`, `lead_sources`, `value_proposition`), and industry-specific custom fields. Revenue is not in the registry; it returns with Sales Navigator.
-- **HR:** nice-to-have skills, certifications, employment type, headcount, work mode, relocation, salary range, notice period, companies to source from, companies to avoid, seniority and reporting line, languages, hiring urgency, and `disqualifiers`. Final keys and tiers follow `domain/slots.py` conventions.
+- **Sales/BDE:** the registry was already trimmed to LinkedIn-matchable fields (commit `a25725c`: no pain points, outcomes, budget or tier D). The chat asks what step 2 does not cover: `customer_profile` (B2C), `customer_segments`, `buying_triggers`, `disqualifiers`, the tier B seller-context slots (`how_we_work`, `lead_sources`, `value_proposition`), and industry-specific custom fields. `revenue_range` and `technologies_used` are tier B filter-only chat slots and `company_type` is tier B (`company_type` also feeds a scored criterion, company type fit, weight 5).
+- **HR:** nice-to-have skills, certifications, `target_schools`, employment type, headcount, work mode, relocation, salary range, notice period, companies to source from, companies to avoid, seniority and reporting line (`target_seniority` is scoring-only), languages, hiring urgency, and `disqualifiers`. Final keys and tiers follow `domain/slots.py` conventions.
 
 Values the chat extracts for a step 2 facet (industry, size, country, seniority, function) are resolved to the catalog. A value that cannot be resolved is kept as free text and flagged `unmapped`, and the ICP view shows that it will not become a filter.
 
@@ -166,7 +166,7 @@ Values the chat extracts for a step 2 facet (industry, size, country, seniority,
 
 `domain/slots.py` becomes one registry per role, selected by `SessionState.track` (`"sales"` | `"hr"`). Helper functions take the track. Existing sessions load as `"sales"`.
 
-`geographies` is replaced by `lead_geographies` and `company_hq_geographies`, both tier A, the HQ one with `skip_if` B2C. New Sales slots: `buyer_seniority`. New HR slots as in the tables above. References in `engine/planner.py` (`CUSTOMER_KEYS`), `icp/scoring.py` (`geographic_fit`), `icp/document.py`, the eval cases and the tests are updated. `SIZE_BANDS` is replaced by the LinkedIn codes. HR conditional slots use `skip_if` keyed on `experience_level`.
+`geographies` is replaced by `lead_geographies` and `company_hq_geographies`, both tier A, the HQ one with `skip_if` B2C. New Sales slots: `buyer_seniority`; `revenue_range`, `technologies_used` and `company_type` are also promoted. New HR slots as in the tables above. References in `engine/planner.py` (`CUSTOMER_KEYS`), `icp/scoring.py` (`geographic_fit`), `icp/document.py`, the eval cases and the tests are updated. `SIZE_BANDS` is replaced by the LinkedIn codes. HR conditional slots use `skip_if` keyed on `experience_level`.
 
 ### Slot values carry option references
 
@@ -182,7 +182,7 @@ A role's step 2 is a declarative card list (card id, slots, input type, facet, `
 
 ### API changes
 
-- `POST /sessions` (step 1): body gains `track`. The UI always sends it; the API defaults a missing `track` to `"sales"`. It creates the session, kicks off enrichment, and returns the session id with the step 2 form definition. It no longer returns the first chat question. The old free-text `role` stays accepted but unused.
+- `POST /sessions` (step 1): body gains `track`. The UI always sends it; the API defaults a missing `track` to `"sales"`. It creates the session, kicks off enrichment, and returns the session id with the step 2 form definition. It no longer returns the first chat question. The old free-text `role` stays accepted and is stored as `speaker_role`.
 - `GET /profile-form?track=...`: the card definitions.
 - `GET /options/{facet}?q=...`: catalog options for a facet, with search, for the large lists (industry, country).
 - `POST /sessions/{id}/profile` (step 2 submit): validates required cards, writes the slots as stated values with `refs`, then runs the interviewer opener and returns the existing `TurnResponse`. Same validation style as `POST /sessions/{id}/fallback`.
@@ -225,7 +225,7 @@ Sales criteria (defaults, weights sum to 100): industry fit 25 (`industries`, `c
 ### Prompts, labels, output
 
 - Interviewer, opener and extraction prompts are written per role in `prompts.py`. The extraction prompt lists the catalog options for the facet slots so values resolve to them. The HR set speaks of candidates, never customers or leads.
-- The output document: Ideal Candidate Profile for HR (role and seniority, background, skills, location and work terms, compensation and timing, sourcing, exclusions) and the current ICP for Sales/BDE. Both gain a "LinkedIn filters" block listing each facet value with its id, and marking unmapped values. Same builder, review, edit, approve and verdict flow.
+- The output document: Ideal Candidate Profile for HR (role and seniority, background, skills, location and work terms, compensation and timing, sourcing, exclusions) and the current ICP for Sales/BDE. Both gain a "LinkedIn filters" block listing each facet value with its id, and marking unmapped values. Every slot that has a LinkedIn filter name appears in the block: slots without a facet are listed with facet `free_text` and no ids, and facet slots whose catalog is absent list their values as unmapped. Same builder, review, edit, approve and verdict flow.
 
 ### Frontend
 
@@ -239,13 +239,17 @@ Sales criteria (defaults, weights sum to 100): industry fit 25 (`industries`, `c
 - New HR eval cases (fresher, experienced, both, vague request); existing Sales cases updated for the geography split and new size bands.
 - Prompts changed here must pass the existing eval gate before release. Earlier eval results do not count.
 
+### Deployment
+
+`BACKGROUND_ENRICHMENT` (env var, default true, false automatically when `VERCEL` is set) controls whether the step 1 website read runs in the background. Serverless functions freeze after the response, so a background task would never finish; when false, step 2 reads the site inline. See `docs/DEPLOY.md`.
+
 ## Behaviour details
 
 **Stage and in-flight sessions.** `SessionState` gains `step`: `"profile"` (step 2 not yet submitted) or `"chat"`. A session with no `step` loads as `"chat"` and `track="sales"`; it skips step 2 and continues, with new slots unknown so the chat asks them. A session whose step 2 was never submitted has `step="profile"`; resuming it lands on step 2. Chat endpoints return 409 for a session still in `"profile"`.
 
 **Skip rules.** `business_model` already exists as a tier A single-choice slot. `skip_if` compares exact values, so an unset `business_model` or any value other than B2C means "not skipped".
 
-**Any.** Stored as the sentinel `"Any"`, exclusive. Offered on multi-select and range cards only (industries, size, geography pickers, seniority, function, current industries, current size, candidate location). Not on `business_model`, `experience_level` or `education_level`. Counts as an answer in `real_values`; an Any slot builds no scoring rule, so its criterion drops out and the other weights renormalise; the document renders "Any"; it adds no filter in the LinkedIn block.
+**Any.** Stored as the sentinel `"Any"`, exclusive. Offered on multi-select and range cards only. The Any-capable form fields are industries, lead and HQ geography, seniority, function, `years_experience`, `current_industries`, `current_company_size` and `current_company_hq`. Not on `business_model`, `experience_level` or `education_level`. Counts as an answer in `real_values`; an Any slot builds no scoring rule, so its criterion drops out and the other weights renormalise; the document renders "Any"; it adds no filter in the LinkedIn block.
 
 **Enrichment for HR.** The website describes the employer. For HR it feeds only the opener context and the company industry; it does not write Sales slots.
 
@@ -255,7 +259,7 @@ Sales criteria (defaults, weights sum to 100): industry fit 25 (`industries`, `c
 
 **Review, edit, verdict for HR.** Same edit and approve flow, with an HR section map. The verdict question is relabelled for HR and kept.
 
-**Step 2 validation.** Every card shown for the user's answers is required, except `current_company_hq` and the title chips in Sales card 5. Fresher requires `education_level`, `field_of_study`, `graduation_year`. Experienced requires `years_experience` (at least the lower bound), `current_industries`, `current_company_size`. Both requires `education_level` plus the Experienced set. Required means at least one value or Any. The form never asks `required_skills`; a stale saved draft that still carries the key, or `candidate_locations`, is cleaned of it and never fails validation.
+**Step 2 validation.** Every card shown for the user's answers is required, except `current_company_hq` and the title chips in Sales card 3. Fresher requires `education_level`, `field_of_study`, `graduation_year`, but only once the degree and field-of-study catalogs exist (the education card is hidden until then). Experienced requires `years_experience` (at least the lower bound), `current_industries`, `current_company_size`. Both requires `education_level` plus the Experienced set. Required means at least one value or Any. The form never asks `required_skills`; a stale saved draft that still carries the key, or `candidate_locations`, is cleaned of it and never fails validation.
 
 ## Left to the builder
 
