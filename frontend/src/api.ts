@@ -1,4 +1,4 @@
-import type { FormField, IcpEdit, IcpResponse, ProfileOption, SessionView, StartRequest, Step1Response, Track, Turn } from "./types";
+import type { Card, FormField, IcpEdit, IcpResponse, ProfileOption, SessionView, StartRequest, Step1Response, Track, Turn } from "./types";
 
 const TENANT = import.meta.env.VITE_TENANT_ID ?? "demo";
 
@@ -32,6 +32,7 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
 
 export const startSession = (body: StartRequest) => call<Step1Response>("POST", "/sessions", body);
 export const getSession = (id: string) => call<SessionView>("GET", `/sessions/${id}`);
+export const getProfileForm = (track: Track) => call<Card[]>("GET", `/profile-form?track=${track}`);
 export const getOptions = (facet: string, q = "", limit = 1000) =>
   call<ProfileOption[]>("GET", `/options/${facet}?q=${encodeURIComponent(q)}&limit=${limit}`);
 export const submitProfile = (id: string, answers: Record<string, string[]>) =>

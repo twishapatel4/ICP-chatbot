@@ -13,10 +13,14 @@ type Answers = Record<string, string[]>;
 
 // ---- draft kept per session, so a refresh keeps what was typed ----
 
+const hasValues = (a: Answers) => Object.values(a).some((v) => Array.isArray(v) && v.length > 0);
+
+// An empty draft is no draft: it must not hide the answers the server kept.
 function loadDraft(id: string): Answers | null {
   try {
     const raw = localStorage.getItem(draftKey(id));
-    return raw ? (JSON.parse(raw) as Answers) : null;
+    const draft = raw ? (JSON.parse(raw) as Answers) : null;
+    return draft && hasValues(draft) ? draft : null;
   } catch {
     return null;
   }
@@ -24,7 +28,8 @@ function loadDraft(id: string): Answers | null {
 
 function saveDraft(id: string, answers: Answers) {
   try {
-    localStorage.setItem(draftKey(id), JSON.stringify(answers));
+    if (hasValues(answers)) localStorage.setItem(draftKey(id), JSON.stringify(answers));
+    else localStorage.removeItem(draftKey(id));
   } catch {
     // storage unavailable: the draft just will not survive a refresh
   }
@@ -362,7 +367,7 @@ function GeoField({ values, disabled, countries: { options, error, retry }, fiel
         placeholder="Search for a country..."
         disabled={disabled}
         full={full}
-        onToggle={(l) => onChange(countries.includes(l) ? values.filter((x) => x !== l) : toggle(values, l))}
+        onToggle={(l) => (countries.includes(l) ? removeCountry(l) : onChange(toggle(values, l)))}
       />
       {countries.length > 0 && (
         <>
@@ -529,6 +534,13 @@ export default function StepTwo({ sessionId, track, cards, saved, disabled, miss
   const hasGeo = cards.some((c) => c.fields.some((f) => f.input === "geo"));
   const country = useOptions(hasGeo ? "country" : null);
   const countries = useMemo(() => (hasGeo && country.options.length ? new Set(country.options.map((o) => o.label.toLowerCase())) : null), [hasGeo, country.options]);
+
+  // cities restored without a country (an old draft) cannot be shown or sent: drop them
+  useEffect(() => {
+    if (!countries) return;
+    const strays = cards.flatMap((c) => c.fields).filter((f) => f.input === "geo" && (answers[f.slot]?.length ?? 0) > 0 && !valid(f, answers[f.slot], countries) && !answers[f.slot].includes(ANY) && !answers[f.slot].some((v) => countries.has(v.toLowerCase())));
+    if (strays.length) setAnswers((a) => ({ ...a, ...Object.fromEntries(strays.map((f) => [f.slot, []])) }));
+  }, [countries, cards, answers]);
 
   const problems = problemSlots(cards, answers, countries);
   const labels = new Map(cards.flatMap((c) => c.fields.map((f) => [f.slot, f.label] as const)));

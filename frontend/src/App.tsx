@@ -178,13 +178,15 @@ export default function App() {
       .getSession(id)
       .then((view) => {
         setTrack(view.track);
-        if (view.step === "profile" && view.cards) {
+        if (view.step === "profile") {
+          // never wipe the draft or the pointer here: the session is still waiting at step 2
           setSessionId(view.session_id);
-          setCards(view.cards);
           setSavedAnswers(view.answers);
           setMessages([]);
           setOptions([]);
           setStage("step2");
+          if (view.cards) setCards(view.cards);
+          else if (cards.length === 0) void api.getProfileForm(view.track).then(setCards).catch(() => undefined);
         } else {
           // step 2 was already submitted (maybe in another tab): the cards are stale
           writePending(null);
