@@ -10,7 +10,7 @@ The finished profile will be used to find people and companies on LinkedIn. So e
 
 Three changes ship together:
 
-1. **Three steps.** Step 1 collects who the user is. Step 2 is a short form of 5 core cards. Step 3 is the existing bot conversation, which starts knowing the step 2 answers.
+1. **Three steps.** Step 1 collects who the user is. Step 2 is a short form of 3 to 4 cards. Step 3 is the existing bot conversation, which starts knowing the step 2 answers.
 2. **Two roles on the platform.** The user picks a role in step 1. Sales/BDE teams build an **Ideal Customer Profile** (find leads, projects, clients). HR teams build an **Ideal Candidate Profile** (find people to hire for their own office). The role decides the step 2 cards, the chat's slot list, prompts, labels and output document.
 3. **LinkedIn-aligned options.** Option lists come from LinkedIn's published reference tables and from the vocabulary the LinkedIn database (`Linkedin-BE`) already stores. We keep our current filters. Sales Navigator-only filters are added when Sales Navigator API access exists.
 
@@ -60,11 +60,11 @@ Every option is `{facet, id, label, level, parent, match}`:
 | `industries`, `current_industries` | Industry | Industry codes v2 (hierarchy; groups such as Manufacturing, Financial Services contain sub-industries) | `Company.industry`, `CurrentPosition.industry` (label strings such as "IT Services and IT Consulting", "Software Development") |
 | `company_size`, `current_company_size` | Company headcount | Company size codes A to I | `Company.employeeRange`, `CurrentPosition.employeeRange` |
 | `company_hq_geographies`, `current_company_hq` | Headquarter location | ISO country list, then city | `Company.hqCountry` (ISO-2, e.g. IN, US), `Company.hqCity` |
-| `lead_geographies`, `candidate_locations` | Geography | ISO country list, then city | `LinkedInProfile.details.country` and `.city`; `Lead.location` (free-text line) |
+| `lead_geographies`, `candidate_locations` (HR: asked in the chat) | Geography | ISO country list, then city | `LinkedInProfile.details.country` and `.city`; `Lead.location` (free-text line) |
 | `buyer_seniority` (new) | Seniority level | Seniority codes (10) | not stored; kept for the Sales Navigator filter |
 | `buyer_departments` (Sales), `target_functions` (HR, new) | Function | Job function codes (35) | not stored; kept for the Sales Navigator filter |
 | `buyer_roles` (Sales), `target_roles` (HR) | Title | no static list; free-text chips | `Lead.headline`, `details.title`, `currentPositions[].title` |
-| `required_skills` | Skills | no static list; free-text chips | `details.skills[]` |
+| `required_skills` (asked in the chat) | Skills | no static list; free-text chips | `details.skills[]` |
 | `education_level` | Degrees (`urn:li:degree:N`, with a `rollup` category such as Bachelor's) | Standardized Data API `GET /v2/degrees` (API only, see below) | `details.education[].degree` (free text, matched via the degree's aliases) |
 | `field_of_study` | Fields of study (`urn:li:fieldOfStudy:N`, with `rollupIds`) | Standardized Data API `GET /v2/fieldsOfStudy` (API only) | `details.education[].field` |
 | `graduation_year` | Graduation year | year range | `details.education[].period` |
@@ -201,9 +201,9 @@ HR criteria (defaults, editable like Sales):
 |---|---|---|---|
 | Role fit | 25 | `target_functions`, `target_roles` | list |
 | Experience fit | 20 | `years_experience` | range (`"3-8"`, `"3+"`) |
-| Skills fit | 20 | `required_skills` | list |
+| Skills fit | 20 | `required_skills` (asked in the chat) | list |
 | Education fit | 15 | `education_level`, `field_of_study`, `graduation_year` | list, list, range with a narrow tolerance (about 2 years) |
-| Location fit | 10 | `candidate_locations` | list |
+| Location fit | 10 | `candidate_locations` (asked in the chat) | list |
 | Background fit | 10 | `current_industries`, `current_company_size` | list, range |
 
 - A criterion with no rules (a branch that was skipped, or an Any answer) is not applicable, and the rest renormalise. A Fresher profile therefore scores on role, skills, education and location; an Experienced profile on role, experience, skills, location and background.
@@ -239,13 +239,13 @@ HR criteria (defaults, editable like Sales):
 
 **Enrichment for HR.** The website describes the employer. For HR it feeds only the opener context and the company industry; it does not write Sales slots.
 
-**HR must-ask and stop rules.** Tier A for HR chat: `employment_type`, `work_mode`, `salary_range`, `disqualifiers`. The rest are tier B. Stop rules follow the current engine (`enough_for_icp`: the interviewer's own call plus a floor). The HR floor is `target_roles` plus three more step 2 or chat facts, mirroring `CUSTOMER_KEYS` for Sales. Tiers are A, B, C only; there are no topics or tier D.
+**HR must-ask and stop rules.** Tier A for HR chat: `required_skills`, `candidate_locations`, `employment_type`, `work_mode`, `salary_range`, `disqualifiers`. The rest are tier B. Stop rules follow the current engine (`enough_for_icp`: the interviewer's own call plus a floor). The HR floor is `target_roles` plus three more step 2 or chat facts, mirroring `CUSTOMER_KEYS` for Sales. Tiers are A, B, C only; there are no topics or tier D.
 
 **Vocabulary.** Only user-visible strings change for HR. Internal route names (`/icp`), field names and identifiers stay.
 
 **Review, edit, verdict for HR.** Same edit and approve flow, with an HR section map. The verdict question is relabelled for HR and kept.
 
-**Step 2 validation.** Every card shown for the user's answers is required, except `current_company_hq` and the title chips in Sales card 5. Fresher requires `education_level`, `field_of_study`, `graduation_year`. Experienced requires `years_experience` (at least the lower bound), `current_industries`, `current_company_size`. Both requires `education_level` plus the Experienced set. Required means at least one value or Any. The form never asks `required_skills`; a stale saved draft that still carries the key is cleaned of it and never fails validation.
+**Step 2 validation.** Every card shown for the user's answers is required, except `current_company_hq` and the title chips in Sales card 5. Fresher requires `education_level`, `field_of_study`, `graduation_year`. Experienced requires `years_experience` (at least the lower bound), `current_industries`, `current_company_size`. Both requires `education_level` plus the Experienced set. Required means at least one value or Any. The form never asks `required_skills`; a stale saved draft that still carries the key, or `candidate_locations`, is cleaned of it and never fails validation.
 
 ## Left to the builder
 
@@ -274,7 +274,7 @@ HR criteria (defaults, editable like Sales):
 - Session `step` field, 409 on chat while in step 2, old sessions skipping step 2.
 - `track` defaults to Sales at the API.
 - HR scoring weights and the HR disqualifier fields are my defaults. HR enrichment feeds only opener context and industry.
-- HR tier A set: `employment_type`, `work_mode`, `salary_range`, `disqualifiers`.
+- HR tier A set: `required_skills`, `candidate_locations`, `employment_type`, `work_mode`, `salary_range`, `disqualifiers`.
 - Only user-visible strings are renamed for HR.
 - HR verdict question relabelled, not removed.
 - Legacy `geographies` maps to `lead_geographies` only.

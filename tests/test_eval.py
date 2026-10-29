@@ -291,6 +291,11 @@ def test_hr_eval_cases_do_not_carry_skills_in_profile_answers():
         for slot in ("required_skills", "candidate_locations"):  # asked in the chat now
             assert slot not in (c.profile_answers or {}), (c.name, slot)
         assert case_problems(c) == [], c.name
+        # a location expectation must be stated literally in the scripted chat: the matcher
+        # does not equate "UK" with "United Kingdom"
+        said = " ".join(c.answers).lower()
+        for value in c.expected.get("candidate_locations", []):
+            assert value.lower() in said, (c.name, value)
 
 
 def test_case_problems_flags_a_bad_step_two_form():

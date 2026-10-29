@@ -348,6 +348,18 @@ async def test_hr_track_session_flow(world):
     assert (view["track"], view["step"]) == ("hr", "chat")
 
 
+async def test_hr_profile_with_stale_skills_and_location_keys_is_accepted_and_ignored(world):
+    w = await world()
+    sid = (await w.create(track="hr", role=None))["session_id"]
+    stale = {**HR_FRESHER, "required_skills": ["Python"], "candidate_locations": ["India"]}
+    w.llm.queue("opener", q("Which skills must they have?"))
+    started = await w.call("POST", f"/sessions/{sid}/profile", json={"answers": stale})
+    assert started.status_code == 200, started.text
+    state = (await w.repo.get_session(T, sid)).state
+    assert not {"required_skills", "candidate_locations"} & set(state.profile_answers)
+    assert not {"required_skills", "candidate_locations"} & set(state.slots)
+
+
 async def test_fallback_form_uses_session_track(world):
     w = await world()
     hr_keys = [f["key"] for f in (await w.call("GET", "/fallback-form?track=hr")).json()]

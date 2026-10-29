@@ -10,7 +10,13 @@ from icp_chatbot.domain.slots import (
 )
 from icp_chatbot.domain.state import SessionState, SlotSource, SlotValue
 from icp_chatbot.engine.fallback import fallback_form, missing_required
-from icp_chatbot.engine.planner import customer_keys, enough_for_icp, icp_floor_met
+from icp_chatbot.engine.planner import (
+    customer_keys,
+    enough_for_icp,
+    icp_floor_met,
+    missing_core_slots,
+)
+from icp_chatbot.engine.profile_form import apply_profile, profile_cards
 
 
 def _hr(**slots: tuple[list[str], SlotSource]) -> SessionState:
@@ -384,9 +390,6 @@ def test_refresh_model_is_track_agnostic_for_an_hr_model():
 
 
 # -- Task 12d: the must-have skills are asked in the chat, not in the step 2 form -----------------
-
-from icp_chatbot.engine.planner import missing_core_slots  # noqa: E402
-from icp_chatbot.engine.profile_form import apply_profile, profile_cards  # noqa: E402
 
 _FORM_EXPERIENCED = {
     "target_functions": ["Engineering"],
