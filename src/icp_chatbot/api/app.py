@@ -50,6 +50,7 @@ from icp_chatbot.enrichment.service import EnrichmentService
 from icp_chatbot.icp.builder import build_icp
 from icp_chatbot.icp.document import ICPDocument
 from icp_chatbot.icp.review import Edit, apply_edit, approve, carry_over_edits
+from icp_chatbot.icp.scoring import PriorityQuestion, priority_questions
 from icp_chatbot.limits import BudgetExceeded, BudgetGuard, RateLimiter
 from icp_chatbot.linkedin.catalog import FACETS, default_catalog
 from icp_chatbot.llm.factory import make_llm
@@ -357,6 +358,16 @@ def create_app(
             author=latest.author,
             document=ICPDocument.model_validate(latest.document),
         )
+
+    @app.get("/sessions/{session_id}/scoring-questions", response_model=list[PriorityQuestion])
+    async def scoring_questions(
+        session_id: str, tenant_id: str = Depends(tenant), ct: Container = Depends(c)
+    ):
+        latest = await ct.repo.latest_icp(tenant_id, session_id)
+        if latest is None:
+            raise NotFound("icp")
+        document = ICPDocument.model_validate(latest.document)
+        return priority_questions(document.scoring_model, document.track)
 
     async def _save_company_version(ct, tenant_id, session_id, document, specs):
         version = await ct.repo.add_icp_version(

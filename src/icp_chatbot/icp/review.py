@@ -20,11 +20,13 @@ from icp_chatbot.icp.document import (
 )
 from icp_chatbot.icp.scoring import (
     Disqualifier,
+    PriorityAnswer,
     make_disqualifier,
     refresh_model,
     set_requirement,
     set_weights,
     validate_model,
+    weights_from_priorities,
 )
 
 EDITED_EVIDENCE = "edited by the company"
@@ -41,6 +43,11 @@ class WeightEdit(BaseModel):
     weights: dict[str, float]  # criterion key -> weight; the new total must be 100
 
 
+class PriorityEdit(BaseModel):
+    kind: Literal["priorities"] = "priorities"
+    answers: list[PriorityAnswer]  # "which matters more" answers; the server turns them into weights
+
+
 class RequirementEdit(BaseModel):
     kind: Literal["requirement"] = "requirement"
     criterion: str
@@ -53,7 +60,7 @@ class DisqualifierEdit(BaseModel):
 
 
 Edit = Annotated[
-    FieldEdit | WeightEdit | RequirementEdit | DisqualifierEdit, Field(discriminator="kind")
+    FieldEdit | WeightEdit | PriorityEdit | RequirementEdit | DisqualifierEdit, Field(discriminator="kind")
 ]
 
 
@@ -109,9 +116,14 @@ def apply_edit(
             FeedbackSpec("field_edit", edit.slot, old, values)
         ]
 
-    if isinstance(edit, WeightEdit):
+    if isinstance(edit, (WeightEdit, PriorityEdit)):
         before = {c.key: c.weight for c in model.criteria}
-        model = set_weights(model, edit.weights)
+        weights = (
+            edit.weights
+            if isinstance(edit, WeightEdit)
+            else weights_from_priorities(model, edit.answers, document.track)
+        )
+        model = set_weights(model, weights)
         after = {c.key: c.weight for c in model.criteria}
         specs = [
             FeedbackSpec("weight_edit", k, before[k], after[k])

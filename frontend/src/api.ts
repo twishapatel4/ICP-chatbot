@@ -1,4 +1,4 @@
-import type { Card, FormField, IcpEdit, IcpResponse, ProfileOption, SessionView, StartRequest, Step1Response, Track, Turn } from "./types";
+import type { Card, FormField, IcpEdit, IcpResponse, PriorityQuestion, ProfileOption, SessionView, StartRequest, Step1Response, Track, Turn } from "./types";
 
 const TENANT = import.meta.env.VITE_TENANT_ID ?? "demo";
 
@@ -46,6 +46,8 @@ export const buildIcp = (id: string) => call<IcpResponse>("POST", `/sessions/${i
 export const approveIcp = (id: string) => call<IcpResponse>("POST", `/sessions/${id}/approve`);
 export const editIcp = (id: string, edit: IcpEdit) =>
   call<IcpResponse>("PATCH", `/sessions/${id}/icp`, edit);
+export const getScoringQuestions = (id: string) =>
+  call<PriorityQuestion[]>("GET", `/sessions/${id}/scoring-questions`);
 export const sendVerdict = (id: string, correct: boolean, comment = "") =>
   call<null>("POST", `/sessions/${id}/verdict`, { correct, comment });
 export const reviseIcp = (id: string, text: string) =>

@@ -515,6 +515,7 @@ export default function App() {
         {stage !== "done" && <p className="mt-0 mx-0 mb-2 text-[12px] text-muted">The current profile, being updated from your answer.</p>}
         <IcpView
           icp={icp}
+          onIcp={setIcp}
           approved={approved}
           busy={busy || stage !== "done"}
           readOnly={stage !== "done"}

@@ -42,14 +42,18 @@ export default function StepOne({ busy, status, error, onTrack, onSubmit }: Prop
   const [website, setWebsite] = useState("");
   const [industry, setIndustry] = useState("");
   const [groups, setGroups] = useState<string[]>([]);
+  const [parents, setParents] = useState<Record<string, string>>({});
   const [groupsFailed, setGroupsFailed] = useState(false);
 
   useEffect(() => {
     api
       .getOptions("industry")
-      .then((all) =>
-        setGroups(all.filter((o) => o.level === 1).map((o) => o.label)),
-      )
+      .then((all) => {
+        // every industry, sub-industries too, so a search here finds what Step 2 finds
+        const pickable = all.filter((o) => o.selectable !== false);
+        setGroups(pickable.map((o) => o.label));
+        setParents(Object.fromEntries(pickable.filter((o) => o.parent).map((o) => [o.label, o.parent as string])));
+      })
       .catch(() => setGroupsFailed(true));
   }, []);
 
@@ -159,6 +163,7 @@ export default function StepOne({ busy, status, error, onTrack, onSubmit }: Prop
               value={industry}
               disabled={busy || groups.length === 0}
               options={groups}
+              detail={parents}
               onPick={setIndustry}
             />
           </div>

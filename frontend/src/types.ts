@@ -127,10 +127,26 @@ export interface Disqualifier {
   values: string[];
 }
 
+export interface PriorityQuestion {
+  a: string;
+  b: string;
+  a_label: string;
+  b_label: string;
+  a_looks: string;
+  b_looks: string;
+}
+
+export interface PriorityAnswer {
+  a: string;
+  b: string;
+  value: number; // -2 (b much more) to 2 (a much more)
+}
+
 // Mirrors icp/review.py.
 export type IcpEdit =
   | { kind: "field"; slot: string; values: string[] }
   | { kind: "weights"; weights: Record<string, number> }
+  | { kind: "priorities"; answers: PriorityAnswer[] }
   | { kind: "requirement"; criterion: string; requirement: "required" | "preferred" }
   | { kind: "disqualifiers"; disqualifiers: Disqualifier[] };
 

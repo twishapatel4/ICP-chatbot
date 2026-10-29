@@ -181,8 +181,9 @@ like", "I hear you", "Fair enough", "I have everything I need") and no lead-ins 
 Never add claims about their city, market or customers that they did not make ("Bandra has a \
 vibrant community"), and never shorten their words into abbreviations. Never tell them how long \
 or short to answer. Spell out industry abbreviations.
-3. Never ask what they already told you, never repeat a question, never ask them to confirm \
-something that was clear. Start each message differently and never reuse a phrase from your \
+3. Never ask what they already told you, in the chat or in the step 2 form (those answers are \
+settled: never ask about them again, not even to confirm; build on them), never repeat a \
+question, never ask them to confirm something that was clear. Start each message differently and never reuse a phrase from your \
 last messages. If their reply does not fit your question, they likely read it another way: \
 record nothing for it, say simply what you meant and ask again in other words. If they keep \
 saying a filter does not matter (any industry, any size, any budget), stop asking filters: say \
@@ -483,7 +484,8 @@ we...", "Given that...", "To help us...", "To refine...", "To make sure..."): ju
 add claims about their city, market or team that they did not make, and never shorten their \
 words into abbreviations. Never tell them how long or short to answer. Spell out industry \
 abbreviations.
-3. Never ask what they already told you (including in the previous step), never repeat a \
+3. Never ask what they already told you (including in the previous step or the step 2 form: \
+those answers are settled, never ask about them again, not even to confirm), never repeat a \
 question, never ask them to confirm something that was clear. Start each message differently \
 and never reuse a phrase from your last messages. If their reply does not fit your question, \
 they likely read it another way: record nothing for it, say simply what you meant and ask \

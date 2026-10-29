@@ -8,6 +8,7 @@ matching service should reproduce.
     over the criteria that apply and for which the lead's data is known.
 """
 
+import math
 import re
 import unicodedata
 from dataclasses import dataclass, field
@@ -372,6 +373,94 @@ def set_weights(model: ScoringModel, weights: dict[str, float]) -> ScoringModel:
     if abs(total - WEIGHT_TOTAL) > EPSILON:
         raise ValueError(f"weights must sum to {WEIGHT_TOTAL:g}, got {total:g}")
     return model.model_copy(update={"criteria": criteria})
+
+
+# -- priority questions -----------------------------------------------------------------------------
+
+# "Which matters more, A or B?" pairs per track. The answers turn into weights (weights_from_priorities).
+PRIORITY_DUELS: dict[Track, tuple[tuple[str, str], ...]] = {
+    "sales": (
+        ("industry_fit", "geographic_fit"),
+        ("company_type_fit", "buying_signals"),
+        ("buyer_fit", "company_size"),
+        ("buyer_fit", "industry_fit"),
+        ("company_type_fit", "industry_fit"),
+    ),
+    "hr": (
+        ("role_fit", "skills_fit"),
+        ("experience_fit", "education_fit"),
+        ("role_fit", "experience_fit"),
+        ("skills_fit", "location_fit"),
+        ("background_fit", "employer_fit"),
+    ),
+}
+PRIORITY_STEP = 0.5  # each step of preference multiplies a weight by e^0.5, about 1.65x
+MAX_PREFERENCE = 2  # answers run from -2 (B much more) to +2 (A much more)
+
+
+class PriorityQuestion(BaseModel):
+    a: str
+    b: str
+    a_label: str
+    b_label: str
+    a_looks: str  # what the ICP looks for on this criterion, in the company's own values
+    b_looks: str
+
+
+class PriorityAnswer(BaseModel):
+    a: str
+    b: str
+    value: int = Field(ge=-MAX_PREFERENCE, le=MAX_PREFERENCE)  # positive favours a
+
+
+def _looks_for(criterion: Criterion) -> str:
+    parts: list[str] = []
+    for rule in criterion.rules.values():
+        if rule.kind == "list":
+            parts.extend(rule.primary)
+        else:
+            lo = "" if rule.min is None else f"{rule.min:g}"
+            hi = "" if rule.max is None else f"{rule.max:g}"
+            parts.append(f"{lo}-{hi}" if lo and hi else f"{lo}+" if lo else f"up to {hi}")
+    return ", ".join(parts)
+
+
+def priority_questions(model: ScoringModel, track: Track = "sales") -> list[PriorityQuestion]:
+    """The pairs worth asking: both criteria apply, so the ICP has values for them."""
+    by_key = {c.key: c for c in model.criteria if c.applicable}
+    return [
+        PriorityQuestion(
+            a=a, b=b, a_label=by_key[a].label, b_label=by_key[b].label,
+            a_looks=_looks_for(by_key[a]), b_looks=_looks_for(by_key[b]),
+        )
+        for a, b in PRIORITY_DUELS[track]
+        if a in by_key and b in by_key
+    ]  # fmt: skip
+
+
+def weights_from_priorities(
+    model: ScoringModel, answers: list[PriorityAnswer], track: Track = "sales"
+) -> dict[str, float]:
+    """Weights for every criterion, summing to 100. Criteria in no question keep their weight; the
+    rest share what is left in proportion to e^(step * preference), as whole numbers."""
+    asked_pairs = {(q.a, q.b) for q in priority_questions(model, track)}
+    score: dict[str, float] = {k: 0.0 for pair in asked_pairs for k in pair}
+    for ans in answers:
+        if (ans.a, ans.b) not in asked_pairs:
+            raise ValueError(f"not a priority question: {ans.a} vs {ans.b}")
+        score[ans.a] += ans.value
+        score[ans.b] -= ans.value
+    weights = {c.key: c.weight for c in model.criteria}
+    keys = sorted(score, key=lambda k: [c.key for c in model.criteria].index(k))
+    pool = WEIGHT_TOTAL - sum(w for k, w in weights.items() if k not in score)
+    raw = {k: math.exp(PRIORITY_STEP * score[k]) for k in keys}
+    total = sum(raw.values())
+    exact = {k: raw[k] * pool / total for k in keys}
+    whole = {k: math.floor(exact[k] + EPSILON) for k in keys}
+    leftover = round(pool - sum(whole.values()))
+    for k in sorted(keys, key=lambda k: -(exact[k] - whole[k]))[:leftover]:
+        whole[k] += 1  # largest remainders get the leftover points; ties keep the ICP's order
+    return {**weights, **{k: float(v) for k, v in whole.items()}}
 
 
 def set_requirement(model: ScoringModel, key: str, requirement: str) -> ScoringModel:
