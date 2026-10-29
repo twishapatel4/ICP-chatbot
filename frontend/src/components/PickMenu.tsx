@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { pillInput } from "../ui";
 import { fuzzyFilter } from "./fuzzy";
 
@@ -8,18 +8,24 @@ interface Props {
   placeholder: string;
   value?: string; // shown on the button once something is chosen
   disabled?: boolean;
+  detail?: Record<string, string>; // a muted note after an option, e.g. the region of a country
   onPick: (v: string) => void;
 }
 
 // A searchable dropdown that only picks on click or Enter. A native <select> fires change on every
 // arrow key, which would add a value per key press.
-export default function PickMenu({ options, label, placeholder, value, disabled, onPick }: Props) {
+export default function PickMenu({ options, label, placeholder, value, disabled, detail, onPick }: Props) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
   const button = useRef<HTMLButtonElement>(null);
   const base = useId();
   const results = fuzzyFilter(options, q, (o) => o);
+
+  // keep the highlighted option in view: the country list is 249 long
+  useEffect(() => {
+    if (open) document.getElementById(`${base}-o${active}`)?.scrollIntoView({ block: "nearest" });
+  }, [open, active, base]);
 
   const close = () => {
     setOpen(false);
@@ -43,7 +49,7 @@ export default function PickMenu({ options, label, placeholder, value, disabled,
         ref={button}
         type="button"
         className={`${pillInput} block w-full py-2.5 px-4 text-left text-[14px] font-normal disabled:opacity-50`}
-        aria-label={label}
+        aria-label={value ? `${label}: ${value}` : label}
         aria-haspopup="listbox"
         aria-expanded={open}
         disabled={disabled}
@@ -51,10 +57,21 @@ export default function PickMenu({ options, label, placeholder, value, disabled,
           setActive(0);
           open ? close() : setOpen(true);
         }}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" && !open) {
+            e.preventDefault();
+            setActive(0);
+            setOpen(true);
+          }
+        }}
       >
         {value || placeholder}
         <span aria-hidden="true" className="float-right">⌄</span>
       </button>
+      {/* always mounted, so screen readers announce the count as it changes */}
+      <div className="sr-only" role="status" aria-live="polite">
+        {open ? (results.length ? `${results.length} ${results.length === 1 ? "match" : "matches"}` : "No matches") : ""}
+      </div>
       {open && (
         <div className="absolute z-20 left-0 right-0 mt-1 p-1 bg-panel border border-line rounded-[18px] shadow-soft">
           <input
@@ -102,6 +119,7 @@ export default function PickMenu({ options, label, placeholder, value, disabled,
                 onClick={() => pick(o)}
               >
                 {o}
+                {detail?.[o] && <span className="text-muted text-[12px]"> · {detail[o]}</span>}
               </li>
             ))}
             {results.length === 0 && <li className="py-2 px-3 text-[14px] text-muted">No matches</li>}

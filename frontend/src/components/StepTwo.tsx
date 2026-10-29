@@ -1,6 +1,6 @@
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import * as api from "../api";
-import type { Card, CardField, ProfileOption, Track } from "../types";
+import type { Card, CardField, ProfileOption } from "../types";
 import PickMenu from "./PickMenu";
 import { fuzzyFilter } from "./fuzzy";
 import { actions, card, chip, chipOn, pillInput, primaryBtn } from "../ui";
@@ -160,7 +160,14 @@ const toggle = (values: string[], v: string) => {
   return rest.length >= MAX_VALUES ? values : [...rest, v];
 };
 const atCap = (values: string[]) => without(values).length >= MAX_VALUES;
-const CAP_HINT = <span className="text-[12px] text-muted">Up to {MAX_VALUES}</span>;
+// A polite live region, always mounted so a screen reader announces the count as it changes.
+function CapHint({ count }: { count: number }) {
+  return (
+    <span role="status" aria-live="polite" className="text-[12px] text-muted">
+      {count >= MAX_VALUES ? `Up to ${MAX_VALUES}: limit reached` : count > 0 ? `${count} of ${MAX_VALUES} selected` : ""}
+    </span>
+  );
+}
 
 // An ARIA combobox: type to filter, ArrowUp/ArrowDown to move, Enter to pick, Escape to close.
 // Enter never submits the form from here. Mouse and touch picks work too.
@@ -189,6 +196,9 @@ function SearchPicker({
   const shown = open && results.length > 0;
   const blocked = (o: ProfileOption) => full && !values.includes(o.label);
   const optionId = (i: number) => `${base}-o${i}`;
+  useEffect(() => {
+    if (shown) document.getElementById(`${base}-o${active}`)?.scrollIntoView({ block: "nearest" });
+  }, [shown, active, base]);
 
   function pick(o: ProfileOption | undefined) {
     if (!o || blocked(o)) return;
@@ -199,6 +209,9 @@ function SearchPicker({
 
   return (
     <div className="relative">
+      <div className="sr-only" role="status" aria-live="polite">
+        {shown ? `${results.length} ${results.length === 1 ? "match" : "matches"}` : ""}
+      </div>
       <input
         className={`${pillInput} block w-full py-2.5 px-[18px]`}
         type="text"
@@ -279,7 +292,7 @@ function FreeChips({ values, disabled, onChange }: { values: string[]; disabled:
           ))}
         </div>
       )}
-      {values.length >= MAX_VALUES && CAP_HINT}
+      <CapHint count={values.length} />
       <input
         className={`${pillInput} block w-full py-2.5 px-[18px]`}
         type="text"
@@ -325,7 +338,8 @@ function ChoiceField({ field, values, disabled, onChange }: FieldProps) {
   const menu = !single && !big && !!field.facet;
   const picked = without(values);
   return (
-    <div className="flex flex-col gap-2" role={single ? "radiogroup" : "group"} aria-label={field.label}>
+    <fieldset className="flex flex-col gap-2 min-w-0 m-0 p-0 border-0">
+      <legend className="sr-only">{field.label}</legend>
       {error && <LoadError retry={retry} />}
       <div className={WRAP}>
         {field.any_allowed && <Choice text={ANY} kind={kind} name={name} on={anyOn} disabled={disabled} onChange={() => onChange(single || !anyOn ? [ANY] : [])} />}
@@ -361,7 +375,7 @@ function ChoiceField({ field, values, disabled, onChange }: FieldProps) {
           )}
         </>
       )}
-      {full && CAP_HINT}
+      {!single && <CapHint count={picked.length} />}
       {big && (
         <SearchPicker
           options={options}
@@ -373,91 +387,115 @@ function ChoiceField({ field, values, disabled, onChange }: FieldProps) {
           onToggle={(l) => onChange(single ? [l] : toggle(values, l))}
         />
       )}
-    </div>
+    </fieldset>
   );
 }
 
-// Countries come from the catalog; anything else in the list is a city typed by the user.
+// The geography answer is regions, countries and cities together (10 in all). A region stands for all
+// its countries and stays stored as the region name; a city only counts next to a region or country.
 function GeoField({ values, disabled, countries: { options, error, retry }, field, onChange }: FieldProps) {
-  const countryNames = useMemo(() => new Map(options.map((o) => [o.label.toLowerCase(), o.label])), [options]);
-  const countries = values.filter((v) => countryNames.has(v.toLowerCase()));
-  const cities = values.filter((v) => v !== ANY && !countryNames.has(v.toLowerCase()));
+  const catalog = useMemo(() => new Map(options.map((o) => [o.label.toLowerCase(), o.label])), [options]);
+  const regionNames = useMemo(() => new Set(options.filter((o) => o.level === 1).map((o) => o.label)), [options]);
+  // regions to offer as quick-picks: not the ones that are only a heading (selectable: false)
+  const quick = useMemo(() => options.filter((o) => o.level === 1 && o.selectable !== false).map((o) => o.label), [options]);
+  const countryOpts = useMemo(() => options.filter((o) => o.level === 2), [options]);
+  const known = (v: string) => catalog.get(v.toLowerCase());
+  const places = values.filter((v) => known(v));
+  const cities = values.filter((v) => v !== ANY && !known(v));
   const [city, setCity] = useState("");
   const full = atCap(values);
-  const [region, setRegion] = useState("");
-  // the catalog lists regions (level 1) with their countries (level 2) under them
-  const regionNames = useMemo(() => new Set(options.filter((o) => o.level === 1).map((o) => o.label)), [options]);
-  const regions = options.filter((o) => o.level === 1).map((o) => o.label);
-  const inRegion = options.filter((o) => o.level === 2 && o.parent === region && !countries.includes(o.label));
+
+  // The region the Region button shows and the Country list narrows to: the last one picked, else the
+  // first one already in the answer (so a restored draft shows it too).
+  const [picked, setPicked] = useState<string | null>(null);
+  const region = picked ?? values.map(known).find((v) => v && regionNames.has(v) && quick.includes(v)) ?? "";
+  const [showAll, setShowAll] = useState(false);
+  const narrowed = !!region && !showAll;
+
+  const countryList = countryOpts.filter((o) => !values.some((v) => v.toLowerCase() === o.label.toLowerCase()) && (!narrowed || o.parent === region));
+  const regionOf = useMemo(() => Object.fromEntries(countryOpts.filter((o) => o.parent).map((o) => [o.label, o.parent as string])), [countryOpts]);
+
   const addCity = () => {
     const t = city.trim().slice(0, MAX_CHARS);
     setCity("");
-    if (t && !full && !values.some((v) => v.toLowerCase() === t.toLowerCase())) onChange([...values, t]);
+    if (t && !full && places.length > 0 && !values.some((v) => v.toLowerCase() === t.toLowerCase())) onChange([...values, t]);
   };
-  // cities only make sense under a country: removing the last country takes them with it
-  const removeCountry = (c: string) => {
-    const rest = values.filter((x) => x !== c);
-    onChange(rest.some((v) => countryNames.has(v.toLowerCase())) ? rest : []);
+  const remove = (v: string) => {
+    if (v === picked) setPicked(null);
+    onChange(values.filter((x) => x !== v)); // only this value; nothing else is touched
   };
+  const chipText = (v: string) => (regionNames.has(known(v) ?? "") ? `${v} (all countries)` : v);
+  const shown = without(values);
+
   return (
-    <div className="flex flex-col gap-2">
+    <fieldset className="flex flex-col gap-2 min-w-0 m-0 p-0 border-0">
+      <legend className="sr-only">{field.label}</legend>
       {error && <LoadError retry={retry} />}
-      <div className={WRAP}>
-        {field.any_allowed && <AnyChip values={values} onChange={onChange} disabled={disabled} />}
-      </div>
+      <div className={WRAP}>{field.any_allowed && <AnyChip values={values} onChange={onChange} disabled={disabled} />}</div>
       <div className="flex flex-wrap gap-2">
         <PickMenu
           label="Region"
-          placeholder="Choose a region"
+          placeholder="Add a region"
           value={region}
-          disabled={disabled || full || options.length === 0}
-          options={regions}
+          disabled={disabled || quick.length === 0}
+          options={quick}
           onPick={(r) => {
-            setRegion(r);
-            // a region on its own means all its countries; naming countries narrows it
+            setPicked(r);
+            setShowAll(false);
+            // adds the region (the cap and Any are handled by toggle); countries already chosen stay
             if (!values.includes(r)) onChange(toggle(values, r));
           }}
         />
         <PickMenu
-          key={region}
           label="Country"
-          placeholder={region ? `Narrow to a country in ${region} (optional)` : "Choose a region first"}
-          disabled={disabled || full || !region}
-          options={inRegion.map((o) => o.label)}
-          onPick={(l) => onChange(toggle(values.filter((v) => v !== region), l))}
+          placeholder={narrowed ? `Add a country in ${region}` : "Add a country"}
+          disabled={disabled || full || countryOpts.length === 0}
+          options={countryList.map((o) => o.label)}
+          detail={narrowed ? undefined : regionOf}
+          onPick={(l) => onChange(toggle(values, l))}
         />
       </div>
-      {countries.length > 0 && (
-        <>
-          <div className={WRAP}>
-            {countries.map((c) => (
-              <Chip key={c} text={regionNames.has(c) ? `${c} (all countries)` : c} on remove disabled={disabled} onClick={() => removeCountry(c)} />
-            ))}
-            {cities.map((c) => (
-              <Chip key={c} text={c} on remove disabled={disabled} onClick={() => onChange(values.filter((x) => x !== c))} />
-            ))}
-          </div>
-          <input
-            className={`${pillInput} block w-full py-2.5 px-[18px]`}
-            type="text"
-            maxLength={MAX_CHARS}
-            disabled={disabled || full}
-            placeholder="Add a city (optional), then press Enter"
-            aria-label="Add a city"
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === ",") {
-                e.preventDefault();
-                addCity();
-              }
-            }}
-            onBlur={addCity}
-          />
-        </>
+      {region && (
+        <button
+          type="button"
+          className="self-start border-0 bg-transparent p-0 text-[12px] text-muted underline"
+          aria-pressed={showAll}
+          onClick={() => setShowAll(!showAll)}
+        >
+          {showAll ? `Only countries in ${region}` : "Show all countries"}
+        </button>
       )}
-      {full && CAP_HINT}
-    </div>
+      {shown.length > 0 && (
+        <div className={WRAP}>
+          {shown.map((v) => (
+            <Chip key={v} text={chipText(v)} on remove disabled={disabled} onClick={() => remove(v)} />
+          ))}
+        </div>
+      )}
+      <input
+        className={`${pillInput} block w-full py-2.5 px-[18px]`}
+        type="text"
+        maxLength={MAX_CHARS}
+        disabled={disabled || full || places.length === 0}
+        placeholder={places.length ? "Add a city (optional), then press Enter" : "Add a region or country first"}
+        aria-label="Add a city"
+        value={city}
+        onChange={(e) => setCity(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === ",") {
+            e.preventDefault();
+            addCity();
+          }
+        }}
+        onBlur={addCity}
+      />
+      {cities.length > 0 && places.length === 0 && (
+        <p className="m-0 text-[12px] text-warn" role="alert">
+          Cities only count next to a region or country. Add one, or remove the cities.
+        </p>
+      )}
+      <CapHint count={shown.length} />
+    </fieldset>
   );
 }
 
@@ -573,7 +611,6 @@ function FieldInput(props: FieldProps) {
 
 interface Props {
   sessionId: string;
-  track: Track;
   cards: Card[];
   saved: Answers | null; // the last submitted answers, from the server
   disabled: boolean;
@@ -582,7 +619,7 @@ interface Props {
   onSubmit: (answers: Answers) => void;
 }
 
-export default function StepTwo({ sessionId, track, cards, saved, disabled, missing, error, onSubmit }: Props) {
+export default function StepTwo({ sessionId, cards, saved, disabled, missing, error, onSubmit }: Props) {
   const [answers, setAnswers] = useState<Answers>(() => loadDraft(sessionId) ?? saved ?? {});
   const [flagged, setFlagged] = useState<string[]>(missing);
   useEffect(() => setFlagged(missing), [missing]);
@@ -594,18 +631,13 @@ export default function StepTwo({ sessionId, track, cards, saved, disabled, miss
 
   const hasGeo = cards.some((c) => c.fields.some((f) => f.input === "geo"));
   const country = useOptions(hasGeo ? "country" : null);
-  const countries = useMemo(() => (hasGeo && country.options.length ? new Set(country.options.map((o) => o.label.toLowerCase())) : null), [hasGeo, country.options]);
-
-  // cities restored without a country (an old draft) cannot be shown or sent: drop them
-  useEffect(() => {
-    if (!countries) return;
-    const strays = cards.flatMap((c) => c.fields).filter((f) => f.input === "geo" && (answers[f.slot]?.length ?? 0) > 0 && !valid(f, answers[f.slot], countries) && !answers[f.slot].includes(ANY) && !answers[f.slot].some((v) => countries.has(v.toLowerCase())));
-    if (strays.length) setAnswers((a) => ({ ...a, ...Object.fromEntries(strays.map((f) => [f.slot, []])) }));
-  }, [countries, cards, answers]);
+  // the catalog values an answer may use: countries and the regions that can be picked
+  const countries = useMemo(
+    () => (hasGeo && country.options.length ? new Set(country.options.filter((o) => o.selectable !== false).map((o) => o.label.toLowerCase())) : null),
+    [hasGeo, country.options],
+  );
 
   const labels = new Map(cards.flatMap((c) => c.fields.map((f) => [f.slot, f.label] as const)));
-  const titleFor = (c: Card) => (c.id === "geography" && track === "sales" && answers.business_model?.includes("B2C") ? "Where do your customers live?" : c.title);
-
   // one card per screen
   const pages = cards.filter((c) => shownFields(c, answers).length > 0);
   const [page, setPage] = useState(0);
@@ -618,6 +650,14 @@ export default function StepTwo({ sessionId, track, cards, saved, disabled, miss
     if (i >= 0) setPage(i);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [missing]);
+
+  // move focus to the new screen's heading on Next/Back (not on first load)
+  const heading = useRef<HTMLHeadingElement>(null);
+  const moved = useRef(false);
+  useEffect(() => {
+    if (moved.current) heading.current?.focus();
+    moved.current = true;
+  }, [at]);
 
   const problems = problemSlots(cards, answers, countries);
   const pageProblems = cur ? problemSlots([cur], answers, countries) : [];
@@ -638,8 +678,11 @@ export default function StepTwo({ sessionId, track, cards, saved, disabled, miss
     <form className="flex flex-col gap-4 w-full max-w-[640px] mx-auto" onSubmit={submit}>
       {cur && (
         <>
-          <h1 className="mt-2 mb-1 text-center text-[clamp(22px,3vw,28px)] leading-[1.15] font-medium tracking-[-.025em]">{titleFor(cur)}</h1>
-          <section key={cur.id} className={`${card} flex flex-col gap-3 text-left`} aria-label={titleFor(cur)}>
+          <p className="m-0 text-center text-[12px] text-muted">
+            Question {at + 1} of {pages.length}
+          </p>
+          <h1 ref={heading} tabIndex={-1} className="mt-0 mb-1 text-center outline-0 text-[clamp(22px,3vw,28px)] leading-[1.15] font-medium tracking-[-.025em]">{cur.title}</h1>
+          <section key={cur.id} className={`${card} flex flex-col gap-3 text-left`} aria-label={cur.title}>
             {fields.map((f) => (
               <div key={f.slot} className="flex flex-col gap-2.5 not-first:mt-2 not-first:pt-4 not-first:border-t not-first:border-line">
                 {fields.length > 1 && (

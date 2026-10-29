@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as api from "../api";
 import type { StartRequest, Track } from "../types";
 import PickMenu from "./PickMenu";
@@ -11,6 +11,20 @@ const ROLES: { value: Track; label: string }[] = [
 
 const INPUT = `${pillInput} block w-full mt-1.5 py-3 px-[18px]`;
 const LABEL = "block text-[12px] font-medium text-muted";
+
+type Field = "track" | "company" | "website" | "industry";
+
+// website optional per the UI redesign; the spec lists it as required: confirm with the product owner
+const STEP1_REQUIRED: Field[] = ["track", "company", "industry"];
+const required = (f: Field) => STEP1_REQUIRED.includes(f);
+const star = (f: Field) => (required(f) ? " *" : " (optional)");
+
+// step 1 is asked one screen at a time
+const SCREENS: { title: string; fields: Field[] }[] = [
+  { title: "About you", fields: ["track", "company"] },
+  { title: "Your website", fields: ["website"] },
+  { title: "Your industry", fields: ["industry"] },
+];
 
 interface Props {
   busy: boolean;
@@ -36,10 +50,22 @@ export default function StepOne({ busy, error, onTrack, onSubmit }: Props) {
       .catch(() => setGroupsFailed(true));
   }, []);
 
-  // step 1 is asked one screen at a time: role + company, website (optional), industry
   const [screen, setScreen] = useState(0);
-  const last = screen === 2;
-  const ready = [!!track && !!company.trim(), true, !!industry][screen];
+  const last = screen === SCREENS.length - 1;
+  const value: Record<Field, string> = { track, company: company.trim(), website: website.trim(), industry };
+  const ok = (fs: Field[]) => fs.every((f) => !required(f) || !!value[f]);
+  const ready = ok(SCREENS[screen].fields);
+  const allReady = ok(SCREENS.flatMap((s) => s.fields));
+  // the button reads "Skip" only on a screen whose fields are all optional and still empty
+  const skip = SCREENS[screen].fields.every((f) => !required(f) && !value[f]);
+
+  // move focus to the new screen's heading on Next/Back (not on first load)
+  const heading = useRef<HTMLHeadingElement>(null);
+  const moved = useRef(false);
+  useEffect(() => {
+    if (moved.current) heading.current?.focus();
+    moved.current = true;
+  }, [screen]);
 
   return (
     <form
@@ -48,18 +74,27 @@ export default function StepOne({ busy, error, onTrack, onSubmit }: Props) {
         e.preventDefault();
         if (!ready || busy) return;
         if (!last) return setScreen(screen + 1);
+        if (!allReady) return;
         onSubmit({
           track: track as Track,
           company_name: company.trim(),
-          ...(website.trim() && { website: website.trim() }),
+          ...(value.website && { website: value.website }),
           industry,
         });
       }}
     >
+      <div>
+        <p className="m-0 text-[12px] text-muted">
+          Question {screen + 1} of {SCREENS.length}
+        </p>
+        <h2 ref={heading} tabIndex={-1} className="m-0 text-[17px] font-semibold outline-0">
+          {SCREENS[screen].title}
+        </h2>
+      </div>
       {screen === 0 && (
         <>
           <label className={LABEL}>
-            Your role *
+            Your role{star("track")}
             <select
               className={INPUT}
               value={track}
@@ -79,7 +114,7 @@ export default function StepOne({ busy, error, onTrack, onSubmit }: Props) {
             </select>
           </label>
           <label className={LABEL}>
-            Company name *
+            Company name{star("company")}
             <input
               className={INPUT}
               type="text"
@@ -94,7 +129,7 @@ export default function StepOne({ busy, error, onTrack, onSubmit }: Props) {
       )}
       {screen === 1 && (
         <label className={LABEL}>
-          Website (optional)
+          Website{star("website")}
           <input
             className={INPUT}
             type="text"
@@ -109,7 +144,7 @@ export default function StepOne({ busy, error, onTrack, onSubmit }: Props) {
       )}
       {screen === 2 && (
         <div className={LABEL}>
-          Industry *
+          Industry{star("industry")}
           <div className="mt-1.5">
             <PickMenu
               label="Industry"
@@ -142,7 +177,7 @@ export default function StepOne({ busy, error, onTrack, onSubmit }: Props) {
           </button>
         )}
         <button className={primaryBtn} type="submit" disabled={!ready || busy}>
-          {screen === 1 && !website.trim() ? "Skip" : "Continue"}
+          {skip ? "Skip" : "Continue"}
         </button>
       </div>
     </form>

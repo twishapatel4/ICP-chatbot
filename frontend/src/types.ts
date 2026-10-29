@@ -19,6 +19,7 @@ export interface ProfileOption {
   label: string;
   level: number;
   parent: string | null;
+  selectable?: boolean; // false: a heading only (e.g. the region "Other territories"); missing means true
 }
 
 export type FieldInput = "single" | "multi" | "chips" | "range" | "geo";
@@ -127,9 +128,10 @@ export type IcpEdit =
   | { kind: "requirement"; criterion: string; requirement: "required" | "preferred" }
   | { kind: "disqualifiers"; disqualifiers: Disqualifier[] };
 
-export interface LinkedinFilter {
+export interface FilterEntry {
   facet: string;
   slot: string;
+  filter_name?: string | null; // LinkedIn's own name for the filter; fall back to the facet
   ids: string[];
   labels: string[];
   unmapped: string[]; // values that are not a LinkedIn option and will not become a filter
@@ -137,7 +139,7 @@ export interface LinkedinFilter {
 
 export interface IcpDocument {
   track?: Track;
-  linkedin_filters?: LinkedinFilter[];
+  linkedin_filters?: FilterEntry[];
   sections: Record<string, Record<string, FieldEntry>>;
   scoring_model: { criteria: Criterion[]; disqualifiers: Disqualifier[] };
   summary: string;

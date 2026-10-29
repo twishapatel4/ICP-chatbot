@@ -462,7 +462,6 @@ export default function App() {
                 <StepTwo
                   key={`${sessionId}-${savedAnswers ? "saved" : "none"}`}
                   sessionId={sessionId}
-                  track={track ?? "sales"}
                   cards={cards}
                   saved={savedAnswers}
                   disabled={busy}
