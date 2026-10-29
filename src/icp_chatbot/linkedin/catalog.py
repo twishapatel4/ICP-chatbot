@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
 DATA_DIR = Path(__file__).parent / "data"
+
+log = logging.getLogger(__name__)
 
 FACETS = (
     "industry",
@@ -98,17 +101,24 @@ class OptionCatalog:
     def _load_optional(cls, facet: str, path: Path) -> list[Option]:
         """Options of a synced snapshot, or [] when the file is empty, not a JSON list, or has
         a row without an id and a label (a half-written or hand-edited file must not enable
-        a card that cannot be answered)."""
+        a card that cannot be answered). An unusable file is logged and treated as absent."""
         try:
             rows = json.loads(path.read_text(encoding="utf-8"))
-            if not isinstance(rows, list) or not all(
-                isinstance(r, dict) and r.get("id") not in (None, "") and r.get("label")
-                for r in rows
+            if (
+                isinstance(rows, list)
+                and rows
+                and all(
+                    isinstance(r, dict) and r.get("id") not in (None, "") and r.get("label")
+                    for r in rows
+                )
             ):
-                return []
-            return [cls._build(facet, row) for row in rows]
+                return [cls._build(facet, row) for row in rows]
         except (ValueError, TypeError, OSError):
-            return []
+            pass
+        log.warning(
+            "%s is empty or malformed; the %s catalog is treated as absent", path.name, facet
+        )
+        return []
 
     @staticmethod
     def _build(facet: str, row: dict) -> Option:

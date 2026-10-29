@@ -243,3 +243,166 @@ def test_malformed_bundled_file_still_raises(tmp_path):
     (data / "industries.json").write_text("not json {")
     with pytest.raises(ValueError):
         OptionCatalog(data)
+
+
+# --- fix round 1: atomic writes, token-safe errors, paging guard, dedupe, logging, 429 ---
+
+TOKEN = "tok-SECRET-123"
+
+
+def _ok_degrees():
+    return httpx.Response(200, json=_page([_degree(1, "BSc", 1)], 0, 1))
+
+
+def _ok_fields():
+    return httpx.Response(200, json=_page([{"id": 3, "name": _name("Maths")}], 0, 1))
+
+
+def _seed_old_pair(out):
+    out.mkdir(exist_ok=True)
+    (out / "degrees.json").write_text('[{"id": "old", "label": "Old"}]')
+    (out / "fields_of_study.json").write_text('[{"id": "old", "label": "Old"}]')
+    return {p.name: p.read_text() for p in out.iterdir()}
+
+
+def _run(monkeypatch, out, token=TOKEN):
+    monkeypatch.setenv("LINKEDIN_TOKEN", token)
+    return sync.main(["--token-env", "LINKEDIN_TOKEN", "--out-dir", str(out)])
+
+
+@respx.mock
+@pytest.mark.parametrize("exc", [OSError("disk full"), KeyboardInterrupt()])
+def test_failure_writing_second_file_keeps_old_pair_and_leaves_no_temp(monkeypatch, tmp_path, exc):
+    respx.get(f"{BASE}/degrees").mock(return_value=_ok_degrees())
+    respx.get(f"{BASE}/fieldsOfStudy").mock(return_value=_ok_fields())
+    before = _seed_old_pair(tmp_path)
+    real = sync._write_temp
+    calls = []
+
+    def flaky(path, text):
+        calls.append(path)
+        if len(calls) == 2:
+            real(path, text[:3])  # a truncated temp file is left behind by the failure
+            raise exc
+        real(path, text)
+
+    monkeypatch.setattr(sync, "_write_temp", flaky)
+    with pytest.raises((SystemExit, KeyboardInterrupt, OSError)):
+        _run(monkeypatch, tmp_path)
+    assert {p.name: p.read_text() for p in tmp_path.iterdir()} == before
+
+
+@respx.mock
+def test_rerun_replaces_both_files_and_leaves_no_temp(monkeypatch, tmp_path):
+    respx.get(f"{BASE}/degrees").mock(return_value=_ok_degrees())
+    respx.get(f"{BASE}/fieldsOfStudy").mock(return_value=_ok_fields())
+    _seed_old_pair(tmp_path)
+    assert _run(monkeypatch, tmp_path) == 0
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["degrees.json", "fields_of_study.json"]
+    assert json.loads((tmp_path / "degrees.json").read_text())[0]["id"] == "1"
+    assert json.loads((tmp_path / "fields_of_study.json").read_text())[0]["id"] == "3"
+
+
+@pytest.mark.parametrize("bad", ["abc\ndef", "abc\x01def", "ab cd", "ab\tcd", "ab\x7fcd"])
+def test_token_with_whitespace_or_control_chars_is_rejected_without_echo(
+    monkeypatch, capsys, tmp_path, bad
+):
+    with respx.mock:  # any request would fail the test: no routes are registered
+        with pytest.raises(SystemExit) as exc:
+            _run(monkeypatch, tmp_path, token=bad)
+    out = capsys.readouterr()
+    assert "LINKEDIN_TOKEN" in str(exc.value.code)
+    for text in (str(exc.value.code), out.out, out.err):
+        assert "abc" not in text and "def" not in text and "cd" not in text.replace("control", "")
+    assert list(tmp_path.iterdir()) == []
+
+
+@respx.mock
+def test_transport_error_message_is_redacted(monkeypatch, capsys, tmp_path):
+    respx.get(f"{BASE}/degrees").mock(
+        side_effect=httpx.LocalProtocolError(f"Illegal header value b'Bearer {TOKEN}'")
+    )
+    with pytest.raises(SystemExit) as exc:
+        _run(monkeypatch, tmp_path)
+    out = capsys.readouterr()
+    assert "LocalProtocolError" in str(exc.value.code)
+    assert "***" in str(exc.value.code)
+    for text in (str(exc.value.code), out.out, out.err):
+        assert TOKEN not in text
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_redact_replaces_every_occurrence():
+    assert sync.redact(f"a {TOKEN} b {TOKEN}", TOKEN) == "a *** b ***"
+
+
+@respx.mock
+def test_429_fails_clearly_mentions_retry_after_and_writes_nothing(monkeypatch, tmp_path):
+    respx.get(f"{BASE}/degrees").mock(
+        return_value=httpx.Response(429, headers={"Retry-After": "30"})
+    )
+    with pytest.raises(SystemExit) as exc:
+        _run(monkeypatch, tmp_path)
+    msg = str(exc.value.code)
+    assert "429" in msg and "Retry-After" in msg and "30" in msg
+    assert TOKEN not in msg
+    assert list(tmp_path.iterdir()) == []
+
+
+@respx.mock
+def test_429_without_retry_after_still_fails_clearly(monkeypatch, tmp_path):
+    respx.get(f"{BASE}/degrees").mock(return_value=httpx.Response(429))
+    with pytest.raises(SystemExit) as exc:
+        _run(monkeypatch, tmp_path)
+    assert "429" in str(exc.value.code)
+    assert list(tmp_path.iterdir()) == []
+
+
+@respx.mock
+def test_fetch_all_stops_when_api_ignores_start(monkeypatch):
+    route = respx.get(f"{BASE}/degrees").mock(
+        return_value=httpx.Response(200, json={"elements": [{"id": 1}, {"id": 2}]})
+    )
+    with httpx.Client() as client, pytest.raises(sync.SyncError, match="repeat"):
+        sync.fetch_all("/degrees", "t", client, count=2)
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_fetch_all_stops_after_max_pages():
+    page = iter(range(1000))
+    respx.get(f"{BASE}/degrees").mock(
+        side_effect=lambda request: httpx.Response(200, json={"elements": [{"id": next(page)}]})
+    )
+    with httpx.Client() as client, pytest.raises(sync.SyncError, match="pages"):
+        sync.fetch_all("/degrees", "t", client, count=1, max_pages=3)
+
+
+def test_to_options_dedupes_by_id_first_wins():
+    rows = [_degree(5, "First", 1), _degree("5", "Second", 2), _degree(6, "Other", 1)]
+    opts = sync.to_options("degree", rows)
+    assert [(o.id, o.label) for o in opts] == [("5", "First"), ("6", "Other")]
+
+
+@pytest.mark.parametrize("content", ["", "not json {", "[]", '[{"id": "1"}]'])
+def test_unusable_optional_file_logs_a_warning_naming_the_file(tmp_path, caplog, content):
+    data = _data_dir(tmp_path)
+    (data / "degrees.json").write_text(content)
+    with caplog.at_level("WARNING", logger="icp_chatbot.linkedin.catalog"):
+        assert not OptionCatalog(data).has("degree")
+    assert any("degrees.json" in r.getMessage() for r in caplog.records)
+
+
+def test_absent_optional_file_logs_nothing(tmp_path, caplog):
+    data = _data_dir(tmp_path)
+    with caplog.at_level("WARNING", logger="icp_chatbot.linkedin.catalog"):
+        OptionCatalog(data)
+    assert not caplog.records
+
+
+def test_token_with_nul_is_rejected_without_echo(monkeypatch, tmp_path):
+    # a NUL cannot be set in a real environment; patch the mapping to cover the check anyway
+    monkeypatch.setattr(sync.os, "environ", {"LINKEDIN_TOKEN": "abc\x00def"})
+    with pytest.raises(SystemExit) as exc:
+        sync.main(["--token-env", "LINKEDIN_TOKEN", "--out-dir", str(tmp_path)])
+    assert "LINKEDIN_TOKEN" in str(exc.value.code) and "abc" not in str(exc.value.code)

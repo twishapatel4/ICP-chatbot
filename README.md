@@ -74,7 +74,7 @@ The API trusts an `X-Tenant-Id` header set by LeadNest's gateway. Do not expose 
 | Compare with an earlier run | `... -m icp_chatbot.cli.replay --baseline base.json` |
 | Is the launch set ready? | `PYTHONPATH=src .venv/bin/python -m icp_chatbot.cli.launch_check` |
 | Interview metrics | `PYTHONPATH=src .venv/bin/python -m icp_chatbot.cli.metrics --days 30` |
-| Refresh the HR degree and field-of-study lists (needs a LinkedIn API token) | `LINKEDIN_TOKEN=... .venv/bin/python scripts/sync_linkedin_catalogs.py --token-env LINKEDIN_TOKEN` |
+| Refresh the HR degree and field-of-study lists (needs a LinkedIn API token) | `LINKEDIN_TOKEN=... .venv/bin/python scripts/sync_linkedin_catalogs.py --token-env LINKEDIN_TOKEN` (the two generated files in `src/icp_chatbot/linkedin/data/` are committed deliberately after a real run) |
 | Mark stale interviews abandoned (run hourly) | `PYTHONPATH=src .venv/bin/python -m icp_chatbot.cli.abandon` |
 
 Write evaluation results outside `eval_cases/`: every `.json` file in that folder is read as a case.
