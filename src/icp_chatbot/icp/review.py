@@ -13,10 +13,10 @@ from icp_chatbot.icp.document import (
     FieldEntry,
     ICPDocument,
     compute_completeness,
-    filters_from_entries,
     group_by_section,
     render_summary,
     sync_field_requirements,
+    with_slot_filter,
 )
 from icp_chatbot.icp.scoring import (
     Disqualifier,
@@ -65,14 +65,17 @@ class FeedbackSpec:
     new: Any
 
 
-def _rebuild(document: ICPDocument, entries: dict[str, FieldEntry], model) -> ICPDocument:
+def _rebuild(
+    document: ICPDocument, entries: dict[str, FieldEntry], model, filters=None
+) -> ICPDocument:
+    """`filters` is the LinkedIn block to keep; the stored one stays unless an edit changed it."""
     rebuilt = document.model_copy(
         update={
             "sections": group_by_section(entries, document.slot_defs(), document.track),
             "scoring_model": model,
             "summary": render_summary(entries, document.slot_defs(), document.track),
             "completeness": compute_completeness(entries, document.needed_defs(), document.track),
-            "linkedin_filters": filters_from_entries(entries, document.track),
+            "linkedin_filters": document.linkedin_filters if filters is None else filters,
         }
     )
     return sync_field_requirements(rebuilt)
@@ -101,7 +104,8 @@ def apply_edit(
             entries.pop(edit.slot, None)
         slot_values = {k: e.values for k, e in entries.items() if e.values}
         model = refresh_model(model, slot_values)
-        return _rebuild(document, entries, model), [
+        filters = with_slot_filter(document.linkedin_filters, edit.slot, values, document.track)
+        return _rebuild(document, entries, model, filters), [
             FeedbackSpec("field_edit", edit.slot, old, values)
         ]
 
@@ -157,9 +161,11 @@ def carry_over_edits(new_document: ICPDocument, previous: ICPDocument) -> ICPDoc
     already changed: edited fields, weights, required flags and exclusion rules. Fields the
     company removed are not carried over, because a removal leaves no trace in the document."""
     entries = new_document.entries()
+    filters = new_document.linkedin_filters  # freshly built entries stay for untouched slots
     for slot, entry in previous.entries().items():
         if entry.evidence == EDITED_EVIDENCE:
             entries[slot] = entry
+            filters = with_slot_filter(filters, slot, entry.values, new_document.track)
     slot_values = {k: e.values for k, e in entries.items() if e.values}
     model = refresh_model(previous.scoring_model, slot_values)
-    return _rebuild(new_document, entries, model)
+    return _rebuild(new_document, entries, model, filters)

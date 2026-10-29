@@ -191,7 +191,9 @@ def test_industry_catalog_lists_top_level_groups_only():
     top = [o.label for o in options if o.level == 1]
     nested = next(o.label for o in options if o.level > 1)
     line = next(
-        row for row in render_slot_catalog("hr").splitlines() if row.startswith("- current_industries:")
+        row
+        for row in render_slot_catalog("hr").splitlines()
+        if row.startswith("- current_industries:")
     )
     assert all(label in line for label in top)
     assert nested not in line and "exact LinkedIn industry label" in line
@@ -200,7 +202,9 @@ def test_industry_catalog_lists_top_level_groups_only():
 
 def test_countries_are_not_listed_one_by_one():
     line = next(
-        row for row in render_slot_catalog("hr").splitlines() if row.startswith("- candidate_locations:")
+        row
+        for row in render_slot_catalog("hr").splitlines()
+        if row.startswith("- candidate_locations:")
     )
     assert "English country name" in line and len(line) < 600
 
@@ -352,3 +356,32 @@ async def test_review_edit_of_field_works_for_hr_slot():
     assert specs[0].type == "field_edit"
     with pytest.raises(ValueError):
         apply_edit(doc, FieldEdit(slot="product", values=["x"]), TODAY)  # a Sales-only slot
+
+
+async def test_hr_filters_use_the_right_facets_and_ids():
+    doc = await _hr_document()
+    by_slot = {f.slot: f for f in doc.linkedin_filters}
+    assert by_slot["candidate_locations"].facet == "country" and by_slot["candidate_locations"].ids
+    assert by_slot["target_functions"].facet == "function" and by_slot["target_functions"].ids
+    assert "required_skills" not in by_slot
+
+
+def test_hr_gap_notes_and_registry_text_use_no_sales_words():
+    import re
+
+    from icp_chatbot.icp.document import missing_slots
+
+    banned = re.compile(r"\b(ICP|leads?|customers?)\b", re.IGNORECASE)
+    notes = missing_slots({}, limit=100, track="hr")
+    assert len(notes) > 10
+    registry_text = [f"{s.label} {s.description}" for s in registry("hr")]
+    assert not [t for t in [*notes, *registry_text] if banned.search(t)]
+
+
+def test_refresh_model_is_track_agnostic_for_an_hr_model():
+    from icp_chatbot.icp.scoring import default_scoring_model, refresh_model
+
+    model = default_scoring_model({}, track="hr")
+    refreshed = refresh_model(model, {"required_skills": ["Python"]})
+    assert validate_model(refreshed, "hr") == []
+    assert any("required_skills" in c.rules for c in refreshed.criteria)

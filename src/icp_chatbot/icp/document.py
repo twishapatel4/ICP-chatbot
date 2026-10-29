@@ -294,7 +294,9 @@ def known_slot_keys(track: Track = "sales") -> set[str]:
 def _filter_entry(
     slot: str, values: list[str], refs: list, unmapped: list[str]
 ) -> FilterEntry | None:
-    if not values or values == [ANY]:  # "Any" is no preference: no filter at all
+    # non-answers carry no filter, and "Any" (no preference) never travels with other values
+    values = [v for v in real_values(slot, values) if v != ANY]
+    if not values:
         return None
     if not refs and not unmapped:  # inferred or confirmed values were never matched to options
         values, refs, unmapped = resolve_slot_values(slot, values)
@@ -321,13 +323,17 @@ def build_linkedin_filters(state: SessionState) -> list[FilterEntry]:
     return found
 
 
-def filters_from_entries(entries: dict[str, FieldEntry], track: Track) -> list[FilterEntry]:
-    """The same block worked out from a document's fields, after the company edited them."""
-    own = slot_map(track)
-    found = [
-        entry
-        for slot in SLOT_FACETS
-        if slot in own and slot in entries
-        if (entry := _filter_entry(slot, entries[slot].values, [], []))
-    ]
-    return found
+def with_slot_filter(
+    filters: list[FilterEntry], slot: str, values: list[str], track: Track
+) -> list[FilterEntry]:
+    """The block after one slot was edited: only that slot's entry is replaced (or removed when
+    the slot has no facet or the new values add no filter); every other entry stays as stored.
+    Typed edits carry no refs, so the entry comes from catalog resolution."""
+    kept = [f for f in filters if f.slot != slot]
+    if slot not in SLOT_FACETS or slot not in slot_map(track):
+        return kept
+    entry = _filter_entry(slot, values, [], [])
+    if entry is None:
+        return kept
+    merged = {f.slot: f for f in [*kept, entry]}
+    return [merged[k] for k in SLOT_FACETS if k in merged]

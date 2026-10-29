@@ -284,3 +284,142 @@ async def test_sales_document_unchanged_apart_from_filters_block():
 def test_legacy_sales_document_loads_with_track_sales_and_empty_filters():
     doc = ICPDocument.model_validate(legacy_document())
     assert doc.track == "sales" and doc.linkedin_filters == []
+
+
+# -- the filters block survives review edits (ruling R15) ------------------------------------------
+
+
+async def _filtered_doc():
+    state = _filters_state(lead_geographies=["Europe"], buyer_roles=["CFO"])
+    state.slots["industries"] = _resolved("industries", ["Financial Services"])
+    state.slots["company_size"] = _resolved("company_size", ["51-200"])
+    return await _build(state)
+
+
+def _blocks(doc):
+    return [f.model_dump() for f in doc.linkedin_filters]
+
+
+async def test_weight_requirement_and_disqualifier_edits_leave_filters_identical():
+    from datetime import date
+
+    from icp_chatbot.icp.review import (
+        DisqualifierEdit,
+        RequirementEdit,
+        WeightEdit,
+        apply_edit,
+    )
+    from icp_chatbot.icp.scoring import Disqualifier
+
+    doc = await _filtered_doc()
+    before = _blocks(doc)
+    assert before
+    weights = {c.key: c.weight for c in doc.scoring_model.criteria}
+    first, second = list(weights)[:2]
+    edits = [
+        WeightEdit(weights={first: weights[first] + 5, second: weights[second] - 5}),
+        RequirementEdit(criterion=first, requirement="required"),
+        DisqualifierEdit(
+            disqualifiers=[Disqualifier(field="industries", operator="in", values=["Government"])]
+        ),
+    ]
+    for edit in edits:
+        edited, _ = apply_edit(doc, edit, date(2026, 10, 20))
+        assert _blocks(edited) == before
+
+
+async def test_field_edit_replaces_only_that_slots_entry():
+    from datetime import date
+
+    from icp_chatbot.icp.review import FieldEdit, apply_edit
+
+    doc = await _filtered_doc()
+    edited, _ = apply_edit(doc, FieldEdit(slot="industries", values=["Insurance"]), date.today())
+    old = {f.slot: f for f in doc.linkedin_filters}
+    new = {f.slot: f for f in edited.linkedin_filters}
+    assert new["industries"].labels == ["Insurance"] and new["industries"].ids
+    assert new["industries"].ids != old["industries"].ids
+    assert {k: v for k, v in new.items() if k != "industries"} == {
+        k: v for k, v in old.items() if k != "industries"
+    }
+    assert [f.slot for f in edited.linkedin_filters] == [f.slot for f in doc.linkedin_filters]
+
+
+async def test_field_edit_to_any_or_empty_removes_the_entry_and_non_facet_edit_changes_nothing():
+    from datetime import date
+
+    from icp_chatbot.icp.review import FieldEdit, apply_edit
+
+    doc = await _filtered_doc()
+    for values in (["Any"], []):
+        edited, _ = apply_edit(doc, FieldEdit(slot="industries", values=values), date.today())
+        assert "industries" not in {f.slot for f in edited.linkedin_filters}
+        assert len(edited.linkedin_filters) == len(doc.linkedin_filters) - 1
+    edited, _ = apply_edit(doc, FieldEdit(slot="buyer_roles", values=["CEO"]), date.today())
+    assert _blocks(edited) == _blocks(doc)
+
+
+async def test_carry_over_keeps_new_ids_for_untouched_slots_and_recomputes_edited_ones():
+    from datetime import date
+
+    from icp_chatbot.icp.review import FieldEdit, apply_edit, carry_over_edits
+
+    old = await _filtered_doc()
+    edited, _ = apply_edit(old, FieldEdit(slot="industries", values=["Insurance"]), date.today())
+    rebuilt_state = _filters_state(lead_geographies=["Europe"], buyer_roles=["CFO"])
+    rebuilt_state.slots["industries"] = _resolved("industries", ["Financial Services"])
+    rebuilt_state.slots["company_size"] = _resolved("company_size", ["201-500"])
+    fresh = await _build(rebuilt_state)
+    merged = carry_over_edits(fresh, edited)
+    by_slot = {f.slot: f for f in merged.linkedin_filters}
+    fresh_by_slot = {f.slot: f for f in fresh.linkedin_filters}
+    assert by_slot["company_size"] == fresh_by_slot["company_size"]
+    assert (
+        by_slot["company_size"].ids != {f.slot: f for f in old.linkedin_filters}["company_size"].ids
+    )
+    assert by_slot["industries"].labels == ["Insurance"]
+
+
+async def test_legacy_document_stays_unfiltered_after_a_weight_edit_until_a_facet_edit():
+    from datetime import date
+
+    from icp_chatbot.icp.review import FieldEdit, WeightEdit, apply_edit
+
+    legacy = ICPDocument.model_validate(legacy_document())
+    weights = {c.key: c.weight for c in legacy.scoring_model.criteria}
+    first, second = list(weights)[:2]
+    edited, _ = apply_edit(
+        legacy, WeightEdit(weights={first: weights[first] + 5, second: weights[second] - 5}),
+        date.today(),
+    )  # fmt: skip
+    assert edited.linkedin_filters == []
+    edited, _ = apply_edit(legacy, FieldEdit(slot="industries", values=["Insurance"]), date.today())
+    assert [f.slot for f in edited.linkedin_filters] == ["industries"]
+
+
+async def test_built_and_edited_ids_agree_for_an_unambiguous_label():
+    from datetime import date
+
+    from icp_chatbot.icp.review import FieldEdit, apply_edit
+
+    doc = await _filtered_doc()
+    edited, _ = apply_edit(
+        doc, FieldEdit(slot="industries", values=["Financial Services"]), date.today()
+    )
+    ids = {f.slot: f.ids for f in doc.linkedin_filters}["industries"]
+    assert {f.slot: f.ids for f in edited.linkedin_filters}["industries"] == ids
+
+
+async def test_a_geography_with_a_city_is_not_flagged_unmapped():
+    doc = await _build(_filters_state(lead_geographies=["Pune"]))
+    (entry,) = [f for f in doc.linkedin_filters if f.slot == "lead_geographies"]
+    assert entry.unmapped == [] and entry.facet == "country"
+
+
+async def test_non_answers_and_any_mixed_with_values_never_enter_the_filter():
+    doc = await _build(
+        _filters_state(industries=["Any", "Financial Services"], company_size=["not sure"])
+    )
+    by_slot = {f.slot: f for f in doc.linkedin_filters}
+    assert "company_size" not in by_slot
+    assert "Any" not in by_slot["industries"].labels and by_slot["industries"].ids
