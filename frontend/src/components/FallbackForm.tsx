@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FormField } from "../types";
+import { TitleField } from "./StepTwo";
 import { actions, card, chip, chipOn, chips, pillInput, primaryBtn } from "../ui";
 
 interface Props {
@@ -37,7 +38,17 @@ export default function FallbackForm({ fields, disabled, missing, onSubmit }: Pr
           <label className={`block text-[12px] font-medium ${missing.includes(f.key) ? "text-warn" : "text-muted"}`}>
             {f.label}
             {f.required ? " *" : ""}
-            {f.choices.length === 0 && (
+            {f.facet === "title" && (
+              <div className="mt-1.5 font-normal">
+                <TitleField
+                  values={answers[f.key] ?? []}
+                  disabled={disabled}
+                  facet={f.facet}
+                  onChange={(v) => setAnswers({ ...answers, [f.key]: v })}
+                />
+              </div>
+            )}
+            {!f.facet && f.choices.length === 0 && (
               <input
                 className={`${pillInput} block w-full mt-1.5 py-3 px-[18px]`}
                 type="text"

@@ -13,7 +13,7 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
-from icp_chatbot.domain.slots import slot_map
+from icp_chatbot.domain.slots import registry, slot_map
 from icp_chatbot.domain.state import SessionState, SlotSource, normalize_values
 from icp_chatbot.icp.document import (
     FieldEntry,
@@ -125,12 +125,34 @@ def _repeats_exclusion(question: str, exclusions: list[str]) -> bool:
     return False
 
 
-def _keep_questions(questions: list[str], exclusions: list[str]) -> list[str]:
+def _answered_stems(entries: dict[str, FieldEntry], defs) -> list[set[str]]:
+    """For each field that has an answer (an "Any" counts), the stems of the words in its key
+    ("lead_geographies" is {lead, geog}): a question with all of them asks about that field."""
+    out = []
+    for slot in defs:
+        entry = entries.get(slot.key)
+        if entry and entry.values:
+            stems = {w[:4] for w in _WORD.findall(slot.key.replace("_", " "))}
+            if stems:
+                out.append(stems)
+    return out
+
+
+def _asks_known_field(question: str, answered: list[set[str]]) -> bool:
+    asked = {w[:4] for w in _WORD.findall(question.lower())}
+    return any(stems <= asked for stems in answered)
+
+
+def _keep_questions(
+    questions: list[str], exclusions: list[str], answered: list[set[str]] | None = None
+) -> list[str]:
     seen: set[str] = set()
     out = []
     for question in questions:
         text = question.strip()
         key = " ".join(_WORD.findall(text.lower()))
+        if answered and _asks_known_field(text, answered):
+            continue  # it asks about something the user already answered
         if text and key not in seen and not _repeats_exclusion(text, exclusions):
             seen.add(key)
             out.append(text)
@@ -190,7 +212,8 @@ async def build_icp(
                     f"Could not turn this exclusion into a rule: {draft.field} {draft.operator} {draft.values}"
                 )
         exclusions = entries["disqualifiers"].values if "disqualifiers" in entries else []
-        open_questions.extend(_keep_questions(synthesis.open_questions, exclusions))
+        answered = _answered_stems(entries, registry(state.track))
+        open_questions.extend(_keep_questions(synthesis.open_questions, exclusions, answered))
 
     shell = ICPDocument(
         track=state.track,
@@ -198,7 +221,7 @@ async def build_icp(
         scoring_model=default_scoring_model({}, track=state.track),
         completeness=compute_completeness({}, track=state.track),
         custom_fields=list(state.domain.fields) if state.domain else [],
-        not_needed=list(state.domain.not_needed) if state.domain else [],
+        not_needed=[*(state.domain.not_needed if state.domain else []), *state.excluded],
     )
     needed = shell.needed_defs()
     open_questions.extend(missing_slots(entries, defs=needed, track=state.track))

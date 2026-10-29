@@ -60,8 +60,11 @@ _SALES_CARDS = (
     Card("target_industries", "What are your Target Industries?",
          (CardField("industries", "multi", "industry", any_allowed=True),)),
     Card("geography", "Where do you serve?", (
-        CardField("lead_geographies", "geo", "country", any_allowed=True),
+        # where the target companies are headquartered is always asked; where their people live only
+        # matters to some, so the form asks that and may switch it off (a lead is then matched on
+        # the head office alone)
         CardField("company_hq_geographies", "geo", "country", any_allowed=True),
+        CardField("lead_geographies", "geo", "country", optional=True, any_allowed=True),
     )),
     Card("buyer_roles", "Which job titles do you want to reach?", (
         CardField("buyer_roles", "chips"),
@@ -281,6 +284,11 @@ def validate_profile(
                 continue
             if values is None or not _field_valid(track, field, values):
                 problems.append(field.slot)
+    # a card whose fields can be switched off still needs one of them
+    for card in profile_cards(track):
+        geo = [f for f in _visible_fields(track, card, state) if f.input == "geo" and f.optional]
+        if len(geo) > 1 and not any(_answer(answers, f) for f in geo):
+            problems.extend(f.slot for f in geo if f.slot not in problems)
     return problems
 
 
@@ -315,7 +323,11 @@ def apply_profile(state: SessionState, answers: Any, turn_no: int = 0) -> list[s
             values = _answer(answers, field) or []
             if not values:
                 _drop_form_value(state, field.slot)
+                if field.input == "geo" and field.optional and field.slot not in state.excluded:
+                    state.excluded.append(field.slot)  # switched off: never asked, never scored
                 continue
+            if field.slot in state.excluded:
+                state.excluded.remove(field.slot)
             if field.input == "range" and values != [ANY]:
                 values = [_range_text(field.slot, values[0])]
             labels, refs, unmapped = resolve_slot_values(field.slot, values)

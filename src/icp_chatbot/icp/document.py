@@ -167,20 +167,80 @@ def missing_slots(
     gaps = [
         s
         for s in defs or registry(track)
-        if s.tier in (Tier.A, Tier.B) and _applicable(s, entries) and not _is_known(s, entries)
+        if s.tier in (Tier.A, Tier.B)
+        and _applicable(s, entries)
+        and not _is_known(s, entries)
+        and not _answered_any(s, entries)
     ]
     gaps.sort(key=lambda s: (s.tier != Tier.A, -s.importance))
     return [_gap_note(s, entries) for s in gaps[:limit]]
 
 
+def _answered_any(slot, entries: dict[str, FieldEntry]) -> bool:
+    """"Any" is an answer (no preference), so the field is not a gap."""
+    entry = entries.get(slot.key)
+    return bool(entry and any(v.strip().lower() == ANY.lower() for v in entry.values))
+
+
+# What to ask for a field that is still unknown: a plain question, as a person would put it.
+GAP_QUESTIONS: dict[str, str] = {
+    "product": "What does the company sell, and what role does it play?",
+    "business_model": "Do you sell to businesses, to individuals, or both?",
+    "how_we_work": "How does a customer go from first contact to a closed deal, and how are you paid?",
+    "lead_sources": "Where do your new customers come from today?",
+    "value_proposition": "Why do customers choose you over others?",
+    "customer_profile": "Who are your customers: their life stage, household and what they want?",
+    "industries": "Which industries do your best customers work in?",
+    "company_size": "How big are your best customers, in number of employees?",
+    "lead_geographies": "Where are the people you sell to based?",
+    "company_hq_geographies": "Where are the head offices of the companies you sell to?",
+    "company_type": "What kind of companies do you sell to: private, public, nonprofit?",
+    "services_offered": "What services do your buyers offer to their own clients?",
+    "revenue_range": "What annual revenue do your best customers have?",
+    "technologies_used": "Which software or tools do your best customers already use?",
+    "customer_segments": "Who do your customers themselves sell to?",
+    "buyer_roles": "Who makes or influences the buying decision?",
+    "buyer_departments": "Which departments are involved in buying?",
+    "buyer_seniority": "How senior are the people who buy?",
+    "buying_triggers": "What events make a company ready to buy from you?",
+    "disqualifiers": "Which companies do you want to avoid?",
+    "target_functions": "Which job function does the hire belong to?",
+    "target_roles": "Which job titles are you hiring for?",
+    "experience_level": "Are you hiring a fresher, an experienced person, or either?",
+    "target_seniority": "How senior should the hire be?",
+    "education_level": "What is the minimum education the candidates need?",
+    "field_of_study": "Which subjects should the candidates have studied?",
+    "graduation_year": "Which graduation years are you looking at?",
+    "years_experience": "How many years of experience should the candidates have?",
+    "current_industries": "Which industries should the candidates work in today?",
+    "current_company_size": "How big should the companies the candidates work at be?",
+    "current_company_hq": "Where should the candidates' current companies be headquartered?",
+    "target_schools": "Which schools or universities do you prefer?",
+    "required_skills": "Which skills must the candidates have?",
+    "nice_to_have_skills": "Which skills would be a plus?",
+    "certifications": "Do the candidates need any certifications?",
+    "languages": "Which languages should the candidates speak?",
+    "candidate_locations": "Where should the candidates be based?",
+    "employment_type": "Is the role full-time, part-time, contract or an internship?",
+    "work_mode": "Is the role on-site, hybrid or remote?",
+    "relocation": "Can candidates from other places be asked to relocate?",
+    "headcount": "How many people are you hiring?",
+    "salary_range": "What pay is on offer, and is it monthly or yearly?",
+    "notice_period": "What is the longest notice period you can wait for?",
+    "urgency": "How soon does the role need to be filled?",
+    "source_companies": "At which companies are good candidates likely to work today?",
+    "avoid_companies": "Which companies should you not hire from?",
+}
+
+
 def _gap_note(slot: SlotDef, entries: dict[str, FieldEntry]) -> str:
-    """A field the card already shows is only unconfirmed, not unknown: saying "Not yet known"
-    under its values reads as a contradiction."""
+    """A field the card already shows is only unconfirmed, not unknown: asking for it again would
+    read as a contradiction, so it is a question to confirm."""
     entry = entries.get(slot.key)
     shown = real_values(slot.key, entry.values) if entry else []
     if shown:
-        return f"Please confirm: {slot.label.lower()} ({', '.join(shown)}) is only a guess so far."
-    return f"Not yet known: {slot.label.lower()}. {slot.description.rstrip('.')}."
+        return f"Is {', '.join(shown)} right for {slot.label.lower()}?"
+    return GAP_QUESTIONS.get(slot.key) or f"What can you tell me about {slot.label.lower()}?"
 
 
 def compute_completeness(

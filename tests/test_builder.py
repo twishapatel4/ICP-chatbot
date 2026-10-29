@@ -133,7 +133,7 @@ async def test_still_unclear_lists_the_core_fields_that_are_missing():
     state.slots["industries"] = slot(["fintech"])
     result = await build_icp(FakeLLM({"final_icp": [ICPSynthesis()]}), CONFIG, state, today=TODAY)
     notes = result.document.open_questions
-    assert 0 < len(notes) <= 5 and all(n.startswith("Not yet known:") for n in notes)
+    assert 0 < len(notes) <= 5 and all(n.endswith("?") for n in notes)
     assert not any("industries" in n.lower() for n in notes)  # known fields are not listed
 
 
@@ -145,7 +145,7 @@ async def test_a_low_confidence_or_non_answer_field_is_listed_as_unknown():
     state.slots["business_model"] = slot(["B2B"])
     result = await build_icp(FakeLLM({"final_icp": [ICPSynthesis()]}), CONFIG, state, today=TODAY)
     text = " ".join(result.document.open_questions).lower()
-    assert "target industries" in text and "buyer roles" in text
+    assert "target industries" in text and "buying decision" in text
 
 
 async def test_a_fully_known_core_has_no_missing_notes():
@@ -174,7 +174,7 @@ async def test_a_shown_but_unconfirmed_field_asks_to_confirm_instead_of_saying_u
     state.slots["industries"] = slot(["Retail"], 0.6)
     result = await build_icp(FakeLLM({"final_icp": [ICPSynthesis()]}), CONFIG, state, today=TODAY)
     notes = result.document.open_questions
-    assert not any(n.lower().startswith("not yet known: target industries") for n in notes)
+    assert not any(n.lower().startswith("how big") and "industr" in n.lower() for n in notes)
     assert any("target industries" in n.lower() and "retail" in n.lower() for n in notes)
 
 
@@ -190,8 +190,9 @@ async def test_open_questions_that_repeat_a_disqualifier_or_each_other_are_dropp
         ]
     )
     result = await build_icp(FakeLLM({"final_icp": [synthesis]}), CONFIG, state, today=TODAY)
-    model_notes = [n for n in result.document.open_questions if not n.startswith(("Not yet", "Please confirm"))]
-    assert model_notes == ["Which port do they ship from?"]
+    questions = result.document.open_questions
+    assert questions.count("Which port do they ship from?") == 1
+    assert not any("letter of credit" in q.lower() or "wholesale" in q.lower() for q in questions)
 
 
 async def test_builder_emits_hr_scoring_model_for_hr_state():
@@ -214,3 +215,20 @@ async def test_builder_emits_hr_scoring_model_for_hr_state():
         "function_fit", "experience_fit", "skills_fit"
     }
     assert validate_model(model, track="hr") == []
+
+
+async def test_still_unclear_skips_fields_answered_any_and_model_questions_about_them():
+    state = SessionState()
+    state.slots["industries"] = slot(["Fintech"])
+    state.slots["lead_geographies"] = slot(["Any"])
+    synthesis = ICPSynthesis(
+        open_questions=[
+            "Which client industries are the best fit?",
+            "Which lead geographies are preferred?",
+            "What is the typical budget cycle?",
+        ]
+    )
+    result = await build_icp(FakeLLM({"final_icp": [synthesis]}), CONFIG, state, today=TODAY)
+    text = " ".join(result.document.open_questions).lower()
+    assert "budget cycle" in text
+    assert "industries" not in text and "geograph" not in text and "people you sell to" not in text

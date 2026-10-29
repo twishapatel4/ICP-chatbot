@@ -68,6 +68,20 @@ function shownFields(c: Card, answers: Answers): CardField[] {
 const answered = (f: CardField, answers: Answers) =>
   (answers[f.slot]?.length ?? 0) > 0;
 
+// Geography asks where the target companies are headquartered, then whether it also matters where
+// their people live. That second question can be answered "no", which switches the field off.
+const OFF = "__off"; // the slots switched off, kept with the answers so a refresh keeps them
+const switchable = (f: CardField, fields: CardField[]) =>
+  f.input === "geo" &&
+  f.optional &&
+  fields.some((x) => x.input === "geo" && !x.optional);
+const isOff = (f: CardField, answers: Answers) =>
+  (answers[OFF] ?? []).includes(f.slot);
+// A switchable field is asked as a yes/no question first; only "yes" shows the picker.
+const SWITCH_QUESTION: Record<string, string> = {
+  lead_geographies: "Does it matter where the people at those companies live?",
+};
+
 // The same checks the server makes, so Continue is only enabled for answers it will take.
 // `countries` is the country catalog (lower-cased labels), or null while it is not loaded.
 function valid(
@@ -89,15 +103,25 @@ function problemSlots(
   answers: Answers,
   countries: Set<string> | null,
 ): string[] {
-  return cards.flatMap((c) =>
-    shownFields(c, answers)
-      .filter((f) =>
-        answered(f, answers)
+  return cards.flatMap((c) => {
+    const fields = shownFields(c, answers);
+    const live = fields.filter(
+      (f) => !(switchable(f, fields) && isOff(f, answers)),
+    );
+    return fields
+      .filter((f) => {
+        if (switchable(f, fields)) {
+          if (isOff(f, answers)) return live.length === 0; // not both off
+          return answered(f, answers)
+            ? !valid(f, answers[f.slot], countries)
+            : true;
+        }
+        return answered(f, answers)
           ? !valid(f, answers[f.slot], countries)
-          : c.required && !f.optional,
-      )
-      .map((f) => f.slot),
-  );
+          : c.required && !f.optional;
+      })
+      .map((f) => f.slot);
+  });
 }
 
 // ---- options from the LinkedIn catalog ----
@@ -291,7 +315,11 @@ function SearchPicker({
   const [active, setActive] = useState(0);
   const base = useId();
   const searching = q.trim() !== "";
-  const results = onQuery ? options : searching ? fuzzyFilter(options, q, (o) => o.label) : suggest;
+  const results = onQuery
+    ? options
+    : searching
+      ? fuzzyFilter(options, q, (o) => o.label)
+      : suggest;
   const shown = open && results.length > 0;
   const optionId = (i: number) => `${base}-o${i}`;
   useEffect(() => {
@@ -360,7 +388,8 @@ function SearchPicker({
         hidden={!shown}
         onScroll={(e) => {
           const el = e.currentTarget;
-          if (onEnd && el.scrollTop + el.clientHeight >= el.scrollHeight - 40) onEnd();
+          if (onEnd && el.scrollTop + el.clientHeight >= el.scrollHeight - 40)
+            onEnd();
         }}
         className="absolute z-20 left-0 right-0 mt-1 max-h-60 overflow-y-auto list-none m-0 p-1 bg-panel border border-line rounded-[18px] shadow-soft"
       >
@@ -389,7 +418,17 @@ function SearchPicker({
 }
 
 // Job titles: LinkedIn's list is too long to load whole, so the server searches it as you type.
-function TitleField({ values, disabled, field, onChange }: FieldProps) {
+export function TitleField({
+  values,
+  disabled,
+  facet = "title",
+  onChange,
+}: {
+  values: string[];
+  disabled: boolean;
+  facet?: string;
+  onChange: (v: string[]) => void;
+}) {
   const [found, setFound] = useState<ProfileOption[]>([]);
   const [failed, setFailed] = useState(false);
   const asked = useRef({ q: "", limit: TITLE_PAGE });
@@ -399,7 +438,7 @@ function TitleField({ values, disabled, field, onChange }: FieldProps) {
     asked.current = { q, limit };
     const mine = ++last.current;
     api
-      .getOptions(field.facet ?? "title", q.trim(), limit)
+      .getOptions(facet, q.trim(), limit)
       .then((r) => mine === last.current && (setFound(r), setFailed(false)))
       .catch(() => mine === last.current && setFailed(true));
   };
@@ -410,7 +449,8 @@ function TitleField({ values, disabled, field, onChange }: FieldProps) {
   // scrolling to the end of the list asks for the next page, up to what the server will give
   const more = () => {
     const { q, limit } = asked.current;
-    if (limit < TITLE_MAX && found.length >= limit) load(q, Math.min(limit + TITLE_PAGE, TITLE_MAX));
+    if (limit < TITLE_MAX && found.length >= limit)
+      load(q, Math.min(limit + TITLE_PAGE, TITLE_MAX));
   };
   useEffect(() => {
     load("", TITLE_PAGE);
@@ -418,11 +458,23 @@ function TitleField({ values, disabled, field, onChange }: FieldProps) {
   }, []);
   return (
     <div className="flex flex-col gap-2">
-      {failed && <LoadError retry={() => load(asked.current.q, asked.current.limit)} what="job titles" />}
+      {failed && (
+        <LoadError
+          retry={() => load(asked.current.q, asked.current.limit)}
+          what="job titles"
+        />
+      )}
       {values.length > 0 && (
         <div className={WRAP}>
           {values.map((v) => (
-            <Chip key={v} text={v} on remove disabled={disabled} onClick={() => onChange(values.filter((x) => x !== v))} />
+            <Chip
+              key={v}
+              text={v}
+              on
+              remove
+              disabled={disabled}
+              onClick={() => onChange(values.filter((x) => x !== v))}
+            />
           ))}
         </div>
       )}
@@ -879,7 +931,14 @@ function FieldInput(props: FieldProps) {
     case "geo":
       return <GeoField {...props} />;
     case "title":
-      return <TitleField {...props} />;
+      return (
+        <TitleField
+          values={props.values}
+          disabled={props.disabled}
+          facet={props.field.facet ?? undefined}
+          onChange={props.onChange}
+        />
+      );
     default:
       return <ChoiceField {...props} />;
   }
@@ -908,9 +967,20 @@ export default function StepTwo({
   status,
   onSubmit,
 }: Props) {
-  const [answers, setAnswers] = useState<Answers>(
-    () => loadDraft(sessionId) ?? saved ?? {},
-  );
+  const [answers, setAnswers] = useState<Answers>(() => {
+    const draft = loadDraft(sessionId);
+    if (draft) return draft;
+    if (!saved) return {};
+    // a switchable field the server holds nothing for, in a card it holds answers for, was answered "no"
+    const off = cards.flatMap((c) => {
+      const fs = c.fields.filter((f) => switchable(f, c.fields));
+      return c.fields.some((f) => saved[f.slot]?.length)
+        ? fs.filter((f) => !saved[f.slot]?.length).map((f) => f.slot)
+        : [];
+    });
+    return off.length ? { ...saved, [OFF]: off } : saved;
+  });
+  const [yes, setYes] = useState<string[]>([]); // switchable fields answered "yes" that have no values yet
   const [flagged, setFlagged] = useState<string[]>(missing);
   useEffect(() => setFlagged(missing), [missing]);
   useEffect(() => saveDraft(sessionId, answers), [sessionId, answers]);
@@ -1018,8 +1088,10 @@ export default function StepTwo({
                   <span
                     className={`text-[14px] font-medium ${flagged.includes(f.slot) ? "text-warn" : "text-ink"}`}
                   >
-                    {f.label}
-                    {f.optional ? (
+                    {switchable(f, fields)
+                      ? (SWITCH_QUESTION[f.slot] ?? f.label)
+                      : f.label}
+                    {switchable(f, fields) ? null : f.optional ? (
                       <span className="font-normal text-muted">
                         {" "}
                         (optional)
@@ -1029,13 +1101,71 @@ export default function StepTwo({
                     )}
                   </span>
                 )}
-                <FieldInput
-                  field={f}
-                  values={answers[f.slot] ?? []}
-                  disabled={disabled}
-                  countries={country}
-                  onChange={(v) => set(f.slot, v)}
-                />
+                {switchable(f, fields) && (
+                  <div
+                    className="flex flex-col gap-2"
+                    role="radiogroup"
+                    aria-label={SWITCH_QUESTION[f.slot] ?? f.label}
+                  >
+                    {(
+                      [
+                        ["yes", "Yes, it matters"],
+                        [
+                          "no",
+                          "No, only where the companies are headquartered",
+                        ],
+                      ] as const
+                    ).map(([choice, text]) => {
+                      const on =
+                        choice === "no"
+                          ? isOff(f, answers)
+                          : !isOff(f, answers) &&
+                            (answered(f, answers) || yes.includes(f.slot));
+                      return (
+                        <label
+                          key={choice}
+                          className={`flex items-center gap-2.5 rounded-[18px] border bg-panel py-2.5 px-4 text-[14px] cursor-pointer ${on ? "border-accent" : "border-line"}`}
+                        >
+                          <input
+                            className="size-4 accent-accent m-0"
+                            type="radio"
+                            name={`switch-${f.slot}`}
+                            checked={on}
+                            disabled={disabled}
+                            onChange={() => {
+                              const off = new Set(answers[OFF] ?? []);
+                              if (choice === "yes") {
+                                off.delete(f.slot);
+                                setYes((y) => [...new Set([...y, f.slot])]);
+                                setAnswers((a) => ({ ...a, [OFF]: [...off] }));
+                              } else {
+                                off.add(f.slot);
+                                setYes((y) => y.filter((x) => x !== f.slot));
+                                setAnswers((a) => ({
+                                  ...a,
+                                  [OFF]: [...off],
+                                  [f.slot]: [],
+                                }));
+                              }
+                            }}
+                          />
+                          {text}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                {(!switchable(f, fields) ||
+                  (!isOff(f, answers) &&
+                    (answered(f, answers) || yes.includes(f.slot)))) && (
+                  <FieldInput
+                    field={switchable(f, fields) ? { ...f, any_allowed: false } : f}
+                    values={answers[f.slot] ?? []}
+                    disabled={disabled}
+                    countries={country}
+                    onChange={(v) => set(f.slot, v)}
+                  />
+                )}
               </div>
             ))}
             {disabled && status && (

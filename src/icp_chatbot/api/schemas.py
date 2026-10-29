@@ -9,7 +9,8 @@ from icp_chatbot.domain.slots import Track, slot_map
 from icp_chatbot.engine.fallback import FormField
 from icp_chatbot.engine.interview import TurnResult
 from icp_chatbot.engine.planner import Progress
-from icp_chatbot.engine.profile_form import Card, CardField, profile_cards
+from icp_chatbot.engine.profile_form import _TITLE_SLOTS, Card, CardField, profile_cards
+from icp_chatbot.linkedin.catalog import default_catalog
 from icp_chatbot.engine.questions import Question
 from icp_chatbot.icp.document import ICPDocument
 from icp_chatbot.linkedin.catalog import Option, default_catalog
@@ -203,10 +204,12 @@ class FormFieldOut(BaseModel):
     description: str
     choices: list[str]
     required: bool
+    facet: str | None = None  # "title": pick from GET /options/title instead of typing
 
     @classmethod
     def of(cls, f: FormField) -> "FormFieldOut":
         return cls(
+            facet="title" if f.key in _TITLE_SLOTS and default_catalog().has("title") else None,
             key=f.key,
             label=f.label,
             description=f.description,

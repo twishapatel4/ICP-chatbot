@@ -107,7 +107,7 @@ def main() -> int:
         with ThreadPoolExecutor(WORKERS) as pool:
             pages = [first, *pool.map(lambda o: fetch_page(client, o), offsets)]
     occupations = [r for p in pages for r in p["_embedded"]["results"]]
-    if len(occupations) < total:
+    if len(occupations) < total * 0.98:  # a few that ESCO cannot serve are skipped; many is a failure
         sys.exit(f"ESCO gave {len(occupations)} of {total} occupations; nothing written.")
     rows = to_rows(occupations)
     OUT.write_text(json.dumps(rows, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")

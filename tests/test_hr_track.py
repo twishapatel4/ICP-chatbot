@@ -267,7 +267,7 @@ def test_countries_are_not_listed_one_by_one():
 
 async def test_opener_mentions_known_step2_facts_and_asks_first_unknown():
     for track, facts in (
-        ("hr", {"target_roles": ["Backend Engineer"], "candidate_locations": ["India"]}),
+        ("hr", {"target_roles": ["Software engineer"], "candidate_locations": ["India"]}),
         ("sales", {"business_model": ["B2B"], "company_size": ["51-200"]}),
     ):
         state = _step2_state(track, **facts)
@@ -448,7 +448,7 @@ def test_refresh_model_is_track_agnostic_for_an_hr_model():
 
 _FORM_EXPERIENCED = {
     "target_functions": ["Engineering"],
-    "target_roles": ["Backend Engineer"],
+    "target_roles": ["Software engineer"],
     "experience_level": ["Experienced"],
     "years_experience": ["3-8"],
     "current_industries": ["Software Development"],
@@ -456,7 +456,7 @@ _FORM_EXPERIENCED = {
 }
 _FORM_FRESHER = {
     "target_functions": ["Engineering"],
-    "target_roles": ["Backend Engineer"],
+    "target_roles": ["Software engineer"],
     "experience_level": ["Fresher"],
 }
 
@@ -502,3 +502,15 @@ def test_fallback_form_hr_still_requires_skills():
     assert form["required_skills"].required and form["candidate_locations"].required
     missing = missing_required({"target_roles": ["Analyst"]}, SessionState(track="hr"))
     assert {"required_skills", "candidate_locations"} <= set(missing)
+
+
+def test_a_question_about_a_slot_the_form_answered_is_refused():
+    from icp_chatbot.engine.interview import AgentTurn, InterviewEngine
+
+    state = _step2_state("sales", industries=["Fintech"], lead_geographies=["Any"])
+    ask_form = AgentTurn(say="Which industries?", action="ask", target_slot="industries")
+    assert "already answered in the step 2 form" in InterviewEngine._problem(state, ask_form)
+    ask_open = AgentTurn(say="Where?", action="ask", target_slot="lead_geographies")
+    assert InterviewEngine._problem(state, ask_open) is None  # "Any" leaves room for specifics
+    ask_other = AgentTurn(say="What triggers a purchase?", action="ask", target_slot="buying_triggers")
+    assert InterviewEngine._problem(state, ask_other) is None

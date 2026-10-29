@@ -15,7 +15,7 @@
       "Any"
     ],
     "target_roles": [
-      "Someone to help the team"
+      "Administrative assistant"
     ],
     "experience_level": [
       "Both"
@@ -38,7 +38,7 @@
   ],
   "expected": {
     "target_roles": [
-      "Someone to help the team"
+      "Administrative assistant"
     ]
   },
   "forbidden": {

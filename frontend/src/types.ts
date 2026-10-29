@@ -102,6 +102,7 @@ export interface FormField {
   description: string;
   choices: string[];
   required: boolean;
+  facet?: string | null; // "title": a job-title dropdown, not free text
 }
 
 export interface FieldEntry {

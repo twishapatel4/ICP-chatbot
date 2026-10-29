@@ -225,6 +225,7 @@ class SessionState(BaseModel):
     probe_conf: dict[str, float] = Field(default_factory=dict)  # slot -> confidence when probed
     stalls: dict[str, int] = Field(default_factory=dict)  # slot -> probes in a row that got nowhere
     skipped: list[str] = Field(default_factory=list)  # slots the user firmly declined to answer
+    excluded: list[str] = Field(default_factory=list)  # slots the user switched off in the form
     followups: dict[str, int] = Field(default_factory=dict)  # question kind -> follow-ups asked
     contradictions: list[str] = Field(default_factory=list)
     best_customer_asked: bool = False
@@ -246,6 +247,8 @@ class SessionState(BaseModel):
     failures: int = 0  # consecutive failed model steps
     offtopic_count: int = 0
     user_questions: int = 0  # questions the user put to the bot, answered along the way
+    # "Still unclear" questions of the profile not asked yet, while the user works through them
+    unclear_queue: list[str] = Field(default_factory=list)
     declines: dict[str, int] = Field(
         default_factory=dict
     )  # slot or kind -> times a bare "no" was re-asked
@@ -301,6 +304,8 @@ class SessionState(BaseModel):
         """A slot is skipped when this industry does not need it, or when a skip rule matches a
         value already known (e.g. B2C)."""
         if self.domain and slot.key in self.domain.not_needed:
+            return False
+        if slot.key in self.excluded:
             return False
         for other_key, other_value in slot.skip_if:
             if any(v.lower() == other_value.lower() for v in self.values(other_key)):

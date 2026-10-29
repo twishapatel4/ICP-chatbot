@@ -303,7 +303,7 @@ def test_case_problems_flags_a_bad_step_two_form():
         "industries": ["Any"],
         "lead_geographies": ["United Kingdom"],
         "company_hq_geographies": ["Any"],
-        "buyer_roles": ["VP Sales"],
+        "buyer_roles": ["Sales director"],
     }
     assert case_problems(case(profile_answers=ok)) == []
     unknown = case_problems(case(profile_answers={**ok, "nope": ["x"]}))
@@ -312,7 +312,7 @@ def test_case_problems_flags_a_bad_step_two_form():
         flagged = case_problems(case(profile_answers={**ok, removed: ["B2B"]}))
         assert any(f"unknown slot {removed}" in p for p in flagged)
     incomplete = case_problems(case(profile_answers={"industries": ["Any"]}))
-    assert any("lead_geographies" in p for p in incomplete)
+    assert any("company_hq_geographies" in p for p in incomplete)
     unresolved = case_problems(
         case(profile_answers={**ok, "lead_geographies": ["Narnia"]})
     )

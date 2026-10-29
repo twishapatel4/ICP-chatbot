@@ -38,7 +38,7 @@ SALES_B2B_PROFILE = {
     "industries": ["Any"],
     "lead_geographies": ["Any"],
     "company_hq_geographies": ["Any"],
-    "buyer_roles": ["VP Sales"],
+    "buyer_roles": ["Sales director"],
 }
 
 
@@ -119,7 +119,7 @@ async def run_to_completion(w):
         ask("Who signs off on buying this?",
              up("industries", ["Fintech"]), up("company_size", ["50-500"]),
              up("lead_geographies", ["Europe"]), up("buying_triggers", ["manual payroll"]),
-             up("buyer_roles", ["CFO"]), target_slot="buyer_roles", enough=True),
+             up("buyer_roles", ["CFO"]), target_slot="buying_triggers", enough=True),
     )  # fmt: skip
     nxt = await w.call(
         "POST", f"/sessions/{sid}/answers", json={"text": "Banks in Europe with 50 to 500 staff"}
@@ -437,7 +437,7 @@ async def test_stopping_early_still_builds_a_partial_profile_that_names_what_is_
     assert built.status_code == 200
     doc = built.json()["document"]
     assert doc["partial"] is True
-    assert any(q.startswith("Not yet known:") for q in doc["open_questions"])
+    assert any(q.endswith("?") for q in doc["open_questions"])
 
 
 # -- voice answers: audio in, text out ------------------------------------------------------------
@@ -518,3 +518,24 @@ async def test_turns_and_the_session_view_carry_progress_that_rises_with_answers
     assert after["percent"] > first["percent"] and after["known"] > first["known"]
     view = (await w.call("GET", f"/sessions/{sid}")).json()["progress"]
     assert view == after
+
+
+async def test_asking_for_the_unclear_questions_walks_the_list_until_the_user_asks_something(world):
+    w = await world()
+    sid = await run_to_completion(w)
+    w.llm.queue("final_icp", ICPSynthesis(open_questions=["Which port do they ship from?"]))
+    built = (await w.call("POST", f"/sessions/{sid}/icp")).json()
+    listed = built["document"]["open_questions"]
+    assert len(listed) >= 2 and all(q.endswith("?") for q in listed)
+
+    first = (await w.call("POST", f"/sessions/{sid}/revise", json={"text": "ask me the unclear questions"})).json()
+    assert first["question"]["text"] == listed[0]  # no model call: the profile's own list
+    w.llm.queue("interviewer", ask("noted", up("buying_triggers", ["audits"])))
+    second = (await w.call("POST", f"/sessions/{sid}/answers", json={"text": "audits"})).json()
+    assert second["question"]["text"] == listed[1] and second["status"] == "active"
+
+    # a question of their own ends the walk: the interviewer answers it, nothing is forced
+    w.llm.queue("interviewer", ask("Each lead is scored on the priorities you set. Does that answer it?"))
+    broke = (await w.call("POST", f"/sessions/{sid}/answers", json={"text": "how is the score worked out?"})).json()
+    assert broke["question"]["text"] != listed[2 % len(listed)] or len(listed) == 2
+    assert broke["question"]["text"].startswith("Each lead is scored")
