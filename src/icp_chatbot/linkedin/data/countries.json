@@ -45,7 +45,10 @@
   "id": "AE",
   "label": "United Arab Emirates",
   "level": 2,
-  "parent": "Middle East"
+  "parent": "Middle East",
+  "match": [
+   "UAE"
+  ]
  },
  {
   "id": "AF",
@@ -297,7 +300,11 @@
   "id": "CI",
   "label": "Côte d'Ivoire",
   "level": 2,
-  "parent": "Africa"
+  "parent": "Africa",
+  "match": [
+   "Ivory Coast",
+   "Cote d'Ivoire"
+  ]
  },
  {
   "id": "CK",
@@ -369,7 +376,10 @@
   "id": "CZ",
   "label": "Czechia",
   "level": 2,
-  "parent": "Europe"
+  "parent": "Europe",
+  "match": [
+   "Czech Republic"
+  ]
  },
  {
   "id": "DE",
@@ -495,7 +505,14 @@
   "id": "GB",
   "label": "United Kingdom",
   "level": 2,
-  "parent": "Europe"
+  "parent": "Europe",
+  "match": [
+   "UK",
+   "U.K.",
+   "Great Britain",
+   "Britain",
+   "England"
+  ]
  },
  {
   "id": "GD",
@@ -765,7 +782,10 @@
   "id": "KR",
   "label": "South Korea",
   "level": 2,
-  "parent": "Asia-Pacific"
+  "parent": "Asia-Pacific",
+  "match": [
+   "Korea, Republic of"
+  ]
  },
  {
   "id": "KW",
@@ -1179,7 +1199,10 @@
   "id": "RU",
   "label": "Russian Federation",
   "level": 2,
-  "parent": "Europe"
+  "parent": "Europe",
+  "match": [
+   "Russia"
+  ]
  },
  {
   "id": "RW",
@@ -1383,7 +1406,11 @@
   "id": "TR",
   "label": "Türkiye",
   "level": 2,
-  "parent": "Middle East"
+  "parent": "Middle East",
+  "match": [
+   "Turkey",
+   "Turkiye"
+  ]
  },
  {
   "id": "TT",
@@ -1431,7 +1458,14 @@
   "id": "US",
   "label": "United States",
   "level": 2,
-  "parent": "North America"
+  "parent": "North America",
+  "match": [
+   "USA",
+   "U.S.",
+   "U.S.A.",
+   "US",
+   "United States of America"
+  ]
  },
  {
   "id": "UY",
@@ -1479,7 +1513,10 @@
   "id": "VN",
   "label": "Vietnam",
   "level": 2,
-  "parent": "Asia-Pacific"
+  "parent": "Asia-Pacific",
+  "match": [
+   "Viet Nam"
+  ]
  },
  {
   "id": "VU",

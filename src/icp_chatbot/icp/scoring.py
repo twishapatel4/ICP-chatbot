@@ -194,19 +194,24 @@ COUNTRY_FIELDS = frozenset(
 )
 
 
-def country_match(candidate: str, wanted: str) -> bool:
+def country_match(candidate: object, wanted: object) -> bool:
     """Whole-name match of a lead's geography against a rule value. Both sides are resolved
     through the country catalog ("US", "United States" and "united states" are one option). They
     match when they resolve to the same option, or when `wanted` is a region and `candidate` is
     one of its countries. Values the catalog does not know (cities) match only when equal
     after case and whitespace normalisation. A location line such as "Berlin, Germany" matches
-    when any of its comma-separated parts matches as a whole."""
-    parts = [p for p in (x.strip() for x in candidate.split(",")) if p]
-    if len(parts) > 1:
-        return any(_country_match_one(p, wanted) for p in parts) or _country_match_one(
-            candidate, wanted
-        )
-    return _country_match_one(candidate, wanted)
+    as a whole value or by its last comma-separated part (the country position), so
+    "Georgia, USA" is the United States, not the country Georgia. Non-text values never match."""
+    if not isinstance(candidate, str) or not isinstance(wanted, str):
+        return False
+    if not candidate.strip() or not wanted.strip():
+        return False
+    if _country_match_one(candidate, wanted):
+        return True
+    if "," in candidate:
+        last = candidate.rsplit(",", 1)[1].strip()
+        return bool(last) and _country_match_one(last, wanted)
+    return False
 
 
 def _country_match_one(candidate: str, wanted: str) -> bool:

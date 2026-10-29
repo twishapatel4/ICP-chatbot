@@ -275,3 +275,58 @@ def test_a_location_line_matches_by_whole_comma_part_only():
     assert country_match("Muscat, Oman", "Middle East") and country_match("Berlin, Germany", "DE")
     assert not country_match("Bucharest, Romania", "Oman")
     assert not country_match("Bucharest, Romania", "Middle East")
+
+
+def test_a_location_line_matches_only_whole_or_by_its_last_part():
+    assert country_match("Berlin, Germany", "Germany")
+    assert country_match("Berlin, Germany", "Europe")
+    assert not country_match("Georgia, USA", "Georgia")
+    assert country_match("Georgia, USA", "United States")
+    assert country_match("Pune, Maharashtra, India", "India")
+    assert not country_match("Pune, Maharashtra, India", "Maharashtra")
+    assert country_match("Georgia", "Georgia")
+
+
+BAD_VALUES = [None, 5, 2.5, [], ["Germany"], [["Germany"]], {}, "", "   ", ",", "x" * 100_000]
+
+
+@pytest.mark.parametrize("bad", BAD_VALUES)
+def test_country_match_never_raises_on_bad_data(bad):
+    from icp_chatbot.icp.scoring import MatchRule, list_match
+
+    assert country_match(bad, "Germany") is False
+    assert country_match("Germany", bad) is False
+    rule = MatchRule(kind="list", primary=["Germany"])
+    assert list_match([bad, "Germany"], rule, "lead_geographies") == 1.0
+    assert list_match([bad], rule, "lead_geographies") == 0.0
+    bad_rule = MatchRule.model_construct(kind="list", primary=[bad], secondary=[])
+    assert list_match(["Germany"], bad_rule, "lead_geographies") == 0.0
+
+
+@pytest.mark.parametrize(
+    ("alias", "iso"),
+    [
+        ("USA", "US"), ("U.S.", "US"), ("U.S.A.", "US"), ("US", "US"), ("usa", "US"),
+        ("United States of America", "US"), ("UK", "GB"), ("U.K.", "GB"),
+        ("Great Britain", "GB"), ("Britain", "GB"), ("England", "GB"),
+        ("Czech Republic", "CZ"), ("Turkey", "TR"), ("Turkiye", "TR"), ("Türkiye", "TR"),
+        ("Ivory Coast", "CI"), ("Cote d'Ivoire", "CI"), ("Russia", "RU"),
+        ("South Korea", "KR"), ("Korea, Republic of", "KR"), ("Viet Nam", "VN"),
+        ("Vietnam", "VN"), ("UAE", "AE"),
+    ],
+)  # fmt: skip
+def test_common_country_aliases_resolve_to_the_right_iso_id(alias, iso):
+    from icp_chatbot.linkedin.catalog import default_catalog
+
+    assert default_catalog().resolve("country", alias).id == iso
+
+
+def test_ambiguous_or_near_names_do_not_resolve_or_collide():
+    from icp_chatbot.linkedin.catalog import default_catalog
+
+    assert default_catalog().resolve("country", "Korea") is None
+    assert not country_match("Guinea", "Guinea-Bissau")
+    assert not country_match("Guinea-Bissau", "Guinea")
+    assert country_match("UK", "United Kingdom") and country_match("Great Britain", "GB")
+def test_blank_never_matches_blank():
+    assert country_match("", "") is False and country_match(" ", "  ") is False
