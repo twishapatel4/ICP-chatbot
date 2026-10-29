@@ -17,6 +17,7 @@ Missing data yields no key for that slot (never an empty list or string).
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Callable, Iterable
 from datetime import date
@@ -105,6 +106,7 @@ def _strings(slot: SlotDef, profile: Any, company: Any) -> list[str]:
 _MONTHS = {m: i for i, m in enumerate("jan feb mar apr may jun jul aug sep oct nov dec".split(), 1)}
 _START = re.compile(r"(?:\b([A-Za-z]{3})[A-Za-z]*\.?\s+)?\b((?:19|20)\d{2})\b")
 _YEAR = re.compile(r"\b(?:19|20)\d{2}\b")
+_OPEN_ENDED = re.compile(r"\bpresent\b|\bcurrent\b|\bongoing\b|[-–—]\s*$", re.IGNORECASE)
 
 
 def _period_start(period: str) -> tuple[int, int] | None:
@@ -132,7 +134,10 @@ def _graduation_year(slot: SlotDef, profile: Any, company: Any, today: date) -> 
     years = []
     for path in slot.profile_paths:
         for node in _walk(path, profile, company):
-            found = _YEAR.findall(_text(node) or "")
+            period = _text(node) or ""
+            if _OPEN_ENDED.search(period):
+                continue  # still studying: not a graduation year yet
+            found = _YEAR.findall(period)
             if found:
                 years.append(int(found[-1]))  # the last year of each period
     return [str(max(years))] if years else []
@@ -141,11 +146,24 @@ def _graduation_year(slot: SlotDef, profile: Any, company: Any, today: date) -> 
 def _years_in_operation(slot: SlotDef, profile: Any, company: Any, today: date) -> list[str]:
     for path in slot.profile_paths:
         for node in _walk(path, profile, company):
-            if isinstance(node, str) and node.strip().isdigit():
-                node = int(node.strip())
-            if isinstance(node, int) and not isinstance(node, bool) and 1800 <= node <= today.year:
-                return [str(today.year - node)]
+            year = _whole_year(node)
+            if year is not None and 1800 <= year <= today.year:
+                return [str(today.year - year)]
     return []
+
+
+def _whole_year(value: Any) -> int | None:
+    """An int, a whole float or an ASCII digit string as an int; anything else is None."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value) if math.isfinite(value) and value.is_integer() else None
+    if isinstance(value, str):
+        text = value.strip()
+        return int(text) if text.isascii() and text.isdecimal() else None
+    return None
 
 
 _COMPUTED: dict[str, Callable[[SlotDef, Any, Any, date], list[str]]] = {
@@ -161,6 +179,8 @@ _COMPUTED: dict[str, Callable[[SlotDef, Any, Any, date], list[str]]] = {
 # reads as Senior.
 
 _NOT_OWNER = re.compile(r"\b(?:product|process|data|service) owner\b")
+# Phrases that hold a C-title word without being one: "Assistant to the CEO", "Chief of Staff".
+_NOT_CHIEF = re.compile(r"\bassistant to(?: the)? \w+|\bchief of staff(?: to(?: the)? \w+)?")
 SENIORITY_RULES: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
     (label, re.compile(pattern))
     for label, pattern in (
@@ -224,7 +244,7 @@ def _titles(slot: SlotDef, profile: Any, company: Any) -> list[str]:
 
 def _derived_seniority(titles: list[str]) -> list[str]:
     for title in titles:
-        text = _NOT_OWNER.sub("", title.lower())
+        text = _NOT_CHIEF.sub("", _NOT_OWNER.sub("", title.lower()))
         for label, pattern in SENIORITY_RULES:
             if pattern.search(text):
                 return [label]

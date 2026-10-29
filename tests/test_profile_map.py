@@ -272,6 +272,43 @@ def test_mapper_reads_only_registry_listed_keys(track):
     assert not nested & (forbidden - {"name"})  # certifications[].name is a listed path
 
 
+@pytest.mark.parametrize("founded", ["²", "٢٠١٠", "2010x", "", None, True, [], {}, 1e400, -5])
+def test_bad_founded_year_never_raises(founded):
+    assert "years_in_operation" not in sales(company={"foundedYear": founded})
+
+
+def test_founded_year_accepts_whole_floats_and_digit_strings():
+    assert sales(company={"foundedYear": 2010.0})["years_in_operation"] == ["16"]
+    assert sales(company={"foundedYear": " 2010 "})["years_in_operation"] == ["16"]
+    assert "years_in_operation" not in sales(company={"foundedYear": 2010.5})
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Executive Assistant to CEO", "Assistant to the CTO", "Chief of Staff",
+        "Chief of Staff to the CEO",
+    ],
+)
+def test_assistants_and_chiefs_of_staff_are_not_cxo(title):
+    assert hr({"title": title}).get("target_seniority") != ["Chief X Officer (CxO)"]
+
+
+def test_a_real_cxo_title_still_reads_as_cxo():
+    assert hr({"title": "Chief Technology Officer"})["target_seniority"] == [
+        "Chief X Officer (CxO)"
+    ]
+
+
+def test_graduation_year_skips_open_ended_periods():
+    still = {"education": [{"period": "2015 – 2019"}, {"period": "2024 - Present"}]}
+    assert hr(still)["graduation_year"] == ["2019"]
+    assert "graduation_year" not in hr({"education": [{"period": "2023 – Present"}]})
+    assert "graduation_year" not in hr({"education": [{"period": "2023 - present"}]})
+    assert "graduation_year" not in hr({"education": [{"period": "2023 –"}]})
+    assert hr({"education": [{"period": "2019"}]})["graduation_year"] == ["2019"]
+
+
 def test_bait_fields_never_reach_the_output():
     out = hr({**PROFILE, **BAIT})
     flat = str(out)

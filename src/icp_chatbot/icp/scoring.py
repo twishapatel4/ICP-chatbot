@@ -61,7 +61,9 @@ HR_CRITERIA: Criteria = (
 # Criteria whose second read slot is not a rule of its own but the half-credit list of the first:
 # {criterion key: {primary slot: secondary slot}}. The rule is keyed by the primary slot (the
 # secondary slot stays in `reads`, so editing it refreshes the rule); with no primary values
-# there is no rule, so a nice-to-have list alone scores nothing.
+# there is no rule, so a nice-to-have-only profile builds no rule and the criterion drops out.
+# Keyed by criterion key, so a stored skills_fit that reads only required_skills also gets the
+# half-credit list when its rules are rebuilt.
 SECONDARY_READS: dict[str, dict[str, str]] = {
     "skills_fit": {"required_skills": "nice_to_have_skills"},
 }
@@ -152,10 +154,47 @@ def loose_equal(a: str, b: str) -> bool:
     return len(a) >= 3 and len(b) >= 3 and (a in b or b in a)
 
 
-def list_match(lead_values: list[str], rule: MatchRule) -> float:
-    if any(loose_equal(v, p) for v in lead_values for p in rule.primary):
+_LEGAL_SUFFIXES = frozenset(
+    "inc incorporated ltd limited llc plc pvt private gmbh corp corporation co company "
+    "sa ag bv srl".split()
+)
+
+
+def _company_tokens(name: str) -> list[str]:
+    tokens = re.sub(r"\W+", " ", name.casefold()).split()
+    while tokens and tokens[-1] in _LEGAL_SUFFIXES:
+        tokens.pop()  # "Acme Corp." and "Acme Corporation" are the same company
+    return tokens
+
+
+def company_match(candidate: str, avoided: str) -> bool:
+    """Whole-name match of a company name against a listed one. Names are compared without case,
+    punctuation and trailing legal suffixes (Inc, Ltd, Pvt, GmbH, ...). They match when equal, or
+    when the listed name has two or more words and appears as a whole-word run inside the
+    candidate ("Tata Consultancy" matches "Tata Consultancy Services Ltd"). A one-word listed
+    name matches only exactly: "Meta" does not match "Metal Works" or "Meta Platforms"."""
+    want, have = _company_tokens(avoided), _company_tokens(candidate)
+    if not want or not have:
+        return False
+    if want == have:
+        return True
+    n = len(want)
+    return n >= 2 and any(have[i : i + n] == want for i in range(len(have) - n + 1))
+
+
+# Fields holding company names, matched by whole name; every other field uses loose_equal.
+COMPANY_NAME_FIELDS = frozenset({"source_companies", "avoid_companies"})
+
+
+def _matcher(slot: str):
+    return company_match if slot in COMPANY_NAME_FIELDS else loose_equal
+
+
+def list_match(lead_values: list[str], rule: MatchRule, slot: str = "") -> float:
+    same = _matcher(slot)
+    if any(same(v, p) for v in lead_values for p in rule.primary):
         return 1.0
-    if any(loose_equal(v, p) for v in lead_values for p in rule.secondary):
+    if any(same(v, p) for v in lead_values for p in rule.secondary):
         return 0.5
     return 0.0
 
@@ -171,10 +210,10 @@ def range_match(value: float, rule: MatchRule) -> float:
     return 0.5 if distance <= rule.tolerance * reference else 0.0
 
 
-def _slot_score(rule: MatchRule, lead_values: list[str]) -> float | None:
+def _slot_score(rule: MatchRule, lead_values: list[str], slot: str = "") -> float | None:
     """Score for one slot, or None when the lead's data cannot be read."""
     if rule.kind == "list":
-        return list_match(lead_values, rule)
+        return list_match(lead_values, rule, slot)
     for text in lead_values:
         bounds = parse_range(text)
         value = _midpoint(bounds) if bounds else None
@@ -356,7 +395,8 @@ def _disqualifier_hit(d: Disqualifier, lead: dict[str, list[str]]) -> bool:
     if not values:
         return False  # unknown data never disqualifies
     if d.operator in ("in", "not_in", "eq"):
-        found = any(loose_equal(v, x) for v in values for x in d.values)
+        same = _matcher(d.field)
+        found = any(same(v, x) for v in values for x in d.values)
         return found if d.operator in ("in", "eq") else not found
     bounds = next((b for b in (parse_range(v) for v in values) if b), None)
     value = _midpoint(bounds) if bounds else None
@@ -377,7 +417,7 @@ def score_lead(model: ScoringModel, lead: dict[str, list[str]]) -> ScoreResult:
         parts = [
             s
             for slot, rule in c.rules.items()
-            if lead.get(slot) and (s := _slot_score(rule, lead[slot])) is not None
+            if lead.get(slot) and (s := _slot_score(rule, lead[slot], slot)) is not None
         ]
         if parts:
             scored.append((c, sum(parts) / len(parts)))

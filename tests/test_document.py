@@ -505,7 +505,7 @@ async def test_carry_over_keeps_fresh_handmade_ids_and_recomputes_only_the_edite
     assert by_slot["company_size"].labels == ["201-500"]
 
 
-# -- Task 12c: each entry names its LinkedIn filter; scoring-only slots are not filters ----------------
+# -- Task 12c: each entry names its LinkedIn filter; scoring-only slots are not filters --
 
 
 async def test_filter_entries_carry_the_linkedin_filter_name():

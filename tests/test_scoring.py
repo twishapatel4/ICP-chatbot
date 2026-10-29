@@ -10,6 +10,7 @@ from icp_chatbot.icp.scoring import (
     MatchRule,
     ScoringModel,
     build_rule,
+    company_match,
     default_scoring_model,
     list_match,
     make_disqualifier,
@@ -135,7 +136,7 @@ def test_a_perfect_lead_scores_100_and_a_poor_one_scores_low():
 
 def test_unknown_lead_data_drops_the_criterion_and_renormalizes():
     model = default_scoring_model(FULL)
-    lead = {"industries": ["Fintech"], "lead_geographies": ["Europe"]}  # only 25 + 20 weight is known
+    lead = {"industries": ["Fintech"], "lead_geographies": ["Europe"]}  # only 25 + 20 weight known
     result = score_lead(model, lead)
     assert result.score == 100.0
     assert result.completeness == pytest.approx(2 / 4)
@@ -465,7 +466,8 @@ def test_mapped_profile_scores_against_the_hr_defaults():
         "skills": ["Python", "Docker"],
         "experience": [{"companyName": "Infosys", "period": "Jan 2018 – Present"}],
         "education": [
-            {"school": "COEP", "degree": "BE", "field": "Computer Science", "period": "2014 – 2018"}
+            {"school": "COEP", "degree": "BE", "field": "Computer Science",
+             "period": "2014 – 2018"}
         ],
     }
     lead = slots_from_profile(profile, None, "hr", date(2026, 10, 29))
@@ -565,3 +567,112 @@ def test_required_hr_criterion_failing_makes_candidate_unqualified():
     )
     result = score_lead(model, {"required_skills": ["Java"], "target_functions": ["Engineering"]})
     assert not result.qualified and result.failed_required == ["skills_fit"]
+
+
+# -- whole-name company matching (ruling R22) -----------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("avoided", "candidate", "hit"),
+    [
+        ("Meta", "Metal Works", False),
+        ("Meta", "Meta", True),
+        ("Meta", "Meta Platforms", False),  # one-word names match exactly only
+        ("Meta Platforms, Inc.", "meta platforms", True),
+        ("Tata Consultancy", "Tata Consultancy Services Ltd", True),
+        ("Apple", "Pineapple Labs", False),
+        ("Acme Corp", "Acme Corporation", True),
+        ("Tata Consultancy", "Tata Steel", False),
+        ("", "Acme", False),
+        ("Acme", "", False),
+        ("Inc.", "Inc", False),  # only a legal suffix: nothing left to compare
+    ],
+)
+def test_company_names_match_on_whole_names(avoided, candidate, hit):
+    assert company_match(candidate, avoided) is hit
+
+
+def test_avoid_companies_uses_whole_name_matching():
+    d = make_disqualifier("avoid_companies", "in", ["Meta"])
+    model = _hr_model({"required_skills": ["Python"]}, disqualifiers=[d])
+    assert score_lead(model, {"avoid_companies": ["Metal Works"]}).disqualified_by is None
+    assert score_lead(model, {"avoid_companies": ["Meta"]}).disqualified_by is not None
+    assert score_lead(model, {"required_skills": ["Python"]}).disqualified_by is None  # unknown
+    multi = make_disqualifier("avoid_companies", "in", ["Tata Consultancy"])
+    model = _hr_model({}, disqualifiers=[multi])
+    assert score_lead(model, {"avoid_companies": ["Tata Consultancy Services"]}).disqualified_by
+
+
+def test_other_disqualifier_fields_keep_loose_matching():
+    d = make_disqualifier("candidate_locations", "in", ["Germany"])
+    model = _hr_model({}, disqualifiers=[d])
+    assert score_lead(model, {"candidate_locations": ["Berlin, Germany"]}).disqualified_by
+
+
+def test_employer_fit_matches_whole_company_names():
+    model = _hr_model({"source_companies": ["Meta"]})
+    assert score_lead(model, {"source_companies": ["Metal Works"]}).breakdown["employer_fit"] == 0
+    assert score_lead(model, {"source_companies": ["Meta"]}).breakdown["employer_fit"] == 1.0
+    model = _hr_model({"source_companies": ["Infosys"]})
+    assert score_lead(model, {"source_companies": ["Infosys Ltd"]}).breakdown["employer_fit"] == 1.0
+
+
+# -- models stored before Task 12c ----------------------------------------------------------------
+
+
+def _old_model(rows, track):
+    criteria = [Criterion(key=k, label=k, weight=w, reads=list(r)) for k, w, r in rows]
+    return ScoringModel(criteria=criteria)
+
+
+OLD_SALES = [
+    ("industry_fit", 35.0, ("industries", "customer_segments")),
+    ("company_size", 25.0, ("company_size",)),
+    ("buying_signals", 15.0, ("buying_triggers",)),
+    ("geographic_fit", 25.0, ("lead_geographies", "company_hq_geographies")),
+]
+OLD_HR = [
+    ("role_fit", 25.0, ("target_functions", "target_roles")),
+    ("experience_fit", 20.0, ("years_experience",)),
+    ("skills_fit", 20.0, ("required_skills",)),
+    ("education_fit", 15.0, ("education_level", "field_of_study", "graduation_year")),
+    ("location_fit", 10.0, ("candidate_locations",)),
+    ("background_fit", 10.0, ("current_industries", "current_company_size")),
+]
+
+
+@pytest.mark.parametrize(("rows", "track"), [(OLD_SALES, "sales"), (OLD_HR, "hr")])
+def test_stored_pre_12c_models_keep_working_and_gain_no_criteria(rows, track):
+    from icp_chatbot.icp.document import Completeness, ICPDocument
+    from icp_chatbot.icp.review import carry_over_edits
+
+    model = _old_model(rows, track)
+    keys = [c.key for c in model.criteria]
+    assert validate_model(model, track) == []
+    values = {"industries": ["Fintech"], "required_skills": ["Python"],
+              "target_roles": ["Engineer"]}
+    refreshed = refresh_model(model, values)
+    assert [c.key for c in refreshed.criteria] == keys
+    assert validate_model(refreshed, track) == []
+    first = keys[0]
+    reweighted = set_weights(model, {first: model.criteria[0].weight - 5,
+                                     keys[1]: model.criteria[1].weight + 5})
+    assert [c.key for c in reweighted.criteria] == keys
+    doc = ICPDocument(
+        track=track, sections={}, scoring_model=model,
+        completeness=Completeness(tier_a=0.0, tier_b=0.0),
+    )
+    carried = carry_over_edits(doc, doc)
+    assert [c.key for c in carried.scoring_model.criteria] == keys
+
+
+def test_an_old_hr_skills_criterion_picks_up_nice_to_have_skills_on_refresh():
+    # SECONDARY_READS is keyed by criterion key, so a stored skills_fit that reads only
+    # required_skills still gets the half-credit list when rules are rebuilt.
+    model = _old_model(OLD_HR, "hr")
+    refreshed = refresh_model(
+        model, {"required_skills": ["Python"], "nice_to_have_skills": ["Docker"]}
+    )
+    skills = next(c for c in refreshed.criteria if c.key == "skills_fit")
+    assert skills.reads == ["required_skills"]
+    assert skills.rules["required_skills"].secondary == ["Docker"]
