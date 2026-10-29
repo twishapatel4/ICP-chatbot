@@ -74,6 +74,19 @@ DEGRADED_NOTICE = (
     "My AI service is slow or unavailable right now, so this is a simpler standard question. "
     "It is not about your answer, which was saved."
 )
+FLOOR_MESSAGES = {
+    "sales": (
+        "enough is true, but we still do not know what they sell and at least three things "
+        "about who buys it (not just B2B or B2C). Ask about those."
+    ),
+    "hr": (
+        "enough is true, but we still do not know the role being hired for and at least three "
+        "facts about the candidate. Ask about those."
+    ),
+}
+# neutral wording: these reach clients of both tracks as 409 bodies
+DETAIL_NOT_READY = "detail mode is offered after the first profile is complete"
+REVISE_NOT_READY = "changes are asked for after the first profile is complete"
 DETAIL_NOTE = "(no new reply: they asked to go deeper, so ask the next most useful detail question)"
 
 
@@ -548,10 +561,7 @@ class InterviewEngine:
                     state.answers_received + 1,
                 )
                 if not icp_floor_met(trial):
-                    return (
-                        "enough is true, but we still do not know what they sell and at least "
-                        "three things about who buys it (not just B2B or B2C). Ask about those."
-                    )
+                    return FLOOR_MESSAGES["hr" if state.track == "hr" else "sales"]
         return None
 
     @staticmethod
@@ -830,7 +840,7 @@ class InterviewEngine:
         self._require_chat(record)
         state = record.state
         if record.status != "completed":
-            raise InvalidTransition("detail mode is offered after the first ICP is complete")
+            raise InvalidTransition(DETAIL_NOT_READY)
         if state.mode == "detail":
             raise InvalidTransition("detail mode was already used")
         if state.questions_asked >= self._caps.detail_total_cap:
@@ -850,7 +860,7 @@ class InterviewEngine:
         self._require_chat(record)
         text = self._validate(text)
         if record.status != "completed":
-            raise InvalidTransition("changes are asked for after the first ICP is complete")
+            raise InvalidTransition(REVISE_NOT_READY)
         state = record.state
         state.finished, state.stop_reason = False, None
         state.pending_question, state.pending_kind = REVISION_QUESTION, "revision"

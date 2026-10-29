@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from icp_chatbot.config import Settings
 from icp_chatbot.llm.types import LLM, StepConfig
-from icp_chatbot.prompts import TRANSCRIBE_PROMPT
+from icp_chatbot.prompts import transcribe_prompt_for
 
 # Formats the Gemini API documents for audio input.
 ALLOWED_MIME_TYPES = frozenset(
@@ -24,12 +24,13 @@ def normalize_mime(content_type: str | None) -> str | None:
     return base if base in ALLOWED_MIME_TYPES else None
 
 
-async def transcribe(llm: LLM, settings: Settings, audio: bytes, mime_type: str) -> str:
+async def transcribe(llm: LLM, settings: Settings, audio: bytes, mime_type: str, track: str = "sales"
+) -> str:
     cfg = StepConfig(model=settings.model_transcribe, temperature=0.0, max_output_tokens=1024)
     result = await llm.generate(
         step="transcribe",
         cfg=cfg,
-        system=TRANSCRIBE_PROMPT,
+        system=transcribe_prompt_for(track),
         user="Transcribe the recording.",
         schema=Transcript,
         audio=(audio, mime_type),

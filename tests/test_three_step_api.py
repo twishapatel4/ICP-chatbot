@@ -580,8 +580,8 @@ async def test_hr_website_read_feeds_the_opener_only(eng):
     state = (await repo.get_session(T, sid)).state
     assert "product" not in state.slots and "online_presence" not in state.slots
     assert set(state.slots) <= set(slot_map("hr"))
-    assert "product" in state.seed  # kept apart, as the opener's context
-    assert "Payroll" in llm.calls_for("opener")[0].user
+    assert "product" in state.seed  # kept apart; its Sales-keyed lines are not sent to the opener
+    assert "Payroll" not in llm.calls_for("opener")[0].user
 
 
 async def test_begin_chat_rejects_invalid_answers_and_keeps_them(eng):
@@ -770,3 +770,34 @@ def test_background_enrichment_defaults_off_on_vercel(monkeypatch):
     assert Settings(_env_file=None).background_enrichment is False
     monkeypatch.setenv("BACKGROUND_ENRICHMENT", "true")
     assert Settings(_env_file=None).background_enrichment is True
+
+
+async def test_hr_transcribe_uses_the_hr_prompt_and_sales_keeps_its_own(world):
+    from icp_chatbot.engine.transcribe import Transcript
+    from icp_chatbot.prompts import HR_TRANSCRIBE_PROMPT, TRANSCRIBE_PROMPT
+
+    w = await world()
+    hr = (await w.start(track="hr", profile=HR_FRESHER))["session_id"]
+    sales = (await w.start())["session_id"]
+    for sid, expected in ((hr, HR_TRANSCRIBE_PROMPT), (sales, TRANSCRIBE_PROMPT)):
+        w.llm.queue("transcribe", Transcript(text="hello"))
+        r = await w.client.post(
+            f"/sessions/{sid}/transcribe", content=b"RIFFdata", headers=test_api.WAV
+        )
+        assert r.status_code == 200, r.text
+        assert w.llm.calls_for("transcribe")[-1].system == expected
+    other = {**test_api.WAV, "X-Tenant-Id": "tenant-2"}
+    r = await w.client.post(f"/sessions/{hr}/transcribe", content=b"x", headers=other)
+    assert r.status_code == 404  # tenant isolation is unchanged
+
+
+async def test_hr_409_bodies_use_no_sales_vocabulary(world):
+    import re
+
+    w = await world()
+    hr = (await w.start(track="hr", profile=HR_FRESHER))["session_id"]
+    for path in ("detail", "revise"):
+        r = await w.call("POST", f"/sessions/{hr}/{path}", json={"text": "change it"})
+        assert r.status_code == 409, (path, r.text)
+        assert r.json()["detail"].startswith("not_allowed:")
+        assert not re.search(r"\bICP\b|\blead|\bcustomer", r.text, re.I), r.text

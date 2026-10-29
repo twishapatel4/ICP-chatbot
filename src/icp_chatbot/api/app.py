@@ -219,7 +219,7 @@ def create_app(
         if record.status != "active":
             raise SessionClosed()
         try:
-            text = await transcribe(ct.llm, ct.settings, bytes(audio), mime)
+            text = await transcribe(ct.llm, ct.settings, bytes(audio), mime, record.state.track)
         except LLMError:
             raise HTTPException(502, "transcription_failed") from None
         return TranscribeResponse(text=text)

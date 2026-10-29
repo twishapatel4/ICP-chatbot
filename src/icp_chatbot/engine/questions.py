@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from icp_chatbot.domain.signup import SignupInfo
-from icp_chatbot.domain.slots import Track
+from icp_chatbot.domain.slots import Track, slot_map
 from icp_chatbot.domain.state import SessionState, SlotValue
 from icp_chatbot.engine.planner import missing_core_slots
 from icp_chatbot.engine.profile_form import FORM_EVIDENCE
@@ -263,6 +263,10 @@ async def generate_opener(
     also acknowledges what step 2 gave and asks the first must-ask question still unknown."""
     track = track or (state.track if state else "sales")
     variant = Question(pick_opener_variant(signup.company_name, signup.role, track), kind="opener")
+    # the website describes the employer, not the people to hire: an HR opener gets none of its
+    # findings (the seed is keyed by Sales fields), and no website lines at all
+    hiring = track == "hr"
+    seed = {k: v for k, v in (seed or {}).items() if k in slot_map(track)}
     lines = [f"Company: {signup.company_name}"]
     for label, value in (
         ("Signer's role", signup.role),
@@ -276,7 +280,7 @@ async def generate_opener(
         lines.append("Website findings (hypotheses, not facts):")
         for key, value in seed.items():
             lines.append(f"- {key}: {'; '.join(value.values)}")
-    else:
+    elif not hiring:
         if site_unread:
             lines.append(
                 "Their website could not be read (blocked or unavailable). Say so in one short, "

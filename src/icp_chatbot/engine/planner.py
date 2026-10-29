@@ -68,10 +68,11 @@ def icp_floor_met(state: SessionState) -> bool:
     anchor = _anchor_key(state.track)
     standard = slot_map(state.track)
     # only fields that apply count: a B2C seller has two (who buys, where), so the bar is
-    # whatever is reachable, up to FLOOR_CUSTOMER_FACTS
+    # whatever is reachable, up to FLOOR_CUSTOMER_FACTS. A field the user declined to answer is
+    # not reachable either, so it lowers the bar rather than blocking it for good.
     applicable = [
         k for k in customer_keys(state.track)
-        if k != anchor and state.is_applicable(standard[k])
+        if k != anchor and state.is_applicable(standard[k]) and k not in state.skipped
     ]  # fmt: skip
     known = [k for k in applicable if _told(state, k)]
     needed = min(FLOOR_CUSTOMER_FACTS, len(applicable))

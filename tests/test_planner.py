@@ -143,6 +143,26 @@ def test_b2c_floor_not_met_with_one_customer_key():
     assert not icp_floor_met(b2c("customer_profile", "lead_geographies"))  # no product
 
 
+def test_b2c_skipping_one_customer_key_still_reaches_the_floor_with_the_other():
+    for skipped, other in (
+        ("customer_profile", "lead_geographies"),
+        ("lead_geographies", "customer_profile"),
+    ):
+        state = b2c("product", other)
+        state.skipped.append(skipped)
+        assert icp_floor_met(state), skipped
+    state = b2c("lead_geographies")  # the anchor is still required
+    state.skipped.append("customer_profile")
+    assert not icp_floor_met(state)
+
+
+def test_b2b_skips_lower_the_bar_only_by_what_cannot_be_asked():
+    state = known(SessionState(), "business_model", values=("B2B",))
+    known(known(known(state, "product"), "industries"), "buyer_roles")
+    state.skipped.append("company_size")
+    assert not icp_floor_met(state)  # four other keys remain applicable: three are still needed
+
+
 def test_b2b_floor_unchanged_needs_three():
     for model in ("B2B", "Both"):
         state = known(SessionState(), "business_model", values=(model,))

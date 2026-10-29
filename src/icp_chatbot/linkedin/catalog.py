@@ -65,7 +65,7 @@ class Option:
     id: str
     label: str
     level: int = 1
-    parent: str | None = None
+    parent: str | None = None  # the parent option's LABEL (for example a country's region), not its id
     match: tuple[str, ...] = ()
     # False for a row the data marks `"pick": false`: kept for matching, not offered as a
     # quick-pick in a picker (the "Other territories" region).

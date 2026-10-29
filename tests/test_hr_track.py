@@ -158,6 +158,60 @@ def test_hr_prompts_contain_no_sales_vocabulary():
     assert config.system_prompt("interviewer", "hr").startswith(hr["interviewer"])
 
 
+def test_hr_engine_constants_contain_no_sales_vocabulary():
+    """The text the engine puts in front of an HR client or an HR model, outside prompts.py."""
+    from icp_chatbot.engine import interview, questions
+
+    texts = {
+        "HR_OPENER_VARIANTS": questions.HR_OPENER_VARIANTS,
+        "HR_OPENER_STEP2_HINT": (questions.HR_OPENER_STEP2_HINT,),
+        "floor message": (interview.FLOOR_MESSAGES["hr"],),
+        "transitions": (interview.DETAIL_NOT_READY, interview.REVISE_NOT_READY),
+        "notices": (
+            interview.RETRY_NOTICE, interview.DEGRADED_NOTICE, interview.DETAIL_NOTE,
+            interview.REVISION_QUESTION, questions.CLOSING_HINT, questions.CLOSING_NOTE_HINT,
+            questions.CLOSING_REVISION_HINT,
+        ),
+    }  # fmt: skip
+    for name, group in texts.items():
+        for text in group:
+            assert not SALES_WORDS.search(text), (name, text)
+
+
+def test_floor_rejection_message_is_track_aware():
+    from icp_chatbot.engine.interview import AgentTurn, InterviewEngine
+
+    turn = AgentTurn(say="Thanks, that is all.", action="finish", enough=True)
+    hr = InterviewEngine._problem(SessionState(track="hr", step="chat"), turn)
+    assert "role being hired for" in hr and "candidate" in hr and "what they sell" not in hr
+    assert not SALES_WORDS.search(hr)
+    sales = InterviewEngine._problem(SessionState(step="chat"), turn)
+    assert "what they sell" in sales and "who buys it" in sales
+
+
+async def test_hr_opener_gets_no_sales_keyed_website_lines():
+    def guess(*values):
+        return SlotValue(values=list(values), confidence=0.5, source=SlotSource.INFERRED)
+
+    seed = {
+        "business_model": guess("B2C"),
+        "customer_segments": guess("Shoppers"),
+        "product": guess("Payroll"),
+    }
+    state = _step2_state("hr", target_roles=["Backend Engineer"])
+    llm = FakeLLM({"opener": [QuestionOutput(question="Which tools?")]})
+    await generate_opener(
+        llm, CONFIG, SignupInfo("Acme", role="Founder"), seed, state=state, site_unread=True
+    )
+    user = llm.calls_for("opener")[0].user
+    for word in ("business_model", "customer_segments", "Payroll", "Shoppers", "Website findings"):
+        assert word not in user
+    assert not SALES_WORDS.search(user), user
+    sales_llm = FakeLLM({"opener": [QuestionOutput(question="Who buys?")]})
+    await generate_opener(sales_llm, CONFIG, SignupInfo("Acme"), seed, track="sales")
+    assert "- business_model: B2C" in sales_llm.calls_for("opener")[0].user
+
+
 def test_hr_opener_fallback_obeys_vocabulary():
     for variant in HR_OPENER_VARIANTS:
         assert not SALES_WORDS.search(variant)

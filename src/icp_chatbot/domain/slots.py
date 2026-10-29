@@ -413,7 +413,7 @@ HR_SECTION_ORDER = (
 )
 
 _EXPERIENCED = (("experience_level", "Experienced"),)
-_NOT_FRESHER_ONLY = (("experience_level", "Experienced"), ("experience_level", "Both"))
+_EXPERIENCED_OR_BOTH = (("experience_level", "Experienced"), ("experience_level", "Both"))
 _FRESHER = (("experience_level", "Fresher"),)
 
 HR_SLOT_LIST: tuple[SlotDef, ...] = _linked((
@@ -469,7 +469,7 @@ HR_SLOT_LIST: tuple[SlotDef, ...] = _linked((
         "The subjects or degrees the candidates should have studied",
         "A",
         0.7,
-        skip_if=_NOT_FRESHER_ONLY,
+        skip_if=_EXPERIENCED_OR_BOTH,
     ),
     _s(
         "graduation_year",
@@ -478,7 +478,7 @@ HR_SLOT_LIST: tuple[SlotDef, ...] = _linked((
         "The graduation years of the candidates (for example 2024 to 2026)",
         "A",
         0.7,
-        skip_if=_NOT_FRESHER_ONLY,
+        skip_if=_EXPERIENCED_OR_BOTH,
     ),
     _s(
         "years_experience",
