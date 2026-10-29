@@ -74,6 +74,31 @@ _UNCLEAR_REQUEST = re.compile(
     r"\b(unclear|unanswered|open|remaining|pending|missing)\b",
     re.I,
 )
+_NONSENSE_NUDGES = (
+    "I could not make sense of that. Could you type your answer in a few words? {q}",
+    "That did not come through as an answer. Please type something I can understand. {q}",
+    "I am still not understanding. Please write your answer in plain words so we can go on. {q}",
+    "I still cannot read that. A short, clear answer is all I need, or press Finish to build the "
+    "profile with what I have. {q}",
+)
+MAX_NONSENSE = 5  # replies in a row that make no sense: the fifth closes the chat
+def looks_like_nonsense(text: str) -> bool:
+    """Keyboard mash such as "gvf" or "hhhhbhgb": every word is letters only with no vowel (or a
+    long run of one letter). Short words, acronyms in capitals (CFO, NHS) and anything with
+    digits or punctuation are left to the model."""
+    words = (text or "").split()
+    if not words:
+        return False
+    for w in words:
+        if not w.isalpha() or not w.isascii():
+            return False
+        if len(w) < 3 or w.isupper():
+            return False
+        if re.search(r"[aeiou]", w.lower()) and not re.search(r"(.)\1{3,}", w.lower()):
+            return False
+    return True
+
+
 # a reply that puts a question to the bot breaks the walk through the list
 _USER_ASKS = re.compile(
     r"\?|^\s*(what|why|how|when|where|who|which|can you|could you|do you|does|is it|are you"
@@ -707,6 +732,30 @@ class InterviewEngine:
         )
         limit = self._limit(state)
         in_unclear = question_kind == "unclear"
+
+        if counted and question_text and looks_like_nonsense(text):
+            # no model call and no progress: the same question stays open
+            state.nonsense_streak += 1
+            n = state.nonsense_streak
+            status, stop_reason, question = "active", None, None
+            if n >= MAX_NONSENSE:
+                status, stop_reason = "fallback", "unreadable"
+                state.pending_question, state.pending_kind, state.pending_slot = "", "", None
+                state.pending_options = []
+                state.stop_reason = stop_reason
+            else:
+                question = Question(
+                    _NONSENSE_NUDGES[n - 1].format(q=question_text), kind=question_kind,
+                    slot=target, options=tuple(state.pending_options), multi=state.pending_multi,
+                )  # fmt: skip
+            await self._repo.save_state(
+                tenant_id, session_id, state, expected_version=record.row_version,
+                status=status if status != "active" else "active" if reopen else None,
+                usage=spend.usage, cost_usd=spend.cost,
+            )  # fmt: skip
+            return self._result(session_id, state, status, question, stop_reason)
+        if counted:
+            state.nonsense_streak = 0
 
         turn: AgentTurn | None = None
         try:

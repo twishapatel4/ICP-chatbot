@@ -294,6 +294,8 @@ export default function App() {
       reason === "model_unavailable" ? "error" : "bot",
       reason === "model_unavailable"
         ? "My AI service is not responding right now, so I cannot continue the chat. This is not your fault. You can fill in this short form instead, or try again later."
+        : reason === "unreadable"
+        ? "I have not been able to understand the last few messages, so I cannot continue the conversation this way. No problem, you can start a new chat whenever you like, or fill in this short form instead."
         : "I could not continue the conversation, so here is a short form instead.",
     );
     try {

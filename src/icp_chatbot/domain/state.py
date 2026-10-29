@@ -246,6 +246,7 @@ class SessionState(BaseModel):
     segment: dict[str, str] = Field(default_factory=dict)
     failures: int = 0  # consecutive failed model steps
     offtopic_count: int = 0
+    nonsense_streak: int = 0  # replies in a row that were keyboard mash, answered without the model
     user_questions: int = 0  # questions the user put to the bot, answered along the way
     # "Still unclear" questions of the profile not asked yet, while the user works through them
     unclear_queue: list[str] = Field(default_factory=list)

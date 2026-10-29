@@ -241,7 +241,7 @@ function Choice({
 }) {
   return (
     <label
-      className={`${chip} py-2 flex items-center gap-2 border border-line bg-panel ${on ? "border-accent" : ""} ${disabled ? "opacity-50" : "cursor-pointer"}`}
+      className={`flex items-center gap-2.5 rounded-[18px] border bg-panel py-3 px-4 text-[14px] ${on ? "border-accent" : "border-line"} ${disabled ? "opacity-50" : "cursor-pointer"}`}
     >
       <input
         className="size-4 accent-accent m-0"
@@ -266,6 +266,8 @@ function AnyToggle({
   onChange: (v: string[]) => void;
   disabled: boolean;
 }) {
+  // what was picked before "Any" was ticked comes back when it is unticked
+  const kept = useRef<string[]>([]);
   return (
     <label className="flex items-center gap-1.5 text-[12px] text-muted cursor-pointer">
       <input
@@ -273,7 +275,15 @@ function AnyToggle({
         type="checkbox"
         checked={values.includes(ANY)}
         disabled={disabled}
-        onChange={(e) => onChange(e.target.checked ? [ANY] : [])}
+        onChange={(e) => {
+          if (e.target.checked) {
+            kept.current = without(values);
+            onChange([ANY]);
+          } else {
+            onChange(kept.current);
+            kept.current = [];
+          }
+        }}
       />
       Any
     </label>
@@ -586,7 +596,13 @@ function ChoiceField({ field, values, disabled, onChange }: FieldProps) {
     <fieldset className="flex flex-col gap-2 min-w-0 m-0 p-0 border-0">
       <legend className="sr-only">{field.label}</legend>
       {error && <LoadError retry={retry} />}
-      <div className={WRAP}>
+      <div
+        className={
+          menu || big
+            ? WRAP
+            : "grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-2" // equal tiles, not crowded pills
+        }
+      >
         {menu
           ? null
           : big
@@ -870,7 +886,7 @@ function RangeField({ field, values, disabled, onChange }: FieldProps) {
           <select
             className={SELECT}
             aria-label={`${field.label}, from`}
-            disabled={disabled}
+            disabled={disabled || values.includes(ANY)}
             value={from}
             onChange={(e) => {
               const f = e.target.value;
@@ -896,7 +912,7 @@ function RangeField({ field, values, disabled, onChange }: FieldProps) {
           <select
             className={SELECT}
             aria-label={`${field.label}, to`}
-            disabled={disabled || !from}
+            disabled={disabled || !from || values.includes(ANY)}
             value={to}
             onChange={(e) => {
               setTo(e.target.value);
@@ -915,17 +931,7 @@ function RangeField({ field, values, disabled, onChange }: FieldProps) {
       </div>
       {field.any_allowed && (
         <div className="flex justify-end">
-          <AnyToggle
-            values={values}
-            disabled={disabled}
-            onChange={(v) => {
-              if (v.includes(ANY)) {
-                setFrom("");
-                setTo("");
-              }
-              onChange(v);
-            }}
-          />
+          <AnyToggle values={values} disabled={disabled} onChange={onChange} />
         </div>
       )}
     </div>

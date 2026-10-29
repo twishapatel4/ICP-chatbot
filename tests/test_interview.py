@@ -682,3 +682,18 @@ async def test_a_rejected_reply_is_not_sent_to_the_backup_model(world):
     llm.queue("interviewer", LLMError("invalid_output", "bad json"))
     result = await engine.answer(T, sid, "hello")
     assert result.notice is not None and len(llm.calls_for("interviewer")) == 1
+
+
+def test_keyboard_mash_is_detected_without_the_model():
+    from icp_chatbot.engine.interview import looks_like_nonsense
+
+    for mash in ("gvf", "yvgv", "hhhhbhgb", "gcgrfcfc", "gvf hhbg"):
+        assert looks_like_nonsense(mash), mash
+    for real in ("CFO", "NHS", "any", "no", "SaaS", "B2B", "fintech startups", "ok", "", "100-300"):
+        assert not looks_like_nonsense(real), real
+
+
+def test_five_nonsense_replies_close_the_chat():
+    from icp_chatbot.engine import interview as iv
+
+    assert iv.MAX_NONSENSE == 5 and len(iv._NONSENSE_NUDGES) == iv.MAX_NONSENSE - 1
