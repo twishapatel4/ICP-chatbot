@@ -329,3 +329,17 @@ def test_ambiguous_or_near_names_do_not_resolve_or_collide():
     assert country_match("UK", "United Kingdom") and country_match("Great Britain", "GB")
 def test_blank_never_matches_blank():
     assert country_match("", "") is False and country_match(" ", "  ") is False
+
+
+def test_the_backup_form_describes_each_field_like_step_two():
+    from icp_chatbot.api.schemas import FormFieldOut
+    from icp_chatbot.engine.fallback import fallback_form
+
+    sales = {f.key: f for f in map(FormFieldOut.of, fallback_form("sales"))}
+    assert (sales["industries"].input, sales["industries"].facet, sales["industries"].any_allowed) == ("multi", "industry", True)
+    assert (sales["lead_geographies"].input, sales["lead_geographies"].facet) == ("geo", "country")
+    assert sales["business_model"].input == "single" and sales["business_model"].choices
+    assert sales["product"].input == "chips" and not sales["product"].any_allowed
+    hr = {f.key: f for f in map(FormFieldOut.of, fallback_form("hr"))}
+    assert hr["years_experience"].input == "range" and hr["years_experience"].any_allowed
+    assert hr["target_roles"].input == "title"

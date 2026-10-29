@@ -18,6 +18,7 @@ class FormField:
     description: str
     choices: tuple[str, ...]
     required: bool
+    single_choice: bool = False
 
 
 def fallback_form(track: Track = "sales") -> list[FormField]:
@@ -29,6 +30,7 @@ def fallback_form(track: Track = "sales") -> list[FormField]:
             s.description,
             s.choices,
             required=not any(k == BRANCH_KEY for k, _ in s.skip_if),
+            single_choice=s.single_choice,
         )
         for s in registry(track)
         if s.tier == Tier.A and s.blocks
@@ -36,7 +38,7 @@ def fallback_form(track: Track = "sales") -> list[FormField]:
     standard = slot_map(track)
     for key in OPTIONAL_FORM_SLOTS:
         if s := standard.get(key):
-            fields.append(FormField(s.key, s.label, s.description, s.choices, required=False))
+            fields.append(FormField(s.key, s.label, s.description, s.choices, False, s.single_choice))
     return fields
 
 

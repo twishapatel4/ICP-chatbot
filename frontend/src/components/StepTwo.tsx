@@ -84,7 +84,7 @@ const SWITCH_QUESTION: Record<string, string> = {
 
 // The same checks the server makes, so Continue is only enabled for answers it will take.
 // `countries` is the country catalog (lower-cased labels), or null while it is not loaded.
-function valid(
+export function valid(
   f: CardField,
   values: string[],
   countries: Set<string> | null,
@@ -134,7 +134,7 @@ interface Loaded {
   retry: () => void;
 }
 
-function useOptions(facet: string | null): Loaded {
+export function useOptions(facet: string | null): Loaded {
   const [state, setState] = useState<{
     facet: string | null;
     options: ProfileOption[];
@@ -938,7 +938,7 @@ function RangeField({ field, values, disabled, onChange }: FieldProps) {
   );
 }
 
-function FieldInput(props: FieldProps) {
+export function FieldInput(props: FieldProps) {
   switch (props.field.input) {
     case "chips":
       return (

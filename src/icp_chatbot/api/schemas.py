@@ -13,7 +13,7 @@ from icp_chatbot.engine.profile_form import _TITLE_SLOTS, Card, CardField, profi
 from icp_chatbot.linkedin.catalog import default_catalog
 from icp_chatbot.engine.questions import Question
 from icp_chatbot.icp.document import ICPDocument
-from icp_chatbot.linkedin.catalog import Option, default_catalog
+from icp_chatbot.linkedin.catalog import SLOT_FACETS, Option, default_catalog
 
 
 def no_nul(text: str) -> str:
@@ -230,23 +230,46 @@ class SessionView(BaseModel):
     answers: dict[str, list[str]] | None = None  # while step is profile: the last submitted
 
 
+_RANGE_KEYS = frozenset({"years_experience", "graduation_year"})
+
+
 class FormFieldOut(BaseModel):
     key: str
     label: str
     description: str
     choices: list[str]
     required: bool
-    facet: str | None = None  # "title": pick from GET /options/title instead of typing
+    facet: str | None = None  # a LinkedIn option list to pick from ("title": GET /options/title)
+    input: str = "chips"  # the control, as on the step 2 form: single, multi, chips, range, geo, title
+    any_allowed: bool = False
 
     @classmethod
     def of(cls, f: FormField) -> "FormFieldOut":
+        catalog = default_catalog()
+        facet = "title" if f.key in _TITLE_SLOTS and catalog.has("title") else SLOT_FACETS.get(f.key)
+        if facet and not catalog.has(facet):
+            facet = None
+        if facet == "title":
+            control = "title"
+        elif facet == "country":
+            control = "geo"
+        elif facet:
+            control = "multi"
+        elif f.choices:
+            control = "single" if f.single_choice else "multi"
+        elif f.key in _RANGE_KEYS:
+            control = "range"
+        else:
+            control = "chips"
         return cls(
-            facet="title" if f.key in _TITLE_SLOTS and default_catalog().has("title") else None,
+            facet=facet,
             key=f.key,
             label=f.label,
             description=f.description,
             choices=list(f.choices),
             required=f.required,
+            input=control,
+            any_allowed=control in ("multi", "geo", "range") and (facet is not None or control == "range"),
         )
 
 

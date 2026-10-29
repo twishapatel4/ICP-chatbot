@@ -54,6 +54,14 @@ def known(state, **slots):
     return state
 
 
+def fill_core(state):
+    """Every core field known, so the model may close: only one open detail is allowed."""
+    for slot in state.slot_defs():
+        if slot.blocks and state.is_applicable(slot) and slot.key not in state.slots:
+            state.slots[slot.key] = SlotValue(values=["x"], confidence=0.9, source=SlotSource.STATED)
+    return state
+
+
 @pytest.fixture
 async def world():
     engine_db = make_engine("sqlite+aiosqlite:///:memory:")
@@ -288,6 +296,7 @@ async def test_the_model_can_finish_when_the_basics_are_known(world):
         pending(SessionState(questions_asked=6), "Who buys?"),
         product=["Payroll"], industries=["Banks"], buyer_roles=["CFO"], company_size=["50-500"],
     )  # fmt: skip
+    fill_core(state)
     sid = await preset(repo, state)
     llm.queue(
         "interviewer",
@@ -567,6 +576,7 @@ async def test_finishing_is_held_back_once_to_confirm_what_was_guessed_from_the_
         product=["Payroll"], buyer_roles=["CFO"], company_size=["50-500"], lead_geographies=["EU"],
     )  # fmt: skip
     guessed(state, industries=["Banks", "Aerospace", "Retail"])
+    fill_core(state)
     sid = await preset(repo, state)
     llm.queue(
         "interviewer",
@@ -602,6 +612,7 @@ async def test_an_answer_changed_over_and_over_is_raised_once_before_finishing(w
         product=["Payroll"], industries=["Banks"], buyer_roles=["CFO"], company_size=["50"],
         lead_geographies=["US"],
     )  # fmt: skip
+    fill_core(state)
     sid = await preset(repo, state)
     regions = ["Canada", "Brazil", "Japan"]
     says = ["Noted. Is that the one?", "Okay, is that the main region?", "Got it. So where do most clients sit?"]
@@ -697,3 +708,28 @@ def test_five_nonsense_replies_close_the_chat():
     from icp_chatbot.engine import interview as iv
 
     assert iv.MAX_NONSENSE == 5 and len(iv._NONSENSE_NUDGES) == iv.MAX_NONSENSE - 1
+
+
+async def test_the_model_cannot_close_with_several_key_details_open(world):
+    engine, repo, llm, _ = world
+    state = known(
+        pending(SessionState(questions_asked=6), "Who buys?"),
+        product=["Payroll"], industries=["Banks"], buyer_roles=["CFO"], company_size=["50-500"],
+    )  # fmt: skip
+    sid = await preset(repo, state)
+    llm.queue(
+        "interviewer",
+        AgentTurn(say="All done.", action="finish", enough=True),
+        ask("Which regions do your clients sit in?"),
+    )
+    result = await engine.answer(T, sid, "the CFO")
+    assert result.status == "active" and "regions" in result.question.text
+
+
+def test_unclear_request_phrasings():
+    from icp_chatbot.engine.interview import _UNCLEAR_REQUEST as r
+
+    for text in ("i wan to clarify some unclear questions", "ask me the unclear questions",
+                 "let's answer the open ones", "unclear questions please"):
+        assert r.search(text), text
+    assert not r.search("change the industry to banks")

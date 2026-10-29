@@ -70,8 +70,9 @@ REVISION_QUESTION = "What should be changed or added in this profile?"
 UNCLEAR_DONE = "That was the last open question. I will update your profile with your answers."
 # "ask me the unclear questions", "go through the open ones": the user wants the profile's own list
 _UNCLEAR_REQUEST = re.compile(
-    r"\b(ask|go through|walk through|start|begin|continue with|take)\b.{0,40}"
-    r"\b(unclear|unanswered|open|remaining|pending|missing)\b",
+    r"\b(ask|go through|walk through|start|begin|continue with|take|clarify|answer|address|"
+    r"resolve|cover|do|see)\b.{0,40}\b(unclear|unanswered|open|remaining|pending|missing)\b"
+    r"|\b(unclear|unanswered)\b.{0,15}\b(questions?|points?|items?|ones?)\b",
     re.I,
 )
 _NONSENSE_NUDGES = (
@@ -628,6 +629,16 @@ class InterviewEngine:
                 )
                 if not icp_floor_met(trial):
                     return FLOOR_MESSAGES["hr" if state.track == "hr" else "sales"]
+                # the interview may close with one key detail open (asked as the last question),
+                # never with several: a field the user declined counts as settled
+                open_ = [
+                    s.label for s in missing_core_slots(trial) if s.key not in trial.skipped
+                ]
+                if len(open_) > 1:
+                    return (
+                        f"you cannot finish yet: {len(open_)} key details are still open "
+                        f"({', '.join(open_)}). Ask about the most important one now."
+                    )
         return None
 
     @staticmethod

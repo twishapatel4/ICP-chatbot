@@ -19,7 +19,7 @@ import StepTwo, { clearDraft } from "./components/StepTwo";
 import ThemeToggle from "./components/ThemeToggle";
 import type { Card, FormField, IcpResponse, Progress, StartRequest, Track, Turn } from "./types";
 import { buildNote, profileName } from "./wording";
-import { app, primaryBtn, chip, chipOn, chips, column, gutter, header, iconBtn } from "./ui";
+import { app, primaryBtn, chips, column, gutter, header, iconBtn } from "./ui";
 
 type Stage = "step1" | "step2" | "interview" | "fallback" | "building" | "scoring" | "result" | "done";
 const STAGES: Stage[] = ["step1", "step2", "interview", "fallback", "building", "scoring", "result", "done"];
@@ -429,7 +429,15 @@ export default function App() {
   // The current profile stays on the page (collapsed) while they explain what to change.
   function improve() {
     // from an approved profile this is "continue the conversation": the rebuilt profile needs approving again
-    push("bot", approved ? "Happy to keep going. What would you like to change or add?" : "Sorry about that. What should be changed or added?");
+    const hasUnclear = (icp?.document.open_questions.length ?? 0) > 0;
+    push("bot", hasUnclear
+      ? "Would you like to clear up the unclear questions, or is there something in the profile you want to fix?"
+      : approved ? "Happy to keep going. What would you like to change or add?" : "Sorry about that. What should be changed or added?");
+    if (hasUnclear) {
+      setOptions(["Answer the unclear questions", "Fix something in the profile"]);
+      setMulti(false);
+      setPicked([]);
+    }
     setApproved(false);
     setRevising(true);
     setStage("interview");
@@ -638,16 +646,26 @@ export default function App() {
 
         {options.length > 0 && replyTyped && (
           <div className="flex flex-col items-end gap-2">
-            <div className={chips} role="group" aria-label={multi ? "Select all that apply" : "Pick one"}>
+            <div className={chips} role={multi ? "group" : "radiogroup"} aria-label={multi ? "Select all that apply" : "Pick one"}>
               {options.map((o) => (
                 <button
                   key={o}
-                  className={`${chip} ${picked.includes(o) ? chipOn : ""}`}
-                  aria-pressed={multi ? picked.includes(o) : undefined}
+                  type="button"
+                  role={multi ? "checkbox" : "radio"}
+                  aria-checked={picked.includes(o)}
+                  className={`flex items-center gap-2.5 rounded-[18px] py-2.5 px-4 text-[14px] text-left font-normal ${picked.includes(o) ? "border-accent" : ""}`}
                   disabled={busy}
                   onClick={(e) => choose(o, e.detail > 0)}
                 >
-                  {multi && picked.includes(o) ? "\u2713 " : ""}
+                  {/* the box or dot shows which kind of pick this is; the button itself takes the click */}
+                  <input
+                    className="size-4 accent-accent m-0 pointer-events-none"
+                    type={multi ? "checkbox" : "radio"}
+                    checked={picked.includes(o)}
+                    readOnly
+                    tabIndex={-1}
+                    aria-hidden="true"
+                  />
                   {o}
                 </button>
               ))}

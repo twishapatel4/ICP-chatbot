@@ -102,7 +102,9 @@ export interface FormField {
   description: string;
   choices: string[];
   required: boolean;
-  facet?: string | null; // "title": a job-title dropdown, not free text
+  facet?: string | null; // a LinkedIn option list to pick from
+  input?: FieldInput; // the control, as on the step 2 form
+  any_allowed?: boolean;
 }
 
 export interface FieldEntry {
