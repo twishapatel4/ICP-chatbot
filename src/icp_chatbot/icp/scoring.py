@@ -397,6 +397,8 @@ def set_weights(model: ScoringModel, weights: dict[str, float]) -> ScoringModel:
     unknown = set(weights) - known
     if unknown:
         raise ValueError(f"unknown criteria: {sorted(unknown)}")
+    if not all(math.isfinite(w) for w in weights.values()):
+        raise ValueError("weights must be finite numbers")
     if any(w < 0 for w in weights.values()):
         raise ValueError("weights cannot be negative")
     criteria = [

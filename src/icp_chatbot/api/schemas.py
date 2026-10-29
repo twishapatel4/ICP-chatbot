@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from icp_chatbot.domain.signup import SignupInfo
 from icp_chatbot.domain.slots import Track, slot_map
@@ -16,6 +16,11 @@ from icp_chatbot.icp.document import ICPDocument
 from icp_chatbot.linkedin.catalog import Option, default_catalog
 
 
+def no_nul(text: str) -> str:
+    """Postgres text cannot hold a NUL byte: drop it before it reaches the database."""
+    return text.replace("\x00", "")
+
+
 class StartRequest(BaseModel):
     """Step 1. A missing track means Sales; the free-text role is still accepted."""
 
@@ -27,6 +32,18 @@ class StartRequest(BaseModel):
     industry: str | None = Field(default=None, max_length=100)
     company_size: str | None = Field(default=None, max_length=50)
     source: str | None = Field(default=None, max_length=100)
+
+    @field_validator("company_name", "website", "email", "role", "industry", "company_size", "source")
+    @classmethod
+    def _clean(cls, value: str | None, info):
+        if value is None:
+            return None
+        value = no_nul(value).strip()
+        if info.field_name == "company_name":
+            if not value:
+                raise ValueError("company_name is empty")
+            return value
+        return value or None
 
     def signup(self) -> SignupInfo:
         return SignupInfo(**self.model_dump(exclude={"track"}))
@@ -115,6 +132,11 @@ class SessionCreated(BaseModel):
 class AnswerRequest(BaseModel):
     text: str  # length is checked by the engine against MAX_ANSWER_CHARS
 
+    @field_validator("text")
+    @classmethod
+    def _clean(cls, value: str) -> str:
+        return no_nul(value)
+
 
 class TranscribeResponse(BaseModel):
     text: str  # empty when nothing intelligible was said
@@ -124,9 +146,19 @@ class VerdictRequest(BaseModel):
     correct: bool  # does the company think the ICP describes its best customers?
     comment: str = Field(default="", max_length=2000)
 
+    @field_validator("comment")
+    @classmethod
+    def _clean(cls, value: str) -> str:
+        return no_nul(value)
+
 
 class FormRequest(BaseModel):
     answers: dict[str, list[str]]
+
+    @field_validator("answers")
+    @classmethod
+    def _clean(cls, value: dict[str, list[str]]) -> dict[str, list[str]]:
+        return {k: [no_nul(v) for v in vs] for k, vs in value.items()}
 
 
 class ProgressOut(BaseModel):

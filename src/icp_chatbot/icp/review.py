@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from icp_chatbot.domain.state import SlotSource, normalize_values
 from icp_chatbot.icp.document import (
@@ -31,12 +31,22 @@ from icp_chatbot.icp.scoring import (
 )
 
 EDITED_EVIDENCE = "edited by the company"
+MAX_EDIT_VALUES = 100
+MAX_EDIT_VALUE_CHARS = 200
 
 
 class FieldEdit(BaseModel):
     kind: Literal["field"] = "field"
     slot: str
-    values: list[str]  # an empty list removes the field
+    values: list[str] = Field(max_length=MAX_EDIT_VALUES)  # an empty list removes the field
+
+    @field_validator("values")
+    @classmethod
+    def _clean(cls, values: list[str]) -> list[str]:
+        cleaned = [v.replace("\x00", "") for v in values]
+        if any(len(v) > MAX_EDIT_VALUE_CHARS for v in cleaned):
+            raise ValueError(f"a value is longer than {MAX_EDIT_VALUE_CHARS} characters")
+        return cleaned
 
 
 class WeightEdit(BaseModel):

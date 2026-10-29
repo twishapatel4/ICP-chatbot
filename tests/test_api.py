@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 
@@ -49,6 +51,7 @@ class World:
 
     async def call(self, method, url, tenant="tenant-1", **kw):
         headers = {"X-Tenant-Id": tenant} if tenant else {}
+        headers.update(kw.pop("headers", {}))
         return await self.client.request(method, url, headers=headers, **kw)
 
     async def create(self, **body):
@@ -539,3 +542,52 @@ async def test_asking_for_the_unclear_questions_walks_the_list_until_the_user_as
     broke = (await w.call("POST", f"/sessions/{sid}/answers", json={"text": "how is the score worked out?"})).json()
     assert broke["question"]["text"] != listed[2 % len(listed)] or len(listed) == 2
     assert broke["question"]["text"].startswith("Each lead is scored")
+
+
+# -- input hardening (QA 2026-10-29) ---------------------------------------------------------------
+
+
+async def test_blank_company_name_is_rejected_and_nul_bytes_are_dropped(world):
+    w = await world()
+    blank = await w.call("POST", "/sessions", json={"company_name": "   "})
+    assert blank.status_code == 422
+    created = await w.create(company_name="Ac\x00me ")
+    stored = (await w.repo.get_session("tenant-1", created["session_id"])).state
+    assert "\x00" not in json.dumps(stored.model_dump(mode="json"))
+
+
+async def test_nul_byte_in_an_answer_is_dropped_not_a_500(world):
+    w = await world()
+    started = await w.start()
+    w.llm.queue("interviewer", ask("Could you say more?"))
+    reply = await w.call(
+        "POST", f"/sessions/{started['session_id']}/answers", json={"text": "pay\x00roll"}
+    )
+    assert reply.status_code == 200, reply.text
+    only_nul = await w.call(
+        "POST", f"/sessions/{started['session_id']}/answers", json={"text": "\x00"}
+    )
+    assert only_nul.status_code == 422
+
+
+async def test_non_finite_weights_and_oversize_field_edits_are_422(world):
+    w = await world()
+    sid = await run_to_completion(w)
+    w.llm.queue("final_icp", ICPSynthesis())
+    await w.call("POST", f"/sessions/{sid}/icp")
+    nan = await w.call(
+        "PATCH",
+        f"/sessions/{sid}/icp",
+        content=b'{"kind":"weights","weights":{"industry_fit":NaN}}',
+        headers={"content-type": "application/json"},
+    )
+    many = await w.call(
+        "PATCH", f"/sessions/{sid}/icp",
+        json={"kind": "field", "slot": "industries", "values": ["x"] * 101},
+    )  # fmt: skip
+    long = await w.call(
+        "PATCH", f"/sessions/{sid}/icp",
+        json={"kind": "field", "slot": "industries", "values": ["x" * 201]},
+    )  # fmt: skip
+    assert (nan.status_code, many.status_code, long.status_code) == (422, 422, 422)
+    assert (await w.call("GET", f"/sessions/{sid}/icp")).json()["version"] == 1
