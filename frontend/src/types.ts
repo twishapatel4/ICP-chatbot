@@ -57,6 +57,12 @@ export interface Step1Response {
 export interface SessionView {
   session_id: string;
   status: string;
+  mode: string;
+  questions_asked: number;
+  question: Question | null; // while the chat is active
+  stop_reason: string | null;
+  has_icp: boolean;
+  progress: Progress;
   step: "profile" | "chat";
   track: Track;
   cards: Card[] | null; // while step is "profile"

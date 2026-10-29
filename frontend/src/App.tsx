@@ -131,6 +131,7 @@ export default function App() {
   const [progress, setProgress] = useState<Progress>(saved?.progress ?? NO_PROGRESS);
   const [startError, setStartError] = useState("");
   const [step2Error, setStep2Error] = useState(""); // a failed step 2 submit that is not about a missing answer
+  const [cardsError, setCardsError] = useState(false); // the step 2 cards could not be fetched on resume
   const working = useRef(false); // set at once, so a fast double click cannot start a second request
   const nextId = useRef(Math.max(0, ...(saved?.messages ?? []).map((m) => m.id)) + 1);
   const firstNewId = useRef(nextId.current); // messages restored after a reload show at once, not typed out
@@ -192,12 +193,21 @@ export default function App() {
           setOptions([]);
           setStage("step2");
           if (view.cards) setCards(view.cards);
-          else if (cards.length === 0) void api.getProfileForm(view.track).then(setCards).catch(() => undefined);
+          else if (cards.length === 0) void loadCards(view.track);
         } else {
           // step 2 was already submitted (maybe in another tab): the cards are stale
           writePending(null);
           clearDraft(id);
-          if (saved?.stage === "step2" || !saved?.sessionId) newChat();
+          if (saved?.stage === "step2" || !saved?.sessionId) {
+            // resume the interview where the server has it; a closed or finished session starts over
+            if (view.status === "active" && view.question) {
+              setSessionId(view.session_id);
+              setCards([]);
+              setSavedAnswers(null);
+              setMessages([]);
+              void handleTurn({ ...view, status: "active", icp_ready: view.has_icp, fallback_form: false, notice: null });
+            } else newChat();
+          }
         }
       })
       .catch((e) => {
@@ -210,10 +220,16 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function loadCards(t: Track) {
+    setCardsError(false);
+    return api.getProfileForm(t).then(setCards).catch(() => setCardsError(true));
+  }
+
   function newChat() {
     if (sessionId) clearDraft(sessionId);
     writePending(null);
     setStep2Error("");
+    setCardsError(false);
     setTrack(null);
     setCards([]);
     setSavedAnswers(null);
@@ -460,6 +476,12 @@ export default function App() {
             sessionId && (
               <>
                 <h1 className="sr-only">Profile builder</h1>
+                {cardsError && cards.length === 0 && (
+                  <div className="flex items-center justify-center gap-3 text-warn text-[13px]" role="alert">
+                    The questions could not be loaded.
+                    <button onClick={() => track && void loadCards(track)}>Retry</button>
+                  </div>
+                )}
                 <StepTwo
                   key={`${sessionId}-${savedAnswers ? "saved" : "none"}`}
                   sessionId={sessionId}
