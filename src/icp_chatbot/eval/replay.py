@@ -9,9 +9,10 @@ from icp_chatbot.engine.interview import InterviewEngine
 from icp_chatbot.enrichment.fetcher import FetchBlocked, FetchedPage
 from icp_chatbot.enrichment.service import EnrichmentService
 from icp_chatbot.eval.cases import EvalCase
+from icp_chatbot.eval.match import forbidden_match, slot_matcher
 from icp_chatbot.icp.builder import build_icp
 from icp_chatbot.icp.document import ICPDocument
-from icp_chatbot.icp.scoring import loose_equal, validate_model
+from icp_chatbot.icp.scoring import validate_model
 from icp_chatbot.llm.types import LLM
 from icp_chatbot.store.db import init_models, make_engine, make_session_factory
 from icp_chatbot.store.repo import Repo
@@ -52,8 +53,14 @@ def _pairs(values_by_slot: dict[str, list[str]], slots) -> list[tuple[str, str]]
     return [(s, v) for s in slots for v in values_by_slot.get(s, [])]
 
 
-def _present(slot: str, value: str, actual: dict[str, list[str]]) -> bool:
-    return any(loose_equal(value, v) for v in actual.get(slot, []))
+def _present(slot: str, expected: str, actual: dict[str, list[str]]) -> bool:
+    """True when some actual value of the slot matches `expected` (catalog-aware per slot)."""
+    same = slot_matcher(slot)
+    return any(same(v, expected) for v in actual.get(slot, []))
+
+
+def _violates(slot: str, forbidden: str, actual: dict[str, list[str]]) -> bool:
+    return any(forbidden_match(slot, v, forbidden) for v in actual.get(slot, []))
 
 
 def score_document(case: EvalCase, document: ICPDocument) -> tuple[float, float, float, int]:
@@ -69,7 +76,7 @@ def score_document(case: EvalCase, document: ICPDocument) -> tuple[float, float,
         correct / len(actual_pairs) if actual_pairs else (1.0 if not expected_pairs else 0.0)
     )
     f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
-    violations = sum(1 for s, v in _pairs(case.forbidden, case.forbidden) if _present(s, v, actual))
+    violations = sum(1 for s, v in _pairs(case.forbidden, case.forbidden) if _violates(s, v, actual))
     return precision, recall, f1, violations
 
 

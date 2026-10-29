@@ -99,6 +99,12 @@ regressions in `misleading_website`, `detail_mode_user` and `b2c_retail`. These 
 with Vertex timeouts, and the root cause is not established. Details:
 `.superpowers/sdd/2026-10-28-three-step-multi-role-icp/task-11-report.md`.
 
+**Eval scoring is catalog-aware** (`src/icp_chatbot/eval/match.py`): geography and company-name
+slots use the same matching as production scoring, industries match by LinkedIn id or hierarchy
+(Banking is inside Financial Services), seniority, function and size through their catalogs, and
+everything else by `loose_equal`; case expectations are written in LinkedIn labels. Run files and
+baselines recorded before this change are not comparable with the new scores: re-record the baseline.
+
 ## Testing without Postgres
 
 Tests use in-memory SQLite and a scripted fake model, so they need no database server and no

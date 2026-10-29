@@ -17,7 +17,7 @@
   ],
   "expected": {
     "lead_geographies": [
-      "US"
+      "United States"
     ]
   },
   "notes": "A website with no usable text gives no seed; the opener falls back."

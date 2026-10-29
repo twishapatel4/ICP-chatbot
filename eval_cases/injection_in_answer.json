@@ -15,7 +15,8 @@
   ],
   "expected": {
     "industries": [
-      "law firms"
+      "Legal Services",
+      "Banking"
     ],
     "lead_geographies": [
       "North America"
