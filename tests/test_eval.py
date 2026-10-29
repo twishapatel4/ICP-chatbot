@@ -219,3 +219,76 @@ def test_comparing_on_a_lower_is_better_target():
     assert verdict.passed
     with pytest.raises(ValueError):
         compare(base_summary(), base_summary(), target="nonsense")
+
+
+# -- HR cases and the step 2 flow -------------------------------------------------------------------
+
+HR_CASES = ("hr_fresher", "hr_experienced", "hr_both", "hr_vague")
+
+
+def _shipped(name):
+    return next(c for c in load_cases(CASES_DIR) if c.name == name)
+
+
+def test_hr_cases_load_and_use_hr_slots():
+    from icp_chatbot.domain.slots import slot_map
+    from icp_chatbot.engine.profile_form import validate_profile
+
+    cases = {c.name: c for c in load_cases(CASES_DIR)}
+    assert set(HR_CASES) <= set(cases)
+    for name in HR_CASES:
+        c = cases[name]
+        assert c.track == "hr", name
+        assert case_problems(c) == [], name
+        assert c.profile_answers is not None, name
+        assert validate_profile("hr", c.profile_answers) == [], name  # the form would be accepted
+        assert set(c.profile_answers) <= set(slot_map("hr")), name
+        assert c.expected or c.forbidden, name  # a vague case may only forbid inventions
+    levels = {n: cases[n].profile_answers["experience_level"] for n in HR_CASES}
+    assert levels == {
+        "hr_fresher": ["Fresher"],
+        "hr_experienced": ["Experienced"],
+        "hr_both": ["Both"],
+        "hr_vague": levels["hr_vague"],
+    }
+    assert "years_experience" not in cases["hr_fresher"].profile_answers
+    assert "years_experience" in cases["hr_both"].profile_answers
+
+
+def test_required_tags_still_covered():
+    cases = load_cases(CASES_DIR)
+    assert REQUIRED_TAGS <= {t for c in cases for t in c.tags}
+    assert [p for p in check_launch_set(cases) if "cases; the launch set needs" not in p] == []
+    assert {c.track for c in cases} == {"sales", "hr"}
+
+
+def test_a_b2c_sales_case_goes_through_the_step_two_form():
+    from icp_chatbot.engine.profile_form import validate_profile
+
+    c = _shipped("b2c_retail")
+    assert c.track == "sales" and c.profile_answers["business_model"] == ["B2C"]
+    assert validate_profile("sales", c.profile_answers) == []
+
+
+async def test_replay_runs_an_hr_case_through_its_track_and_the_step_two_form():
+    c = _shipped("hr_fresher")
+    llm = FakeLLM({
+        "opener": [QuestionOutput(question="Hi!")],
+        "interviewer": [ask("Any internships?", up("work_mode", ["Hybrid"])), ask("More?")],
+        "final_icp": [ICPSynthesis()],
+    })  # fmt: skip
+    result = await replay_case(c.model_copy(update={"answers": ["a", "b"]}), llm, SETTINGS)
+    assert result.errors == [] and result.status == "completed"
+    assert result.scoring_valid  # judged against the HR registry, not the Sales one
+    assert result.recall > 0  # the form answers reached the document as stated slots
+
+
+async def test_a_case_without_step_two_answers_still_uses_the_legacy_start():
+    c = case(name="legacy", answers=["a"])
+    assert c.profile_answers is None
+    llm = FakeLLM({
+        "opener": [QuestionOutput(question="Hi!")],
+        "interviewer": [ask("q?")],
+        "final_icp": [ICPSynthesis()],
+    })  # fmt: skip
+    assert (await replay_case(c, llm, SETTINGS)).errors == []

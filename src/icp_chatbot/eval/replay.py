@@ -88,8 +88,13 @@ async def replay_case(
             repo=repo, llm=llm, enrichment=enrichment, settings=settings
         )
 
-        result = await engine.start(TENANT, SignupInfo(**case.signup))
-        sid = result.session_id
+        signup = SignupInfo(**case.signup)
+        if case.profile_answers is None:
+            result = await engine.start(TENANT, signup)  # Sales without the step 2 cards
+            sid = result.session_id
+        else:
+            sid = await engine.create(TENANT, signup, case.track)
+            result = await engine.begin_chat(TENANT, sid, case.profile_answers)
         for text in case.answers:
             if result.status != "active":
                 break

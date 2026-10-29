@@ -1,0 +1,76 @@
+{
+  "name": "hr_both",
+  "track": "hr",
+  "tags": [
+    "hr",
+    "both",
+    "one_long_reply"
+  ],
+  "signup": {
+    "company_name": "Meridian Health Analytics",
+    "role": "HR Business Partner",
+    "email": "people@meridian.example"
+  },
+  "profile_answers": {
+    "target_functions": [
+      "Analyst"
+    ],
+    "target_roles": [
+      "Data Analyst"
+    ],
+    "experience_level": [
+      "Both"
+    ],
+    "years_experience": [
+      "1-6"
+    ],
+    "current_industries": [
+      "Any"
+    ],
+    "current_company_size": [
+      "Any"
+    ],
+    "candidate_locations": [
+      "India",
+      "Bengaluru",
+      "Hyderabad"
+    ],
+    "required_skills": [
+      "SQL",
+      "Excel"
+    ]
+  },
+  "answers": [
+    "We are building a data team. I want a mix: a couple of fresh graduates we can train, and a few analysts with three to six years who can lead small projects. Both groups should be comfortable with SQL and dashboards, hybrid from Bengaluru or Hyderabad, full-time. Salary depends on experience, nothing fixed yet. Hiring about five people in total, ideally within two months. Nice to have: Power BI, and healthcare domain knowledge."
+  ],
+  "expected": {
+    "experience_level": [
+      "Both"
+    ],
+    "years_experience": [
+      "1-6"
+    ],
+    "required_skills": [
+      "SQL",
+      "Excel"
+    ],
+    "candidate_locations": [
+      "India"
+    ],
+    "work_mode": [
+      "Hybrid"
+    ],
+    "nice_to_have_skills": [
+      "Power BI"
+    ]
+  },
+  "forbidden": {
+    "current_industries": [
+      "Banking"
+    ],
+    "employment_type": [
+      "Internship"
+    ]
+  },
+  "notes": "Both: experienced set required; Any on industry and company size builds no rule and must not turn into a specific value."
+}

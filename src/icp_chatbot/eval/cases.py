@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from icp_chatbot.domain.slots import Track, slot_map
+from icp_chatbot.engine.profile_form import validate_profile
 
 MIN_LAUNCH_CASES = 30
 
@@ -28,6 +29,7 @@ class EvalCase(BaseModel):
     tags: list[str]
     signup: dict[str, str]
     website_text: str | None = None  # what the company's website says, for enrichment
+    profile_answers: dict[str, list[str]] | None = None  # step 2 form; None skips step 2
     answers: list[str]
     detail_answers: list[str] = Field(
         default_factory=list
@@ -52,6 +54,11 @@ def case_problems(case: EvalCase) -> list[str]:
     for slot in [*case.expected, *case.forbidden]:
         if slot not in known:
             problems.append(f"unknown slot {slot}")
+    if case.profile_answers is not None:
+        problems.extend(
+            f"step 2 form is missing or invalid: {slot}"
+            for slot in validate_profile(case.track, case.profile_answers)
+        )
     return problems
 
 

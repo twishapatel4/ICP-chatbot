@@ -29,5 +29,16 @@
       "IT manager"
     ]
   },
-  "notes": "A B2C company is never asked about buyer roles or departments."
+  "notes": "A B2C company is never asked about buyer roles or departments. Step 2 answers B2C, so the industry, company size and buyer cards are hidden and must not be required.",
+  "profile_answers": {
+    "business_model": [
+      "B2C"
+    ],
+    "lead_geographies": [
+      "United Kingdom"
+    ],
+    "company_hq_geographies": [
+      "Any"
+    ]
+  }
 }
