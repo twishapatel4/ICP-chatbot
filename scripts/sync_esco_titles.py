@@ -84,12 +84,45 @@ def extra_titles() -> list[str]:
     return [ln.strip() for ln in lines if ln.strip() and not ln.startswith("#")]
 
 
+ONET = "https://www.onetcenter.org/dl_files/database/db_29_1_text/"  # O*NET, CC BY 4.0
+
+
+def onet_titles(client: httpx.Client) -> tuple[list[str], list[str]]:
+    """(occupation titles, alternate/reported titles) from the O*NET database."""
+    def column(name: str, col: str) -> list[str]:
+        r = client.get(ONET + name.replace(" ", "%20"), timeout=120, follow_redirects=True)
+        r.raise_for_status()
+        lines = r.text.splitlines()
+        i = lines[0].split("\t").index(col)
+        return [ln.split("\t")[i] for ln in lines[1:] if ln.strip()]
+
+    return column("Occupation Data.txt", "Title"), column("Alternate Titles.txt", "Alternate Title")
+
+
 def merge_extras() -> int:
-    """Re-rank the existing snapshot with the extras on top, without calling ESCO."""
-    old = [r for r in json.loads(OUT.read_text(encoding="utf-8")) if not r["id"].startswith("extra~")]
-    rows = [{"id": f"extra~{i}", "label": tidy(t)} for i, t in enumerate(extra_titles())]
-    seen = {r["label"].casefold() for r in rows}
-    rows += [r for r in old if r["label"].casefold() not in seen]
+    """Rebuild the snapshot order without calling ESCO: curated extras, O*NET occupation
+    titles, the existing ESCO titles, then O*NET alternate titles."""
+    old = [r for r in json.loads(OUT.read_text(encoding="utf-8")) if r["id"].split("~")[0] not in ("extra", "onet")]
+    with httpx.Client() as client:
+        primary, alternate = onet_titles(client)
+    rows: list[dict] = []
+    seen: set[str] = set()
+
+    def add(oid: str, label: str) -> None:
+        label = tidy(label)
+        key = label.casefold()
+        if label and len(label) <= 80 and key not in seen:
+            seen.add(key)
+            rows.append({"id": oid, "label": label})
+
+    for i, t in enumerate(extra_titles()):
+        add(f"extra~{i}", t)
+    for i, t in enumerate(primary):
+        add(f"onet~p{i}", t)
+    for r in old:
+        add(r["id"], r["label"])
+    for i, t in enumerate(alternate):
+        add(f"onet~a{i}", t)
     OUT.write_text(json.dumps(rows, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"{OUT}: {len(rows)} titles")
     return 0
