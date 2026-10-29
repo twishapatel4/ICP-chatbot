@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from icp_chatbot.linkedin.catalog import DATA_DIR  # noqa: E402
 
+EXTRAS = Path(__file__).with_name("linkedin_extra_titles.txt")
 API = "https://ec.europa.eu/esco/api/search"
 PAGE = 10  # a full page is about 35 KB per occupation, bigger pages time out
 RETRIES = 8
@@ -77,6 +78,23 @@ def tidy(label: str) -> str:
     return text[:1].upper() + text[1:]
 
 
+def extra_titles() -> list[str]:
+    """Titles common on LinkedIn that ESCO lacks (Founder, VP of Sales, ...), ranked first."""
+    lines = EXTRAS.read_text(encoding="utf-8").splitlines()
+    return [ln.strip() for ln in lines if ln.strip() and not ln.startswith("#")]
+
+
+def merge_extras() -> int:
+    """Re-rank the existing snapshot with the extras on top, without calling ESCO."""
+    old = [r for r in json.loads(OUT.read_text(encoding="utf-8")) if not r["id"].startswith("extra~")]
+    rows = [{"id": f"extra~{i}", "label": tidy(t)} for i, t in enumerate(extra_titles())]
+    seen = {r["label"].casefold() for r in rows}
+    rows += [r for r in old if r["label"].casefold() not in seen]
+    OUT.write_text(json.dumps(rows, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"{OUT}: {len(rows)} titles")
+    return 0
+
+
 def to_rows(occupations: list[dict]) -> list[dict]:
     """One row per distinct title: all preferred names first, then alternative labels. The
     first row for a title (compared ignoring case) wins."""
@@ -90,6 +108,8 @@ def to_rows(occupations: list[dict]) -> list[dict]:
             seen.add(key)
             rows.append({"id": oid, "label": label})
 
+    for i, label in enumerate(extra_titles()):
+        add(f"extra~{i}", label)
     for occ in occupations:
         add(occ["uri"].rsplit("/", 1)[-1], (occ.get("preferredLabel") or {}).get("en") or occ["title"])
     for occ in occupations:
@@ -100,6 +120,8 @@ def to_rows(occupations: list[dict]) -> list[dict]:
 
 
 def main() -> int:
+    if "--extras-only" in sys.argv:
+        return merge_extras()
     with httpx.Client() as client:
         first = fetch_page(client, 0)
         total = int(first["total"])

@@ -1,0 +1,650 @@
+# Titles common on LinkedIn profiles that ESCO lacks. One per line; merged first by
+# sync_esco_titles.py (and so ranked ahead of ESCO titles). Add more here and re-run
+# `python scripts/sync_esco_titles.py --extras-only` to update titles.json without downloading.
+Founder
+Co-Founder
+Founder & CEO
+Co-Founder & CEO
+Co-Founder & CTO
+Founding Partner
+Founding Engineer
+Founding Member
+Founding Team Member
+Founding Designer
+Founding Product Manager
+Founding Board Member
+Founder and Managing Director
+Owner
+Co-Owner
+Business Owner
+Proprietor
+Entrepreneur
+Serial Entrepreneur
+Self-Employed
+Freelancer
+Independent Consultant
+Consultant
+Principal Consultant
+Senior Consultant
+Managing Partner
+General Partner
+Partner
+Senior Partner
+Equity Partner
+Managing Member
+Chairman
+Chairperson
+Chairman & CEO
+Executive Chairman
+Non-Executive Director
+Independent Director
+Board Member
+Board Director
+Board Advisor
+Advisor
+Strategic Advisor
+Senior Advisor
+Venture Partner
+Investor
+Angel Investor
+Chief Executive Officer
+CEO
+Chief Operating Officer
+COO
+Chief Financial Officer
+CFO
+Chief Technology Officer
+CTO
+Chief Information Officer
+CIO
+Chief Information Security Officer
+CISO
+Chief Marketing Officer
+CMO
+Chief Revenue Officer
+CRO
+Chief Product Officer
+CPO
+Chief Data Officer
+CDO
+Chief Data Scientist
+Chief AI Officer
+Chief Digital Officer
+Chief Human Resources Officer
+CHRO
+Chief People Officer
+Chief Talent Officer
+Chief Commercial Officer
+CCO
+Chief Business Officer
+Chief Strategy Officer
+Chief Legal Officer
+Chief Compliance Officer
+Chief Risk Officer
+Chief Security Officer
+Chief Customer Officer
+Chief Experience Officer
+Chief Growth Officer
+Chief Sales Officer
+Chief Procurement Officer
+Chief Supply Chain Officer
+Chief Medical Officer
+Chief Scientific Officer
+Chief Architect
+Chief of Staff
+Chief Innovation Officer
+Chief Sustainability Officer
+Chief Accounting Officer
+Chief Design Officer
+Chief Content Officer
+Chief Brand Officer
+Chief Creative Officer
+Chief Analytics Officer
+Chief Transformation Officer
+President
+President & CEO
+Vice President
+Senior Vice President
+Executive Vice President
+Associate Vice President
+Assistant Vice President
+VP
+SVP
+EVP
+AVP
+VP of Sales
+VP of Marketing
+VP of Engineering
+VP of Product
+VP of Operations
+VP of Finance
+VP of HR
+VP of People
+VP of Business Development
+VP of Customer Success
+VP of Technology
+VP of Data
+VP of Design
+VP of Growth
+VP of Partnerships
+VP of Talent Acquisition
+Vice President of Sales
+Vice President of Marketing
+Vice President of Engineering
+Vice President of Product
+Vice President of Operations
+Vice President of Human Resources
+Vice President of Business Development
+Vice President of Customer Success
+Head of Sales
+Head of Marketing
+Head of Engineering
+Head of Product
+Head of Design
+Head of Data
+Head of Growth
+Head of Operations
+Head of Finance
+Head of HR
+Head of People
+Head of Talent
+Head of Talent Acquisition
+Head of Recruitment
+Head of Business Development
+Head of Customer Success
+Head of Partnerships
+Head of Technology
+Head of IT
+Head of Procurement
+Head of Legal
+Head of Strategy
+Head of Content
+Head of Brand
+Head of Demand Generation
+Head of Digital
+Head of AI
+Head of Security
+Head of Learning and Development
+Managing Director
+Executive Director
+Director
+Senior Director
+Associate Director
+Assistant Director
+Regional Director
+Country Manager
+Country Director
+General Manager
+Regional Manager
+Area Manager
+Branch Manager
+Director of Sales
+Director of Marketing
+Director of Engineering
+Director of Product
+Director of Operations
+Director of Finance
+Director of Human Resources
+Director of HR
+Director of Talent Acquisition
+Director of Recruiting
+Director of Business Development
+Director of Customer Success
+Director of IT
+Director of Technology
+Director of Data
+Director of Design
+Director of Growth
+Director of Partnerships
+Director of Procurement
+Director of Demand Generation
+Director of Digital Marketing
+Director of Product Management
+Director of Software Engineering
+Director of Information Technology
+Director of Sales Operations
+Director of Revenue Operations
+Director of Account Management
+Director of Learning and Development
+Director of Compensation and Benefits
+Director of People Operations
+Director of Employee Experience
+Director of Talent Management
+Director of Content
+Director of Communications
+Director of Strategy
+Director of Analytics
+Engineering Director
+Sales Director
+Marketing Director
+Product Director
+Design Director
+Creative Director
+Technical Director
+Technology Director
+Finance Director
+HR Director
+Operations Director
+Business Development Director
+Talent Acquisition Director
+People Director
+Engineering Manager
+Senior Engineering Manager
+Product Manager
+Senior Product Manager
+Associate Product Manager
+Group Product Manager
+Principal Product Manager
+Technical Product Manager
+Product Owner
+Product Marketing Manager
+Product Designer
+Program Manager
+Senior Program Manager
+Technical Program Manager
+Project Manager
+Senior Project Manager
+IT Project Manager
+Scrum Master
+Agile Coach
+Delivery Manager
+Sales Manager
+Senior Sales Manager
+Regional Sales Manager
+Area Sales Manager
+Enterprise Sales Manager
+Inside Sales Manager
+Account Manager
+Senior Account Manager
+Key Account Manager
+Strategic Account Manager
+Global Account Manager
+Account Executive
+Senior Account Executive
+Enterprise Account Executive
+Strategic Account Executive
+Mid-Market Account Executive
+Sales Executive
+Sales Representative
+Inside Sales Representative
+Outside Sales Representative
+Sales Development Representative
+SDR
+Business Development Representative
+BDR
+Business Development Manager
+Business Development Executive
+Business Development Associate
+Sales Associate
+Sales Consultant
+Sales Engineer
+Solutions Engineer
+Senior Solutions Engineer
+Sales Specialist
+Solutions Specialist
+Solutions Consultant
+Solutions Architect
+Senior Solutions Architect
+Enterprise Architect
+Technical Account Manager
+Customer Success Manager
+Senior Customer Success Manager
+Customer Success Associate
+Customer Success Director
+Customer Success Specialist
+Customer Support Specialist
+Customer Support Manager
+Customer Service Representative
+Customer Service Manager
+Customer Experience Manager
+Client Success Manager
+Client Partner
+Client Services Manager
+Client Relationship Manager
+Relationship Manager
+Partnerships Manager
+Partner Manager
+Alliance Manager
+Channel Manager
+Channel Sales Manager
+Revenue Operations Manager
+Sales Operations Manager
+Sales Operations Analyst
+Sales Enablement Manager
+Sales Analyst
+Sales Lead
+Sales Team Lead
+Team Lead
+Team Leader
+Marketing Manager
+Senior Marketing Manager
+Digital Marketing Manager
+Content Marketing Manager
+Growth Marketing Manager
+Performance Marketing Manager
+Demand Generation Manager
+Field Marketing Manager
+Brand Manager
+Marketing Executive
+Marketing Specialist
+Marketing Associate
+Marketing Coordinator
+Marketing Analyst
+Marketing Consultant
+Growth Manager
+Growth Hacker
+SEO Specialist
+SEO Manager
+Social Media Manager
+Social Media Specialist
+Community Manager
+Content Strategist
+Content Writer
+Copywriter
+Communications Manager
+Public Relations Manager
+PR Manager
+Email Marketing Manager
+Marketing Automation Manager
+Software Engineer
+Senior Software Engineer
+Staff Software Engineer
+Principal Software Engineer
+Lead Software Engineer
+Software Developer
+Senior Software Developer
+Backend Developer
+Backend Engineer
+Frontend Developer
+Frontend Engineer
+Front-End Developer
+Back-End Developer
+Full Stack Developer
+Full Stack Engineer
+Full-Stack Developer
+Web Developer
+Mobile Developer
+Mobile App Developer
+iOS Developer
+Android Developer
+React Developer
+Node.js Developer
+Python Developer
+Java Developer
+.NET Developer
+PHP Developer
+Ruby on Rails Developer
+Golang Developer
+Flutter Developer
+Embedded Software Engineer
+Firmware Engineer
+Game Developer
+Blockchain Developer
+Salesforce Developer
+Salesforce Administrator
+SAP Consultant
+DevOps Engineer
+Senior DevOps Engineer
+Site Reliability Engineer
+SRE
+Platform Engineer
+Cloud Engineer
+Cloud Architect
+Infrastructure Engineer
+Systems Engineer
+Systems Administrator
+Network Engineer
+Database Administrator
+QA Engineer
+Quality Assurance Engineer
+QA Analyst
+Test Engineer
+Software Tester
+Automation Engineer
+SDET
+Security Engineer
+Cybersecurity Analyst
+Information Security Analyst
+Security Analyst
+Penetration Tester
+Data Scientist
+Senior Data Scientist
+Data Analyst
+Senior Data Analyst
+Data Engineer
+Senior Data Engineer
+Analytics Engineer
+Machine Learning Engineer
+ML Engineer
+AI Engineer
+AI Researcher
+Research Scientist
+Applied Scientist
+NLP Engineer
+Computer Vision Engineer
+Business Intelligence Analyst
+BI Developer
+Business Analyst
+Senior Business Analyst
+Systems Analyst
+Technical Lead
+Tech Lead
+Team Lead Engineering
+Engineering Lead
+Development Manager
+Software Development Manager
+IT Manager
+IT Director
+IT Administrator
+IT Support Specialist
+IT Consultant
+Technical Support Engineer
+Technical Writer
+Technical Recruiter
+UX Designer
+UI Designer
+UI/UX Designer
+UX Researcher
+UX Manager
+Graphic Designer
+Visual Designer
+Interaction Designer
+Brand Designer
+Motion Designer
+Art Director
+Human Resources Manager
+HR Manager
+Senior HR Manager
+HR Business Partner
+HR Generalist
+HR Executive
+HR Specialist
+HR Coordinator
+HR Assistant
+HR Administrator
+HR Analyst
+HR Consultant
+HR Operations Manager
+HR Director
+Human Resources Director
+Human Resources Business Partner
+Human Resources Generalist
+Human Resources Executive
+Human Resources Specialist
+Human Resources Coordinator
+Human Resources Associate
+People Operations Manager
+People Partner
+People & Culture Manager
+People and Culture Manager
+Talent Acquisition Manager
+Talent Acquisition Specialist
+Talent Acquisition Partner
+Talent Acquisition Lead
+Talent Acquisition Executive
+Talent Acquisition Coordinator
+Talent Partner
+Talent Manager
+Talent Sourcer
+Recruiter
+Senior Recruiter
+Lead Recruiter
+Corporate Recruiter
+Technical Recruiting Manager
+Recruiting Manager
+Recruitment Manager
+Recruitment Consultant
+Recruitment Specialist
+Recruitment Executive
+Staffing Manager
+Staffing Specialist
+Sourcing Specialist
+Learning and Development Manager
+Learning & Development Specialist
+Training Manager
+Compensation and Benefits Manager
+Compensation Analyst
+Benefits Administrator
+Payroll Manager
+Payroll Specialist
+Employee Relations Manager
+Employer Branding Manager
+Diversity and Inclusion Manager
+Organizational Development Manager
+Workforce Planning Manager
+HRIS Analyst
+HR Technology Manager
+Finance Manager
+Financial Analyst
+Senior Financial Analyst
+Financial Controller
+Controller
+Corporate Controller
+Treasurer
+Accountant
+Senior Accountant
+Accounting Manager
+Accounts Manager
+Accounts Payable Specialist
+Accounts Receivable Specialist
+Auditor
+Internal Auditor
+Tax Manager
+FP&A Manager
+FP&A Analyst
+Investment Analyst
+Investment Banking Analyst
+Investment Manager
+Portfolio Manager
+Risk Manager
+Compliance Manager
+Compliance Officer
+Legal Counsel
+General Counsel
+Corporate Counsel
+In-House Counsel
+Attorney
+Lawyer
+Paralegal
+Operations Manager
+Senior Operations Manager
+Operations Analyst
+Operations Executive
+Operations Coordinator
+Operations Lead
+Business Operations Manager
+Business Operations Analyst
+Process Improvement Manager
+Supply Chain Manager
+Supply Chain Analyst
+Logistics Manager
+Procurement Manager
+Procurement Specialist
+Purchasing Manager
+Sourcing Manager
+Strategic Sourcing Manager
+Category Manager
+Vendor Manager
+Warehouse Manager
+Production Manager
+Plant Manager
+Facilities Manager
+Office Manager
+Administrative Assistant
+Executive Assistant
+Personal Assistant
+Virtual Assistant
+Executive Business Partner
+Office Administrator
+Receptionist
+Strategy Manager
+Strategy Consultant
+Management Consultant
+Business Consultant
+Technology Consultant
+Associate Consultant
+Business Strategy Manager
+Corporate Development Manager
+Corporate Strategy Manager
+Chief Revenue Officer
+Head of Revenue
+Revenue Manager
+Chief Operating Officer & Co-Founder
+Intern
+Software Engineering Intern
+Marketing Intern
+Business Development Intern
+HR Intern
+Trainee
+Management Trainee
+Graduate Trainee
+Associate
+Senior Associate
+Analyst
+Senior Analyst
+Specialist
+Senior Specialist
+Coordinator
+Executive
+Senior Executive
+Manager
+Senior Manager
+Assistant Manager
+Deputy Manager
+Deputy General Manager
+Assistant General Manager
+Lead
+Supervisor
+Principal
+Principal Engineer
+Staff Engineer
+Distinguished Engineer
+Engineering Fellow
+Fellow
+Researcher
+Professor
+Assistant Professor
+Associate Professor
+Lecturer
+Teacher
+Trainer
+Mentor
+Coach
+Executive Coach
+Business Coach
+Life Coach
+Healthcare Administrator
+Clinic Manager
+Practice Manager
+Store Manager
+Restaurant Manager
+Hotel Manager
+Real Estate Agent
+Real Estate Broker
+Property Manager
+Insurance Agent
+Financial Advisor
+Financial Planner
+Wealth Manager
+Loan Officer
+Mortgage Broker

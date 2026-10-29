@@ -1,5 +1,2593 @@
 [
  {
+  "id": "extra~0",
+  "label": "Founder"
+ },
+ {
+  "id": "extra~1",
+  "label": "Co-Founder"
+ },
+ {
+  "id": "extra~2",
+  "label": "Founder & CEO"
+ },
+ {
+  "id": "extra~3",
+  "label": "Co-Founder & CEO"
+ },
+ {
+  "id": "extra~4",
+  "label": "Co-Founder & CTO"
+ },
+ {
+  "id": "extra~5",
+  "label": "Founding Partner"
+ },
+ {
+  "id": "extra~6",
+  "label": "Founding Engineer"
+ },
+ {
+  "id": "extra~7",
+  "label": "Founding Member"
+ },
+ {
+  "id": "extra~8",
+  "label": "Founding Team Member"
+ },
+ {
+  "id": "extra~9",
+  "label": "Founding Designer"
+ },
+ {
+  "id": "extra~10",
+  "label": "Founding Product Manager"
+ },
+ {
+  "id": "extra~11",
+  "label": "Founding Board Member"
+ },
+ {
+  "id": "extra~12",
+  "label": "Founder and Managing Director"
+ },
+ {
+  "id": "extra~13",
+  "label": "Owner"
+ },
+ {
+  "id": "extra~14",
+  "label": "Co-Owner"
+ },
+ {
+  "id": "extra~15",
+  "label": "Business Owner"
+ },
+ {
+  "id": "extra~16",
+  "label": "Proprietor"
+ },
+ {
+  "id": "extra~17",
+  "label": "Entrepreneur"
+ },
+ {
+  "id": "extra~18",
+  "label": "Serial Entrepreneur"
+ },
+ {
+  "id": "extra~19",
+  "label": "Self-Employed"
+ },
+ {
+  "id": "extra~20",
+  "label": "Freelancer"
+ },
+ {
+  "id": "extra~21",
+  "label": "Independent Consultant"
+ },
+ {
+  "id": "extra~22",
+  "label": "Consultant"
+ },
+ {
+  "id": "extra~23",
+  "label": "Principal Consultant"
+ },
+ {
+  "id": "extra~24",
+  "label": "Senior Consultant"
+ },
+ {
+  "id": "extra~25",
+  "label": "Managing Partner"
+ },
+ {
+  "id": "extra~26",
+  "label": "General Partner"
+ },
+ {
+  "id": "extra~27",
+  "label": "Partner"
+ },
+ {
+  "id": "extra~28",
+  "label": "Senior Partner"
+ },
+ {
+  "id": "extra~29",
+  "label": "Equity Partner"
+ },
+ {
+  "id": "extra~30",
+  "label": "Managing Member"
+ },
+ {
+  "id": "extra~31",
+  "label": "Chairman"
+ },
+ {
+  "id": "extra~32",
+  "label": "Chairperson"
+ },
+ {
+  "id": "extra~33",
+  "label": "Chairman & CEO"
+ },
+ {
+  "id": "extra~34",
+  "label": "Executive Chairman"
+ },
+ {
+  "id": "extra~35",
+  "label": "Non-Executive Director"
+ },
+ {
+  "id": "extra~36",
+  "label": "Independent Director"
+ },
+ {
+  "id": "extra~37",
+  "label": "Board Member"
+ },
+ {
+  "id": "extra~38",
+  "label": "Board Director"
+ },
+ {
+  "id": "extra~39",
+  "label": "Board Advisor"
+ },
+ {
+  "id": "extra~40",
+  "label": "Advisor"
+ },
+ {
+  "id": "extra~41",
+  "label": "Strategic Advisor"
+ },
+ {
+  "id": "extra~42",
+  "label": "Senior Advisor"
+ },
+ {
+  "id": "extra~43",
+  "label": "Venture Partner"
+ },
+ {
+  "id": "extra~44",
+  "label": "Investor"
+ },
+ {
+  "id": "extra~45",
+  "label": "Angel Investor"
+ },
+ {
+  "id": "extra~46",
+  "label": "Chief Executive Officer"
+ },
+ {
+  "id": "extra~47",
+  "label": "CEO"
+ },
+ {
+  "id": "extra~48",
+  "label": "Chief Operating Officer"
+ },
+ {
+  "id": "extra~49",
+  "label": "COO"
+ },
+ {
+  "id": "extra~50",
+  "label": "Chief Financial Officer"
+ },
+ {
+  "id": "extra~51",
+  "label": "CFO"
+ },
+ {
+  "id": "extra~52",
+  "label": "Chief Technology Officer"
+ },
+ {
+  "id": "extra~53",
+  "label": "CTO"
+ },
+ {
+  "id": "extra~54",
+  "label": "Chief Information Officer"
+ },
+ {
+  "id": "extra~55",
+  "label": "CIO"
+ },
+ {
+  "id": "extra~56",
+  "label": "Chief Information Security Officer"
+ },
+ {
+  "id": "extra~57",
+  "label": "CISO"
+ },
+ {
+  "id": "extra~58",
+  "label": "Chief Marketing Officer"
+ },
+ {
+  "id": "extra~59",
+  "label": "CMO"
+ },
+ {
+  "id": "extra~60",
+  "label": "Chief Revenue Officer"
+ },
+ {
+  "id": "extra~61",
+  "label": "CRO"
+ },
+ {
+  "id": "extra~62",
+  "label": "Chief Product Officer"
+ },
+ {
+  "id": "extra~63",
+  "label": "CPO"
+ },
+ {
+  "id": "extra~64",
+  "label": "Chief Data Officer"
+ },
+ {
+  "id": "extra~65",
+  "label": "CDO"
+ },
+ {
+  "id": "extra~66",
+  "label": "Chief Data Scientist"
+ },
+ {
+  "id": "extra~67",
+  "label": "Chief AI Officer"
+ },
+ {
+  "id": "extra~68",
+  "label": "Chief Digital Officer"
+ },
+ {
+  "id": "extra~69",
+  "label": "Chief Human Resources Officer"
+ },
+ {
+  "id": "extra~70",
+  "label": "CHRO"
+ },
+ {
+  "id": "extra~71",
+  "label": "Chief People Officer"
+ },
+ {
+  "id": "extra~72",
+  "label": "Chief Talent Officer"
+ },
+ {
+  "id": "extra~73",
+  "label": "Chief Commercial Officer"
+ },
+ {
+  "id": "extra~74",
+  "label": "CCO"
+ },
+ {
+  "id": "extra~75",
+  "label": "Chief Business Officer"
+ },
+ {
+  "id": "extra~76",
+  "label": "Chief Strategy Officer"
+ },
+ {
+  "id": "extra~77",
+  "label": "Chief Legal Officer"
+ },
+ {
+  "id": "extra~78",
+  "label": "Chief Compliance Officer"
+ },
+ {
+  "id": "extra~79",
+  "label": "Chief Risk Officer"
+ },
+ {
+  "id": "extra~80",
+  "label": "Chief Security Officer"
+ },
+ {
+  "id": "extra~81",
+  "label": "Chief Customer Officer"
+ },
+ {
+  "id": "extra~82",
+  "label": "Chief Experience Officer"
+ },
+ {
+  "id": "extra~83",
+  "label": "Chief Growth Officer"
+ },
+ {
+  "id": "extra~84",
+  "label": "Chief Sales Officer"
+ },
+ {
+  "id": "extra~85",
+  "label": "Chief Procurement Officer"
+ },
+ {
+  "id": "extra~86",
+  "label": "Chief Supply Chain Officer"
+ },
+ {
+  "id": "extra~87",
+  "label": "Chief Medical Officer"
+ },
+ {
+  "id": "extra~88",
+  "label": "Chief Scientific Officer"
+ },
+ {
+  "id": "extra~89",
+  "label": "Chief Architect"
+ },
+ {
+  "id": "extra~90",
+  "label": "Chief of Staff"
+ },
+ {
+  "id": "extra~91",
+  "label": "Chief Innovation Officer"
+ },
+ {
+  "id": "extra~92",
+  "label": "Chief Sustainability Officer"
+ },
+ {
+  "id": "extra~93",
+  "label": "Chief Accounting Officer"
+ },
+ {
+  "id": "extra~94",
+  "label": "Chief Design Officer"
+ },
+ {
+  "id": "extra~95",
+  "label": "Chief Content Officer"
+ },
+ {
+  "id": "extra~96",
+  "label": "Chief Brand Officer"
+ },
+ {
+  "id": "extra~97",
+  "label": "Chief Creative Officer"
+ },
+ {
+  "id": "extra~98",
+  "label": "Chief Analytics Officer"
+ },
+ {
+  "id": "extra~99",
+  "label": "Chief Transformation Officer"
+ },
+ {
+  "id": "extra~100",
+  "label": "President"
+ },
+ {
+  "id": "extra~101",
+  "label": "President & CEO"
+ },
+ {
+  "id": "extra~102",
+  "label": "Vice President"
+ },
+ {
+  "id": "extra~103",
+  "label": "Senior Vice President"
+ },
+ {
+  "id": "extra~104",
+  "label": "Executive Vice President"
+ },
+ {
+  "id": "extra~105",
+  "label": "Associate Vice President"
+ },
+ {
+  "id": "extra~106",
+  "label": "Assistant Vice President"
+ },
+ {
+  "id": "extra~107",
+  "label": "VP"
+ },
+ {
+  "id": "extra~108",
+  "label": "SVP"
+ },
+ {
+  "id": "extra~109",
+  "label": "EVP"
+ },
+ {
+  "id": "extra~110",
+  "label": "AVP"
+ },
+ {
+  "id": "extra~111",
+  "label": "VP of Sales"
+ },
+ {
+  "id": "extra~112",
+  "label": "VP of Marketing"
+ },
+ {
+  "id": "extra~113",
+  "label": "VP of Engineering"
+ },
+ {
+  "id": "extra~114",
+  "label": "VP of Product"
+ },
+ {
+  "id": "extra~115",
+  "label": "VP of Operations"
+ },
+ {
+  "id": "extra~116",
+  "label": "VP of Finance"
+ },
+ {
+  "id": "extra~117",
+  "label": "VP of HR"
+ },
+ {
+  "id": "extra~118",
+  "label": "VP of People"
+ },
+ {
+  "id": "extra~119",
+  "label": "VP of Business Development"
+ },
+ {
+  "id": "extra~120",
+  "label": "VP of Customer Success"
+ },
+ {
+  "id": "extra~121",
+  "label": "VP of Technology"
+ },
+ {
+  "id": "extra~122",
+  "label": "VP of Data"
+ },
+ {
+  "id": "extra~123",
+  "label": "VP of Design"
+ },
+ {
+  "id": "extra~124",
+  "label": "VP of Growth"
+ },
+ {
+  "id": "extra~125",
+  "label": "VP of Partnerships"
+ },
+ {
+  "id": "extra~126",
+  "label": "VP of Talent Acquisition"
+ },
+ {
+  "id": "extra~127",
+  "label": "Vice President of Sales"
+ },
+ {
+  "id": "extra~128",
+  "label": "Vice President of Marketing"
+ },
+ {
+  "id": "extra~129",
+  "label": "Vice President of Engineering"
+ },
+ {
+  "id": "extra~130",
+  "label": "Vice President of Product"
+ },
+ {
+  "id": "extra~131",
+  "label": "Vice President of Operations"
+ },
+ {
+  "id": "extra~132",
+  "label": "Vice President of Human Resources"
+ },
+ {
+  "id": "extra~133",
+  "label": "Vice President of Business Development"
+ },
+ {
+  "id": "extra~134",
+  "label": "Vice President of Customer Success"
+ },
+ {
+  "id": "extra~135",
+  "label": "Head of Sales"
+ },
+ {
+  "id": "extra~136",
+  "label": "Head of Marketing"
+ },
+ {
+  "id": "extra~137",
+  "label": "Head of Engineering"
+ },
+ {
+  "id": "extra~138",
+  "label": "Head of Product"
+ },
+ {
+  "id": "extra~139",
+  "label": "Head of Design"
+ },
+ {
+  "id": "extra~140",
+  "label": "Head of Data"
+ },
+ {
+  "id": "extra~141",
+  "label": "Head of Growth"
+ },
+ {
+  "id": "extra~142",
+  "label": "Head of Operations"
+ },
+ {
+  "id": "extra~143",
+  "label": "Head of Finance"
+ },
+ {
+  "id": "extra~144",
+  "label": "Head of HR"
+ },
+ {
+  "id": "extra~145",
+  "label": "Head of People"
+ },
+ {
+  "id": "extra~146",
+  "label": "Head of Talent"
+ },
+ {
+  "id": "extra~147",
+  "label": "Head of Talent Acquisition"
+ },
+ {
+  "id": "extra~148",
+  "label": "Head of Recruitment"
+ },
+ {
+  "id": "extra~149",
+  "label": "Head of Business Development"
+ },
+ {
+  "id": "extra~150",
+  "label": "Head of Customer Success"
+ },
+ {
+  "id": "extra~151",
+  "label": "Head of Partnerships"
+ },
+ {
+  "id": "extra~152",
+  "label": "Head of Technology"
+ },
+ {
+  "id": "extra~153",
+  "label": "Head of IT"
+ },
+ {
+  "id": "extra~154",
+  "label": "Head of Procurement"
+ },
+ {
+  "id": "extra~155",
+  "label": "Head of Legal"
+ },
+ {
+  "id": "extra~156",
+  "label": "Head of Strategy"
+ },
+ {
+  "id": "extra~157",
+  "label": "Head of Content"
+ },
+ {
+  "id": "extra~158",
+  "label": "Head of Brand"
+ },
+ {
+  "id": "extra~159",
+  "label": "Head of Demand Generation"
+ },
+ {
+  "id": "extra~160",
+  "label": "Head of Digital"
+ },
+ {
+  "id": "extra~161",
+  "label": "Head of AI"
+ },
+ {
+  "id": "extra~162",
+  "label": "Head of Security"
+ },
+ {
+  "id": "extra~163",
+  "label": "Head of Learning and Development"
+ },
+ {
+  "id": "extra~164",
+  "label": "Managing Director"
+ },
+ {
+  "id": "extra~165",
+  "label": "Executive Director"
+ },
+ {
+  "id": "extra~166",
+  "label": "Director"
+ },
+ {
+  "id": "extra~167",
+  "label": "Senior Director"
+ },
+ {
+  "id": "extra~168",
+  "label": "Associate Director"
+ },
+ {
+  "id": "extra~169",
+  "label": "Assistant Director"
+ },
+ {
+  "id": "extra~170",
+  "label": "Regional Director"
+ },
+ {
+  "id": "extra~171",
+  "label": "Country Manager"
+ },
+ {
+  "id": "extra~172",
+  "label": "Country Director"
+ },
+ {
+  "id": "extra~173",
+  "label": "General Manager"
+ },
+ {
+  "id": "extra~174",
+  "label": "Regional Manager"
+ },
+ {
+  "id": "extra~175",
+  "label": "Area Manager"
+ },
+ {
+  "id": "extra~176",
+  "label": "Branch Manager"
+ },
+ {
+  "id": "extra~177",
+  "label": "Director of Sales"
+ },
+ {
+  "id": "extra~178",
+  "label": "Director of Marketing"
+ },
+ {
+  "id": "extra~179",
+  "label": "Director of Engineering"
+ },
+ {
+  "id": "extra~180",
+  "label": "Director of Product"
+ },
+ {
+  "id": "extra~181",
+  "label": "Director of Operations"
+ },
+ {
+  "id": "extra~182",
+  "label": "Director of Finance"
+ },
+ {
+  "id": "extra~183",
+  "label": "Director of Human Resources"
+ },
+ {
+  "id": "extra~184",
+  "label": "Director of HR"
+ },
+ {
+  "id": "extra~185",
+  "label": "Director of Talent Acquisition"
+ },
+ {
+  "id": "extra~186",
+  "label": "Director of Recruiting"
+ },
+ {
+  "id": "extra~187",
+  "label": "Director of Business Development"
+ },
+ {
+  "id": "extra~188",
+  "label": "Director of Customer Success"
+ },
+ {
+  "id": "extra~189",
+  "label": "Director of IT"
+ },
+ {
+  "id": "extra~190",
+  "label": "Director of Technology"
+ },
+ {
+  "id": "extra~191",
+  "label": "Director of Data"
+ },
+ {
+  "id": "extra~192",
+  "label": "Director of Design"
+ },
+ {
+  "id": "extra~193",
+  "label": "Director of Growth"
+ },
+ {
+  "id": "extra~194",
+  "label": "Director of Partnerships"
+ },
+ {
+  "id": "extra~195",
+  "label": "Director of Procurement"
+ },
+ {
+  "id": "extra~196",
+  "label": "Director of Demand Generation"
+ },
+ {
+  "id": "extra~197",
+  "label": "Director of Digital Marketing"
+ },
+ {
+  "id": "extra~198",
+  "label": "Director of Product Management"
+ },
+ {
+  "id": "extra~199",
+  "label": "Director of Software Engineering"
+ },
+ {
+  "id": "extra~200",
+  "label": "Director of Information Technology"
+ },
+ {
+  "id": "extra~201",
+  "label": "Director of Sales Operations"
+ },
+ {
+  "id": "extra~202",
+  "label": "Director of Revenue Operations"
+ },
+ {
+  "id": "extra~203",
+  "label": "Director of Account Management"
+ },
+ {
+  "id": "extra~204",
+  "label": "Director of Learning and Development"
+ },
+ {
+  "id": "extra~205",
+  "label": "Director of Compensation and Benefits"
+ },
+ {
+  "id": "extra~206",
+  "label": "Director of People Operations"
+ },
+ {
+  "id": "extra~207",
+  "label": "Director of Employee Experience"
+ },
+ {
+  "id": "extra~208",
+  "label": "Director of Talent Management"
+ },
+ {
+  "id": "extra~209",
+  "label": "Director of Content"
+ },
+ {
+  "id": "extra~210",
+  "label": "Director of Communications"
+ },
+ {
+  "id": "extra~211",
+  "label": "Director of Strategy"
+ },
+ {
+  "id": "extra~212",
+  "label": "Director of Analytics"
+ },
+ {
+  "id": "extra~213",
+  "label": "Engineering Director"
+ },
+ {
+  "id": "extra~214",
+  "label": "Sales Director"
+ },
+ {
+  "id": "extra~215",
+  "label": "Marketing Director"
+ },
+ {
+  "id": "extra~216",
+  "label": "Product Director"
+ },
+ {
+  "id": "extra~217",
+  "label": "Design Director"
+ },
+ {
+  "id": "extra~218",
+  "label": "Creative Director"
+ },
+ {
+  "id": "extra~219",
+  "label": "Technical Director"
+ },
+ {
+  "id": "extra~220",
+  "label": "Technology Director"
+ },
+ {
+  "id": "extra~221",
+  "label": "Finance Director"
+ },
+ {
+  "id": "extra~222",
+  "label": "HR Director"
+ },
+ {
+  "id": "extra~223",
+  "label": "Operations Director"
+ },
+ {
+  "id": "extra~224",
+  "label": "Business Development Director"
+ },
+ {
+  "id": "extra~225",
+  "label": "Talent Acquisition Director"
+ },
+ {
+  "id": "extra~226",
+  "label": "People Director"
+ },
+ {
+  "id": "extra~227",
+  "label": "Engineering Manager"
+ },
+ {
+  "id": "extra~228",
+  "label": "Senior Engineering Manager"
+ },
+ {
+  "id": "extra~229",
+  "label": "Product Manager"
+ },
+ {
+  "id": "extra~230",
+  "label": "Senior Product Manager"
+ },
+ {
+  "id": "extra~231",
+  "label": "Associate Product Manager"
+ },
+ {
+  "id": "extra~232",
+  "label": "Group Product Manager"
+ },
+ {
+  "id": "extra~233",
+  "label": "Principal Product Manager"
+ },
+ {
+  "id": "extra~234",
+  "label": "Technical Product Manager"
+ },
+ {
+  "id": "extra~235",
+  "label": "Product Owner"
+ },
+ {
+  "id": "extra~236",
+  "label": "Product Marketing Manager"
+ },
+ {
+  "id": "extra~237",
+  "label": "Product Designer"
+ },
+ {
+  "id": "extra~238",
+  "label": "Program Manager"
+ },
+ {
+  "id": "extra~239",
+  "label": "Senior Program Manager"
+ },
+ {
+  "id": "extra~240",
+  "label": "Technical Program Manager"
+ },
+ {
+  "id": "extra~241",
+  "label": "Project Manager"
+ },
+ {
+  "id": "extra~242",
+  "label": "Senior Project Manager"
+ },
+ {
+  "id": "extra~243",
+  "label": "IT Project Manager"
+ },
+ {
+  "id": "extra~244",
+  "label": "Scrum Master"
+ },
+ {
+  "id": "extra~245",
+  "label": "Agile Coach"
+ },
+ {
+  "id": "extra~246",
+  "label": "Delivery Manager"
+ },
+ {
+  "id": "extra~247",
+  "label": "Sales Manager"
+ },
+ {
+  "id": "extra~248",
+  "label": "Senior Sales Manager"
+ },
+ {
+  "id": "extra~249",
+  "label": "Regional Sales Manager"
+ },
+ {
+  "id": "extra~250",
+  "label": "Area Sales Manager"
+ },
+ {
+  "id": "extra~251",
+  "label": "Enterprise Sales Manager"
+ },
+ {
+  "id": "extra~252",
+  "label": "Inside Sales Manager"
+ },
+ {
+  "id": "extra~253",
+  "label": "Account Manager"
+ },
+ {
+  "id": "extra~254",
+  "label": "Senior Account Manager"
+ },
+ {
+  "id": "extra~255",
+  "label": "Key Account Manager"
+ },
+ {
+  "id": "extra~256",
+  "label": "Strategic Account Manager"
+ },
+ {
+  "id": "extra~257",
+  "label": "Global Account Manager"
+ },
+ {
+  "id": "extra~258",
+  "label": "Account Executive"
+ },
+ {
+  "id": "extra~259",
+  "label": "Senior Account Executive"
+ },
+ {
+  "id": "extra~260",
+  "label": "Enterprise Account Executive"
+ },
+ {
+  "id": "extra~261",
+  "label": "Strategic Account Executive"
+ },
+ {
+  "id": "extra~262",
+  "label": "Mid-Market Account Executive"
+ },
+ {
+  "id": "extra~263",
+  "label": "Sales Executive"
+ },
+ {
+  "id": "extra~264",
+  "label": "Sales Representative"
+ },
+ {
+  "id": "extra~265",
+  "label": "Inside Sales Representative"
+ },
+ {
+  "id": "extra~266",
+  "label": "Outside Sales Representative"
+ },
+ {
+  "id": "extra~267",
+  "label": "Sales Development Representative"
+ },
+ {
+  "id": "extra~268",
+  "label": "SDR"
+ },
+ {
+  "id": "extra~269",
+  "label": "Business Development Representative"
+ },
+ {
+  "id": "extra~270",
+  "label": "BDR"
+ },
+ {
+  "id": "extra~271",
+  "label": "Business Development Manager"
+ },
+ {
+  "id": "extra~272",
+  "label": "Business Development Executive"
+ },
+ {
+  "id": "extra~273",
+  "label": "Business Development Associate"
+ },
+ {
+  "id": "extra~274",
+  "label": "Sales Associate"
+ },
+ {
+  "id": "extra~275",
+  "label": "Sales Consultant"
+ },
+ {
+  "id": "extra~276",
+  "label": "Sales Engineer"
+ },
+ {
+  "id": "extra~277",
+  "label": "Solutions Engineer"
+ },
+ {
+  "id": "extra~278",
+  "label": "Senior Solutions Engineer"
+ },
+ {
+  "id": "extra~279",
+  "label": "Sales Specialist"
+ },
+ {
+  "id": "extra~280",
+  "label": "Solutions Specialist"
+ },
+ {
+  "id": "extra~281",
+  "label": "Solutions Consultant"
+ },
+ {
+  "id": "extra~282",
+  "label": "Solutions Architect"
+ },
+ {
+  "id": "extra~283",
+  "label": "Senior Solutions Architect"
+ },
+ {
+  "id": "extra~284",
+  "label": "Enterprise Architect"
+ },
+ {
+  "id": "extra~285",
+  "label": "Technical Account Manager"
+ },
+ {
+  "id": "extra~286",
+  "label": "Customer Success Manager"
+ },
+ {
+  "id": "extra~287",
+  "label": "Senior Customer Success Manager"
+ },
+ {
+  "id": "extra~288",
+  "label": "Customer Success Associate"
+ },
+ {
+  "id": "extra~289",
+  "label": "Customer Success Director"
+ },
+ {
+  "id": "extra~290",
+  "label": "Customer Success Specialist"
+ },
+ {
+  "id": "extra~291",
+  "label": "Customer Support Specialist"
+ },
+ {
+  "id": "extra~292",
+  "label": "Customer Support Manager"
+ },
+ {
+  "id": "extra~293",
+  "label": "Customer Service Representative"
+ },
+ {
+  "id": "extra~294",
+  "label": "Customer Service Manager"
+ },
+ {
+  "id": "extra~295",
+  "label": "Customer Experience Manager"
+ },
+ {
+  "id": "extra~296",
+  "label": "Client Success Manager"
+ },
+ {
+  "id": "extra~297",
+  "label": "Client Partner"
+ },
+ {
+  "id": "extra~298",
+  "label": "Client Services Manager"
+ },
+ {
+  "id": "extra~299",
+  "label": "Client Relationship Manager"
+ },
+ {
+  "id": "extra~300",
+  "label": "Relationship Manager"
+ },
+ {
+  "id": "extra~301",
+  "label": "Partnerships Manager"
+ },
+ {
+  "id": "extra~302",
+  "label": "Partner Manager"
+ },
+ {
+  "id": "extra~303",
+  "label": "Alliance Manager"
+ },
+ {
+  "id": "extra~304",
+  "label": "Channel Manager"
+ },
+ {
+  "id": "extra~305",
+  "label": "Channel Sales Manager"
+ },
+ {
+  "id": "extra~306",
+  "label": "Revenue Operations Manager"
+ },
+ {
+  "id": "extra~307",
+  "label": "Sales Operations Manager"
+ },
+ {
+  "id": "extra~308",
+  "label": "Sales Operations Analyst"
+ },
+ {
+  "id": "extra~309",
+  "label": "Sales Enablement Manager"
+ },
+ {
+  "id": "extra~310",
+  "label": "Sales Analyst"
+ },
+ {
+  "id": "extra~311",
+  "label": "Sales Lead"
+ },
+ {
+  "id": "extra~312",
+  "label": "Sales Team Lead"
+ },
+ {
+  "id": "extra~313",
+  "label": "Team Lead"
+ },
+ {
+  "id": "extra~314",
+  "label": "Team Leader"
+ },
+ {
+  "id": "extra~315",
+  "label": "Marketing Manager"
+ },
+ {
+  "id": "extra~316",
+  "label": "Senior Marketing Manager"
+ },
+ {
+  "id": "extra~317",
+  "label": "Digital Marketing Manager"
+ },
+ {
+  "id": "extra~318",
+  "label": "Content Marketing Manager"
+ },
+ {
+  "id": "extra~319",
+  "label": "Growth Marketing Manager"
+ },
+ {
+  "id": "extra~320",
+  "label": "Performance Marketing Manager"
+ },
+ {
+  "id": "extra~321",
+  "label": "Demand Generation Manager"
+ },
+ {
+  "id": "extra~322",
+  "label": "Field Marketing Manager"
+ },
+ {
+  "id": "extra~323",
+  "label": "Brand Manager"
+ },
+ {
+  "id": "extra~324",
+  "label": "Marketing Executive"
+ },
+ {
+  "id": "extra~325",
+  "label": "Marketing Specialist"
+ },
+ {
+  "id": "extra~326",
+  "label": "Marketing Associate"
+ },
+ {
+  "id": "extra~327",
+  "label": "Marketing Coordinator"
+ },
+ {
+  "id": "extra~328",
+  "label": "Marketing Analyst"
+ },
+ {
+  "id": "extra~329",
+  "label": "Marketing Consultant"
+ },
+ {
+  "id": "extra~330",
+  "label": "Growth Manager"
+ },
+ {
+  "id": "extra~331",
+  "label": "Growth Hacker"
+ },
+ {
+  "id": "extra~332",
+  "label": "SEO Specialist"
+ },
+ {
+  "id": "extra~333",
+  "label": "SEO Manager"
+ },
+ {
+  "id": "extra~334",
+  "label": "Social Media Manager"
+ },
+ {
+  "id": "extra~335",
+  "label": "Social Media Specialist"
+ },
+ {
+  "id": "extra~336",
+  "label": "Community Manager"
+ },
+ {
+  "id": "extra~337",
+  "label": "Content Strategist"
+ },
+ {
+  "id": "extra~338",
+  "label": "Content Writer"
+ },
+ {
+  "id": "extra~339",
+  "label": "Copywriter"
+ },
+ {
+  "id": "extra~340",
+  "label": "Communications Manager"
+ },
+ {
+  "id": "extra~341",
+  "label": "Public Relations Manager"
+ },
+ {
+  "id": "extra~342",
+  "label": "PR Manager"
+ },
+ {
+  "id": "extra~343",
+  "label": "Email Marketing Manager"
+ },
+ {
+  "id": "extra~344",
+  "label": "Marketing Automation Manager"
+ },
+ {
+  "id": "extra~345",
+  "label": "Software Engineer"
+ },
+ {
+  "id": "extra~346",
+  "label": "Senior Software Engineer"
+ },
+ {
+  "id": "extra~347",
+  "label": "Staff Software Engineer"
+ },
+ {
+  "id": "extra~348",
+  "label": "Principal Software Engineer"
+ },
+ {
+  "id": "extra~349",
+  "label": "Lead Software Engineer"
+ },
+ {
+  "id": "extra~350",
+  "label": "Software Developer"
+ },
+ {
+  "id": "extra~351",
+  "label": "Senior Software Developer"
+ },
+ {
+  "id": "extra~352",
+  "label": "Backend Developer"
+ },
+ {
+  "id": "extra~353",
+  "label": "Backend Engineer"
+ },
+ {
+  "id": "extra~354",
+  "label": "Frontend Developer"
+ },
+ {
+  "id": "extra~355",
+  "label": "Frontend Engineer"
+ },
+ {
+  "id": "extra~356",
+  "label": "Front-End Developer"
+ },
+ {
+  "id": "extra~357",
+  "label": "Back-End Developer"
+ },
+ {
+  "id": "extra~358",
+  "label": "Full Stack Developer"
+ },
+ {
+  "id": "extra~359",
+  "label": "Full Stack Engineer"
+ },
+ {
+  "id": "extra~360",
+  "label": "Full-Stack Developer"
+ },
+ {
+  "id": "extra~361",
+  "label": "Web Developer"
+ },
+ {
+  "id": "extra~362",
+  "label": "Mobile Developer"
+ },
+ {
+  "id": "extra~363",
+  "label": "Mobile App Developer"
+ },
+ {
+  "id": "extra~364",
+  "label": "IOS Developer"
+ },
+ {
+  "id": "extra~365",
+  "label": "Android Developer"
+ },
+ {
+  "id": "extra~366",
+  "label": "React Developer"
+ },
+ {
+  "id": "extra~367",
+  "label": "Node.js Developer"
+ },
+ {
+  "id": "extra~368",
+  "label": "Python Developer"
+ },
+ {
+  "id": "extra~369",
+  "label": "Java Developer"
+ },
+ {
+  "id": "extra~370",
+  "label": ".NET Developer"
+ },
+ {
+  "id": "extra~371",
+  "label": "PHP Developer"
+ },
+ {
+  "id": "extra~372",
+  "label": "Ruby on Rails Developer"
+ },
+ {
+  "id": "extra~373",
+  "label": "Golang Developer"
+ },
+ {
+  "id": "extra~374",
+  "label": "Flutter Developer"
+ },
+ {
+  "id": "extra~375",
+  "label": "Embedded Software Engineer"
+ },
+ {
+  "id": "extra~376",
+  "label": "Firmware Engineer"
+ },
+ {
+  "id": "extra~377",
+  "label": "Game Developer"
+ },
+ {
+  "id": "extra~378",
+  "label": "Blockchain Developer"
+ },
+ {
+  "id": "extra~379",
+  "label": "Salesforce Developer"
+ },
+ {
+  "id": "extra~380",
+  "label": "Salesforce Administrator"
+ },
+ {
+  "id": "extra~381",
+  "label": "SAP Consultant"
+ },
+ {
+  "id": "extra~382",
+  "label": "DevOps Engineer"
+ },
+ {
+  "id": "extra~383",
+  "label": "Senior DevOps Engineer"
+ },
+ {
+  "id": "extra~384",
+  "label": "Site Reliability Engineer"
+ },
+ {
+  "id": "extra~385",
+  "label": "SRE"
+ },
+ {
+  "id": "extra~386",
+  "label": "Platform Engineer"
+ },
+ {
+  "id": "extra~387",
+  "label": "Cloud Engineer"
+ },
+ {
+  "id": "extra~388",
+  "label": "Cloud Architect"
+ },
+ {
+  "id": "extra~389",
+  "label": "Infrastructure Engineer"
+ },
+ {
+  "id": "extra~390",
+  "label": "Systems Engineer"
+ },
+ {
+  "id": "extra~391",
+  "label": "Systems Administrator"
+ },
+ {
+  "id": "extra~392",
+  "label": "Network Engineer"
+ },
+ {
+  "id": "extra~393",
+  "label": "Database Administrator"
+ },
+ {
+  "id": "extra~394",
+  "label": "QA Engineer"
+ },
+ {
+  "id": "extra~395",
+  "label": "Quality Assurance Engineer"
+ },
+ {
+  "id": "extra~396",
+  "label": "QA Analyst"
+ },
+ {
+  "id": "extra~397",
+  "label": "Test Engineer"
+ },
+ {
+  "id": "extra~398",
+  "label": "Software Tester"
+ },
+ {
+  "id": "extra~399",
+  "label": "Automation Engineer"
+ },
+ {
+  "id": "extra~400",
+  "label": "SDET"
+ },
+ {
+  "id": "extra~401",
+  "label": "Security Engineer"
+ },
+ {
+  "id": "extra~402",
+  "label": "Cybersecurity Analyst"
+ },
+ {
+  "id": "extra~403",
+  "label": "Information Security Analyst"
+ },
+ {
+  "id": "extra~404",
+  "label": "Security Analyst"
+ },
+ {
+  "id": "extra~405",
+  "label": "Penetration Tester"
+ },
+ {
+  "id": "extra~406",
+  "label": "Data Scientist"
+ },
+ {
+  "id": "extra~407",
+  "label": "Senior Data Scientist"
+ },
+ {
+  "id": "extra~408",
+  "label": "Data Analyst"
+ },
+ {
+  "id": "extra~409",
+  "label": "Senior Data Analyst"
+ },
+ {
+  "id": "extra~410",
+  "label": "Data Engineer"
+ },
+ {
+  "id": "extra~411",
+  "label": "Senior Data Engineer"
+ },
+ {
+  "id": "extra~412",
+  "label": "Analytics Engineer"
+ },
+ {
+  "id": "extra~413",
+  "label": "Machine Learning Engineer"
+ },
+ {
+  "id": "extra~414",
+  "label": "ML Engineer"
+ },
+ {
+  "id": "extra~415",
+  "label": "AI Engineer"
+ },
+ {
+  "id": "extra~416",
+  "label": "AI Researcher"
+ },
+ {
+  "id": "extra~417",
+  "label": "Research Scientist"
+ },
+ {
+  "id": "extra~418",
+  "label": "Applied Scientist"
+ },
+ {
+  "id": "extra~419",
+  "label": "NLP Engineer"
+ },
+ {
+  "id": "extra~420",
+  "label": "Computer Vision Engineer"
+ },
+ {
+  "id": "extra~421",
+  "label": "Business Intelligence Analyst"
+ },
+ {
+  "id": "extra~422",
+  "label": "BI Developer"
+ },
+ {
+  "id": "extra~423",
+  "label": "Business Analyst"
+ },
+ {
+  "id": "extra~424",
+  "label": "Senior Business Analyst"
+ },
+ {
+  "id": "extra~425",
+  "label": "Systems Analyst"
+ },
+ {
+  "id": "extra~426",
+  "label": "Technical Lead"
+ },
+ {
+  "id": "extra~427",
+  "label": "Tech Lead"
+ },
+ {
+  "id": "extra~428",
+  "label": "Team Lead Engineering"
+ },
+ {
+  "id": "extra~429",
+  "label": "Engineering Lead"
+ },
+ {
+  "id": "extra~430",
+  "label": "Development Manager"
+ },
+ {
+  "id": "extra~431",
+  "label": "Software Development Manager"
+ },
+ {
+  "id": "extra~432",
+  "label": "IT Manager"
+ },
+ {
+  "id": "extra~433",
+  "label": "IT Director"
+ },
+ {
+  "id": "extra~434",
+  "label": "IT Administrator"
+ },
+ {
+  "id": "extra~435",
+  "label": "IT Support Specialist"
+ },
+ {
+  "id": "extra~436",
+  "label": "IT Consultant"
+ },
+ {
+  "id": "extra~437",
+  "label": "Technical Support Engineer"
+ },
+ {
+  "id": "extra~438",
+  "label": "Technical Writer"
+ },
+ {
+  "id": "extra~439",
+  "label": "Technical Recruiter"
+ },
+ {
+  "id": "extra~440",
+  "label": "UX Designer"
+ },
+ {
+  "id": "extra~441",
+  "label": "UI Designer"
+ },
+ {
+  "id": "extra~442",
+  "label": "UI/UX Designer"
+ },
+ {
+  "id": "extra~443",
+  "label": "UX Researcher"
+ },
+ {
+  "id": "extra~444",
+  "label": "UX Manager"
+ },
+ {
+  "id": "extra~445",
+  "label": "Graphic Designer"
+ },
+ {
+  "id": "extra~446",
+  "label": "Visual Designer"
+ },
+ {
+  "id": "extra~447",
+  "label": "Interaction Designer"
+ },
+ {
+  "id": "extra~448",
+  "label": "Brand Designer"
+ },
+ {
+  "id": "extra~449",
+  "label": "Motion Designer"
+ },
+ {
+  "id": "extra~450",
+  "label": "Art Director"
+ },
+ {
+  "id": "extra~451",
+  "label": "Human Resources Manager"
+ },
+ {
+  "id": "extra~452",
+  "label": "HR Manager"
+ },
+ {
+  "id": "extra~453",
+  "label": "Senior HR Manager"
+ },
+ {
+  "id": "extra~454",
+  "label": "HR Business Partner"
+ },
+ {
+  "id": "extra~455",
+  "label": "HR Generalist"
+ },
+ {
+  "id": "extra~456",
+  "label": "HR Executive"
+ },
+ {
+  "id": "extra~457",
+  "label": "HR Specialist"
+ },
+ {
+  "id": "extra~458",
+  "label": "HR Coordinator"
+ },
+ {
+  "id": "extra~459",
+  "label": "HR Assistant"
+ },
+ {
+  "id": "extra~460",
+  "label": "HR Administrator"
+ },
+ {
+  "id": "extra~461",
+  "label": "HR Analyst"
+ },
+ {
+  "id": "extra~462",
+  "label": "HR Consultant"
+ },
+ {
+  "id": "extra~463",
+  "label": "HR Operations Manager"
+ },
+ {
+  "id": "extra~464",
+  "label": "HR Director"
+ },
+ {
+  "id": "extra~465",
+  "label": "Human Resources Director"
+ },
+ {
+  "id": "extra~466",
+  "label": "Human Resources Business Partner"
+ },
+ {
+  "id": "extra~467",
+  "label": "Human Resources Generalist"
+ },
+ {
+  "id": "extra~468",
+  "label": "Human Resources Executive"
+ },
+ {
+  "id": "extra~469",
+  "label": "Human Resources Specialist"
+ },
+ {
+  "id": "extra~470",
+  "label": "Human Resources Coordinator"
+ },
+ {
+  "id": "extra~471",
+  "label": "Human Resources Associate"
+ },
+ {
+  "id": "extra~472",
+  "label": "People Operations Manager"
+ },
+ {
+  "id": "extra~473",
+  "label": "People Partner"
+ },
+ {
+  "id": "extra~474",
+  "label": "People & Culture Manager"
+ },
+ {
+  "id": "extra~475",
+  "label": "People and Culture Manager"
+ },
+ {
+  "id": "extra~476",
+  "label": "Talent Acquisition Manager"
+ },
+ {
+  "id": "extra~477",
+  "label": "Talent Acquisition Specialist"
+ },
+ {
+  "id": "extra~478",
+  "label": "Talent Acquisition Partner"
+ },
+ {
+  "id": "extra~479",
+  "label": "Talent Acquisition Lead"
+ },
+ {
+  "id": "extra~480",
+  "label": "Talent Acquisition Executive"
+ },
+ {
+  "id": "extra~481",
+  "label": "Talent Acquisition Coordinator"
+ },
+ {
+  "id": "extra~482",
+  "label": "Talent Partner"
+ },
+ {
+  "id": "extra~483",
+  "label": "Talent Manager"
+ },
+ {
+  "id": "extra~484",
+  "label": "Talent Sourcer"
+ },
+ {
+  "id": "extra~485",
+  "label": "Recruiter"
+ },
+ {
+  "id": "extra~486",
+  "label": "Senior Recruiter"
+ },
+ {
+  "id": "extra~487",
+  "label": "Lead Recruiter"
+ },
+ {
+  "id": "extra~488",
+  "label": "Corporate Recruiter"
+ },
+ {
+  "id": "extra~489",
+  "label": "Technical Recruiting Manager"
+ },
+ {
+  "id": "extra~490",
+  "label": "Recruiting Manager"
+ },
+ {
+  "id": "extra~491",
+  "label": "Recruitment Manager"
+ },
+ {
+  "id": "extra~492",
+  "label": "Recruitment Consultant"
+ },
+ {
+  "id": "extra~493",
+  "label": "Recruitment Specialist"
+ },
+ {
+  "id": "extra~494",
+  "label": "Recruitment Executive"
+ },
+ {
+  "id": "extra~495",
+  "label": "Staffing Manager"
+ },
+ {
+  "id": "extra~496",
+  "label": "Staffing Specialist"
+ },
+ {
+  "id": "extra~497",
+  "label": "Sourcing Specialist"
+ },
+ {
+  "id": "extra~498",
+  "label": "Learning and Development Manager"
+ },
+ {
+  "id": "extra~499",
+  "label": "Learning & Development Specialist"
+ },
+ {
+  "id": "extra~500",
+  "label": "Training Manager"
+ },
+ {
+  "id": "extra~501",
+  "label": "Compensation and Benefits Manager"
+ },
+ {
+  "id": "extra~502",
+  "label": "Compensation Analyst"
+ },
+ {
+  "id": "extra~503",
+  "label": "Benefits Administrator"
+ },
+ {
+  "id": "extra~504",
+  "label": "Payroll Manager"
+ },
+ {
+  "id": "extra~505",
+  "label": "Payroll Specialist"
+ },
+ {
+  "id": "extra~506",
+  "label": "Employee Relations Manager"
+ },
+ {
+  "id": "extra~507",
+  "label": "Employer Branding Manager"
+ },
+ {
+  "id": "extra~508",
+  "label": "Diversity and Inclusion Manager"
+ },
+ {
+  "id": "extra~509",
+  "label": "Organizational Development Manager"
+ },
+ {
+  "id": "extra~510",
+  "label": "Workforce Planning Manager"
+ },
+ {
+  "id": "extra~511",
+  "label": "HRIS Analyst"
+ },
+ {
+  "id": "extra~512",
+  "label": "HR Technology Manager"
+ },
+ {
+  "id": "extra~513",
+  "label": "Finance Manager"
+ },
+ {
+  "id": "extra~514",
+  "label": "Financial Analyst"
+ },
+ {
+  "id": "extra~515",
+  "label": "Senior Financial Analyst"
+ },
+ {
+  "id": "extra~516",
+  "label": "Financial Controller"
+ },
+ {
+  "id": "extra~517",
+  "label": "Controller"
+ },
+ {
+  "id": "extra~518",
+  "label": "Corporate Controller"
+ },
+ {
+  "id": "extra~519",
+  "label": "Treasurer"
+ },
+ {
+  "id": "extra~520",
+  "label": "Accountant"
+ },
+ {
+  "id": "extra~521",
+  "label": "Senior Accountant"
+ },
+ {
+  "id": "extra~522",
+  "label": "Accounting Manager"
+ },
+ {
+  "id": "extra~523",
+  "label": "Accounts Manager"
+ },
+ {
+  "id": "extra~524",
+  "label": "Accounts Payable Specialist"
+ },
+ {
+  "id": "extra~525",
+  "label": "Accounts Receivable Specialist"
+ },
+ {
+  "id": "extra~526",
+  "label": "Auditor"
+ },
+ {
+  "id": "extra~527",
+  "label": "Internal Auditor"
+ },
+ {
+  "id": "extra~528",
+  "label": "Tax Manager"
+ },
+ {
+  "id": "extra~529",
+  "label": "FP&A Manager"
+ },
+ {
+  "id": "extra~530",
+  "label": "FP&A Analyst"
+ },
+ {
+  "id": "extra~531",
+  "label": "Investment Analyst"
+ },
+ {
+  "id": "extra~532",
+  "label": "Investment Banking Analyst"
+ },
+ {
+  "id": "extra~533",
+  "label": "Investment Manager"
+ },
+ {
+  "id": "extra~534",
+  "label": "Portfolio Manager"
+ },
+ {
+  "id": "extra~535",
+  "label": "Risk Manager"
+ },
+ {
+  "id": "extra~536",
+  "label": "Compliance Manager"
+ },
+ {
+  "id": "extra~537",
+  "label": "Compliance Officer"
+ },
+ {
+  "id": "extra~538",
+  "label": "Legal Counsel"
+ },
+ {
+  "id": "extra~539",
+  "label": "General Counsel"
+ },
+ {
+  "id": "extra~540",
+  "label": "Corporate Counsel"
+ },
+ {
+  "id": "extra~541",
+  "label": "In-House Counsel"
+ },
+ {
+  "id": "extra~542",
+  "label": "Attorney"
+ },
+ {
+  "id": "extra~543",
+  "label": "Lawyer"
+ },
+ {
+  "id": "extra~544",
+  "label": "Paralegal"
+ },
+ {
+  "id": "extra~545",
+  "label": "Operations Manager"
+ },
+ {
+  "id": "extra~546",
+  "label": "Senior Operations Manager"
+ },
+ {
+  "id": "extra~547",
+  "label": "Operations Analyst"
+ },
+ {
+  "id": "extra~548",
+  "label": "Operations Executive"
+ },
+ {
+  "id": "extra~549",
+  "label": "Operations Coordinator"
+ },
+ {
+  "id": "extra~550",
+  "label": "Operations Lead"
+ },
+ {
+  "id": "extra~551",
+  "label": "Business Operations Manager"
+ },
+ {
+  "id": "extra~552",
+  "label": "Business Operations Analyst"
+ },
+ {
+  "id": "extra~553",
+  "label": "Process Improvement Manager"
+ },
+ {
+  "id": "extra~554",
+  "label": "Supply Chain Manager"
+ },
+ {
+  "id": "extra~555",
+  "label": "Supply Chain Analyst"
+ },
+ {
+  "id": "extra~556",
+  "label": "Logistics Manager"
+ },
+ {
+  "id": "extra~557",
+  "label": "Procurement Manager"
+ },
+ {
+  "id": "extra~558",
+  "label": "Procurement Specialist"
+ },
+ {
+  "id": "extra~559",
+  "label": "Purchasing Manager"
+ },
+ {
+  "id": "extra~560",
+  "label": "Sourcing Manager"
+ },
+ {
+  "id": "extra~561",
+  "label": "Strategic Sourcing Manager"
+ },
+ {
+  "id": "extra~562",
+  "label": "Category Manager"
+ },
+ {
+  "id": "extra~563",
+  "label": "Vendor Manager"
+ },
+ {
+  "id": "extra~564",
+  "label": "Warehouse Manager"
+ },
+ {
+  "id": "extra~565",
+  "label": "Production Manager"
+ },
+ {
+  "id": "extra~566",
+  "label": "Plant Manager"
+ },
+ {
+  "id": "extra~567",
+  "label": "Facilities Manager"
+ },
+ {
+  "id": "extra~568",
+  "label": "Office Manager"
+ },
+ {
+  "id": "extra~569",
+  "label": "Administrative Assistant"
+ },
+ {
+  "id": "extra~570",
+  "label": "Executive Assistant"
+ },
+ {
+  "id": "extra~571",
+  "label": "Personal Assistant"
+ },
+ {
+  "id": "extra~572",
+  "label": "Virtual Assistant"
+ },
+ {
+  "id": "extra~573",
+  "label": "Executive Business Partner"
+ },
+ {
+  "id": "extra~574",
+  "label": "Office Administrator"
+ },
+ {
+  "id": "extra~575",
+  "label": "Receptionist"
+ },
+ {
+  "id": "extra~576",
+  "label": "Strategy Manager"
+ },
+ {
+  "id": "extra~577",
+  "label": "Strategy Consultant"
+ },
+ {
+  "id": "extra~578",
+  "label": "Management Consultant"
+ },
+ {
+  "id": "extra~579",
+  "label": "Business Consultant"
+ },
+ {
+  "id": "extra~580",
+  "label": "Technology Consultant"
+ },
+ {
+  "id": "extra~581",
+  "label": "Associate Consultant"
+ },
+ {
+  "id": "extra~582",
+  "label": "Business Strategy Manager"
+ },
+ {
+  "id": "extra~583",
+  "label": "Corporate Development Manager"
+ },
+ {
+  "id": "extra~584",
+  "label": "Corporate Strategy Manager"
+ },
+ {
+  "id": "extra~585",
+  "label": "Chief Revenue Officer"
+ },
+ {
+  "id": "extra~586",
+  "label": "Head of Revenue"
+ },
+ {
+  "id": "extra~587",
+  "label": "Revenue Manager"
+ },
+ {
+  "id": "extra~588",
+  "label": "Chief Operating Officer & Co-Founder"
+ },
+ {
+  "id": "extra~589",
+  "label": "Intern"
+ },
+ {
+  "id": "extra~590",
+  "label": "Software Engineering Intern"
+ },
+ {
+  "id": "extra~591",
+  "label": "Marketing Intern"
+ },
+ {
+  "id": "extra~592",
+  "label": "Business Development Intern"
+ },
+ {
+  "id": "extra~593",
+  "label": "HR Intern"
+ },
+ {
+  "id": "extra~594",
+  "label": "Trainee"
+ },
+ {
+  "id": "extra~595",
+  "label": "Management Trainee"
+ },
+ {
+  "id": "extra~596",
+  "label": "Graduate Trainee"
+ },
+ {
+  "id": "extra~597",
+  "label": "Associate"
+ },
+ {
+  "id": "extra~598",
+  "label": "Senior Associate"
+ },
+ {
+  "id": "extra~599",
+  "label": "Analyst"
+ },
+ {
+  "id": "extra~600",
+  "label": "Senior Analyst"
+ },
+ {
+  "id": "extra~601",
+  "label": "Specialist"
+ },
+ {
+  "id": "extra~602",
+  "label": "Senior Specialist"
+ },
+ {
+  "id": "extra~603",
+  "label": "Coordinator"
+ },
+ {
+  "id": "extra~604",
+  "label": "Executive"
+ },
+ {
+  "id": "extra~605",
+  "label": "Senior Executive"
+ },
+ {
+  "id": "extra~606",
+  "label": "Manager"
+ },
+ {
+  "id": "extra~607",
+  "label": "Senior Manager"
+ },
+ {
+  "id": "extra~608",
+  "label": "Assistant Manager"
+ },
+ {
+  "id": "extra~609",
+  "label": "Deputy Manager"
+ },
+ {
+  "id": "extra~610",
+  "label": "Deputy General Manager"
+ },
+ {
+  "id": "extra~611",
+  "label": "Assistant General Manager"
+ },
+ {
+  "id": "extra~612",
+  "label": "Lead"
+ },
+ {
+  "id": "extra~613",
+  "label": "Supervisor"
+ },
+ {
+  "id": "extra~614",
+  "label": "Principal"
+ },
+ {
+  "id": "extra~615",
+  "label": "Principal Engineer"
+ },
+ {
+  "id": "extra~616",
+  "label": "Staff Engineer"
+ },
+ {
+  "id": "extra~617",
+  "label": "Distinguished Engineer"
+ },
+ {
+  "id": "extra~618",
+  "label": "Engineering Fellow"
+ },
+ {
+  "id": "extra~619",
+  "label": "Fellow"
+ },
+ {
+  "id": "extra~620",
+  "label": "Researcher"
+ },
+ {
+  "id": "extra~621",
+  "label": "Professor"
+ },
+ {
+  "id": "extra~622",
+  "label": "Assistant Professor"
+ },
+ {
+  "id": "extra~623",
+  "label": "Associate Professor"
+ },
+ {
+  "id": "extra~624",
+  "label": "Lecturer"
+ },
+ {
+  "id": "extra~625",
+  "label": "Teacher"
+ },
+ {
+  "id": "extra~626",
+  "label": "Trainer"
+ },
+ {
+  "id": "extra~627",
+  "label": "Mentor"
+ },
+ {
+  "id": "extra~628",
+  "label": "Coach"
+ },
+ {
+  "id": "extra~629",
+  "label": "Executive Coach"
+ },
+ {
+  "id": "extra~630",
+  "label": "Business Coach"
+ },
+ {
+  "id": "extra~631",
+  "label": "Life Coach"
+ },
+ {
+  "id": "extra~632",
+  "label": "Healthcare Administrator"
+ },
+ {
+  "id": "extra~633",
+  "label": "Clinic Manager"
+ },
+ {
+  "id": "extra~634",
+  "label": "Practice Manager"
+ },
+ {
+  "id": "extra~635",
+  "label": "Store Manager"
+ },
+ {
+  "id": "extra~636",
+  "label": "Restaurant Manager"
+ },
+ {
+  "id": "extra~637",
+  "label": "Hotel Manager"
+ },
+ {
+  "id": "extra~638",
+  "label": "Real Estate Agent"
+ },
+ {
+  "id": "extra~639",
+  "label": "Real Estate Broker"
+ },
+ {
+  "id": "extra~640",
+  "label": "Property Manager"
+ },
+ {
+  "id": "extra~641",
+  "label": "Insurance Agent"
+ },
+ {
+  "id": "extra~642",
+  "label": "Financial Advisor"
+ },
+ {
+  "id": "extra~643",
+  "label": "Financial Planner"
+ },
+ {
+  "id": "extra~644",
+  "label": "Wealth Manager"
+ },
+ {
+  "id": "extra~645",
+  "label": "Loan Officer"
+ },
+ {
+  "id": "extra~646",
+  "label": "Mortgage Broker"
+ },
+ {
   "id": "52df9d56-efd4-48d0-ad93-59231943fc4c",
   "label": "3D animator"
  },
@@ -32,20 +2620,12 @@
   "label": "Accommodation manager"
  },
  {
-  "id": "eda0d957-3c3c-4139-b89a-a18bc9e18897",
-  "label": "Accountant"
- },
- {
   "id": "caafca69-9faa-4850-8930-a3fa07fea4e6",
   "label": "Accounting analyst"
  },
  {
   "id": "bfe142b9-a049-4d41-89c4-fd2f34ac56b6",
   "label": "Accounting assistant"
- },
- {
-  "id": "04f39bfa-bc03-4480-98bc-b18ce4fe4b4b",
-  "label": "Accounting manager"
  },
  {
   "id": "b065b637-5cb5-44d9-8c39-08004b51734e",
@@ -74,10 +2654,6 @@
  {
   "id": "2dcb5dad-1902-4051-9023-d725485479a7",
   "label": "Acupuncturist"
- },
- {
-  "id": "044d78cc-f62f-4532-83a5-8e04f2889652",
-  "label": "Administrative assistant"
  },
  {
   "id": "6e1b1bd7-9eec-4f10-bce7-94a27d9023e8",
@@ -676,10 +3252,6 @@
   "label": "Aromatherapist"
  },
  {
-  "id": "cb93fd23-1f51-4495-867a-936c1967066b",
-  "label": "Art director"
- },
- {
   "id": "6040c941-ab83-44b2-84e7-5cbfa1eafcdc",
   "label": "Art handler"
  },
@@ -866,10 +3438,6 @@
  {
   "id": "3a75b477-e151-40fb-9909-b3641401bfed",
   "label": "Automated optical inspection operator"
- },
- {
-  "id": "bb609566-3ab6-44dd-8f48-cf0b15b96827",
-  "label": "Automation engineer"
  },
  {
   "id": "5791a961-4717-4230-a245-a4082a675f04",
@@ -1320,14 +3888,6 @@
   "label": "Braiding textile technician"
  },
  {
-  "id": "0917ab6b-18a8-4cfd-8e7a-843b88cf9457",
-  "label": "Branch manager"
- },
- {
-  "id": "de80bbf0-447d-4a6a-845a-fdba4e0dc30c",
-  "label": "Brand manager"
- },
- {
   "id": "6d72138d-2ebb-4a89-b2b2-8c22365b89bf",
   "label": "Brazier"
  },
@@ -1452,20 +4012,8 @@
   "label": "Business administration vocational teacher"
  },
  {
-  "id": "60082a99-d8ef-4e84-9290-78902681b6ed",
-  "label": "Business analyst"
- },
- {
   "id": "9a6d8a84-a8a9-4c9b-9ead-59a710e93759",
   "label": "Business and marketing vocational teacher"
- },
- {
-  "id": "d9612966-e295-4d81-ba2b-9f36bad0b392",
-  "label": "Business coach"
- },
- {
-  "id": "6a29d804-f775-446c-bec7-35fc4e28ac97",
-  "label": "Business consultant"
  },
  {
   "id": "b76178c0-a03a-4793-b079-1e61e636c521",
@@ -1696,10 +4244,6 @@
   "label": "Catcher"
  },
  {
-  "id": "dab60fc6-c16e-4de7-b969-b323784f5a49",
-  "label": "Category manager"
- },
- {
   "id": "b4ff30f8-073b-4dd8-9128-ecf9d0ff87ba",
   "label": "Cattle breeder"
  },
@@ -1824,36 +4368,12 @@
   "label": "Chief conductor"
  },
  {
-  "id": "e297ec12-4712-40a4-ad98-ba004cacb205",
-  "label": "Chief data officer"
- },
- {
-  "id": "6c3fd65e-2d24-47d8-bc22-9e93512bdcc2",
-  "label": "Chief executive officer"
- },
- {
   "id": "a05d0a6d-7b60-445a-8dcb-282c7d5a6852",
   "label": "Chief fire officer"
  },
  {
   "id": "276ba420-ef09-4a0e-b215-2c2e2f80ad28",
   "label": "Chief ICT security officer"
- },
- {
-  "id": "82f90e87-de92-4678-adae-61d3e5f7e1e4",
-  "label": "Chief information officer"
- },
- {
-  "id": "0ddbf393-38f1-4c22-b14c-fe775008f321",
-  "label": "Chief marketing officer"
- },
- {
-  "id": "c64a6e4e-5b38-4f93-b26d-aded817aeaf3",
-  "label": "Chief operating officer"
- },
- {
-  "id": "7b1b5da8-573a-49bb-a38e-68725a949f4f",
-  "label": "Chief technology officer"
  },
  {
   "id": "526ba8e1-fc71-4657-8d27-52f03e8ca81d",
@@ -2644,10 +5164,6 @@
   "label": "Crane technician"
  },
  {
-  "id": "d2db926b-8b14-4686-9c98-fb0dc3a38cbb",
-  "label": "Creative director"
- },
- {
   "id": "1a87e487-6761-4374-b6db-100ac5a9ad5a",
   "label": "Credit adviser"
  },
@@ -2744,14 +5260,6 @@
   "label": "Customer contact centre information clerk"
  },
  {
-  "id": "9c9752b7-3e3b-4a08-8553-b63a013f8072",
-  "label": "Customer experience manager"
- },
- {
-  "id": "13d1b2b4-99dd-44da-9734-c9f74bae18f7",
-  "label": "Customer service representative"
- },
- {
   "id": "a3ef0728-7540-4676-ad18-cf0a7913b3ce",
   "label": "Customs and excise officer"
  },
@@ -2820,10 +5328,6 @@
   "label": "Dangerous goods safety adviser"
  },
  {
-  "id": "d3edb8f8-3a06-47a0-8fb9-9b212c006aa2",
-  "label": "Data analyst"
- },
- {
   "id": "9729c0f3-c9bc-482e-ac59-a82ec3b67ba3",
   "label": "Data centre operator"
  },
@@ -2840,16 +5344,8 @@
   "label": "Data quality specialist"
  },
  {
-  "id": "258e46f9-0075-4a2e-adae-1ff0477e0f30",
-  "label": "Data scientist"
- },
- {
   "id": "1562c7a3-c7d9-419d-b9b6-db26610bcf84",
   "label": "Data warehouse designer"
- },
- {
-  "id": "8c57af09-719c-42b3-be40-6ed4946236cc",
-  "label": "Database administrator"
  },
  {
   "id": "8d9ec84d-cf2d-4179-87bc-335cda54a427",
@@ -3656,10 +6152,6 @@
   "label": "Engraving machine operator"
  },
  {
-  "id": "2bef94db-0088-4507-982a-2ca717529adb",
-  "label": "Enterprise architect"
- },
- {
   "id": "aff66ae0-d6e1-4de3-b6af-78647defd08c",
   "label": "Enterprise development worker"
  },
@@ -3772,10 +6264,6 @@
   "label": "Excavator operator"
  },
  {
-  "id": "2a04a1df-a3b9-403e-a245-e7f93fdddd44",
-  "label": "Executive assistant"
- },
- {
   "id": "691d30cc-6b2c-4025-89b4-3e719fe664c7",
   "label": "Exhibition curator"
  },
@@ -3810,10 +6298,6 @@
  {
   "id": "56a535ff-189b-45da-97d4-775f78744f83",
   "label": "Eyewear and optical equipment specialised seller"
- },
- {
-  "id": "b42c5ed4-c6e4-4694-934f-96127719cc43",
-  "label": "Facilities manager"
  },
  {
   "id": "26ca1895-2047-4c76-a678-831c85824f61",
@@ -3904,20 +6388,12 @@
   "label": "Filing machine operator"
  },
  {
-  "id": "8d586ee9-0ab1-4155-a3b0-2ca786c8e48c",
-  "label": "Financial analyst"
- },
- {
   "id": "1ad59946-d13e-441e-9b36-56e1df055e21",
   "label": "Financial auditor"
  },
  {
   "id": "c01cdf85-3ce0-4d12-ae86-e4e63493fafa",
   "label": "Financial broker"
- },
- {
-  "id": "5e5b1b61-1351-4d3b-a293-deb3661715dd",
-  "label": "Financial controller"
  },
  {
   "id": "a04eedcf-8424-475a-8dc5-f30a9da4b151",
@@ -3930,10 +6406,6 @@
  {
   "id": "35fbb8cd-c044-49a1-850c-010481c99b4a",
   "label": "Financial markets back office administrator"
- },
- {
-  "id": "21de0f3b-a71a-4263-a9ba-90c5f3721b4d",
-  "label": "Financial planner"
  },
  {
   "id": "7a6ca615-a2bc-499d-8288-d186ce2594ea",
@@ -4752,10 +7224,6 @@
   "label": "Granulator machine operator"
  },
  {
-  "id": "69bcbb0a-8d80-4ecd-b0a4-9adea2a40de2",
-  "label": "Graphic designer"
- },
- {
   "id": "757da94f-d1f3-48ad-ac61-74e22bc18cca",
   "label": "Graphologist"
  },
@@ -5182,10 +7650,6 @@
  {
   "id": "d8ed1703-9c03-4ea0-83cc-b6169bc54ffd",
   "label": "Human resources assistant"
- },
- {
-  "id": "f605bcd2-90b6-45a0-a558-d05016d68a77",
-  "label": "Human resources manager"
  },
  {
   "id": "d3e32e5e-7f24-48e3-b939-e4f800eb62fb",
@@ -5992,10 +8456,6 @@
   "label": "Investment adviser"
  },
  {
-  "id": "b7f47c25-bdf3-42fa-a68e-ad32754b2dba",
-  "label": "Investment analyst"
- },
- {
   "id": "fd0801c9-809a-4cfd-98ed-6c5860c163f2",
   "label": "Investment clerk"
  },
@@ -6006,10 +8466,6 @@
  {
   "id": "b95bdbed-1e7e-482a-aa73-7bdbb3e36358",
   "label": "Investment fund manager"
- },
- {
-  "id": "0ecedad1-1144-45ff-83db-a3c4db393036",
-  "label": "Investment manager"
  },
  {
   "id": "4c715719-3c3f-4058-ba00-9b2ef34848e8",
@@ -6260,10 +8716,6 @@
   "label": "Law lecturer"
  },
  {
-  "id": "974d4eab-fbee-4c52-b16e-73bdd8c25b53",
-  "label": "Lawyer"
- },
- {
   "id": "55d2eb3e-1e49-404a-b4bf-be4829694a59",
   "label": "Lawyer linguist"
  },
@@ -6488,10 +8940,6 @@
   "label": "Lieutenant"
  },
  {
-  "id": "fc85156e-4f0b-46c4-ba66-a3b17318d932",
-  "label": "Life coach"
- },
- {
   "id": "3025dea4-1752-40a9-9431-fd874420386f",
   "label": "Life guard"
  },
@@ -6586,10 +9034,6 @@
  {
   "id": "65bd2342-f7de-4932-9164-eb480e35a791",
   "label": "Livestock worker"
- },
- {
-  "id": "8e185c49-704e-49c0-8584-a7e0b618f628",
-  "label": "Loan officer"
  },
  {
   "id": "da4589ce-7534-4cc1-9ce4-cabf9364b87c",
@@ -6798,10 +9242,6 @@
  {
   "id": "47e81c7f-2d04-4a60-a8ff-9913c36d8344",
   "label": "Marketing assistant"
- },
- {
-  "id": "6fcf4638-e7c7-4978-9302-9a7b63a3d57c",
-  "label": "Marketing manager"
  },
  {
   "id": "9cda1c7c-ba07-4381-b831-1bb346ff865f",
@@ -7340,10 +9780,6 @@
   "label": "Montessori school teacher"
  },
  {
-  "id": "3f277813-3cab-4c5d-bfeb-613e449b31c5",
-  "label": "Mortgage broker"
- },
- {
   "id": "ab5a5073-453c-4a93-aff7-345a19f8b954",
   "label": "Mortgage loan underwriter"
  },
@@ -7676,10 +10112,6 @@
   "label": "Office equipment repair technician"
  },
  {
-  "id": "6e6839b6-099c-4802-906e-7f2c8203ee69",
-  "label": "Office manager"
- },
- {
   "id": "4ce42c3c-8a46-40b6-9274-1f5cee3c5cba",
   "label": "Official veterinarian"
  },
@@ -7726,10 +10158,6 @@
  {
   "id": "1dd7c3cb-2d58-4dad-ae15-c9081174ab7e",
   "label": "Online sales channel manager"
- },
- {
-  "id": "c6bd511a-d966-4df9-a48e-4f800354f268",
-  "label": "Operations manager"
  },
  {
   "id": "a4ab8347-782f-4ca1-940d-44ffea256ebf",
@@ -8596,10 +11024,6 @@
   "label": "Product grader"
  },
  {
-  "id": "9f508305-80ce-4111-8722-f2c9b4a44890",
-  "label": "Product manager"
- },
- {
   "id": "b0ad8659-0410-4b5b-9466-a90f8b3cdac9",
   "label": "Product quality controller"
  },
@@ -8642,10 +11066,6 @@
  {
   "id": "c94f3565-d987-431f-a46b-6f4e018e0bd7",
   "label": "Programme manager"
- },
- {
-  "id": "bea99fea-0383-4c63-b944-70d4799de2c5",
-  "label": "Project manager"
  },
  {
   "id": "dce6a68c-8a05-4c26-85d4-6fbc43e7d822",
@@ -8768,10 +11188,6 @@
   "label": "Public housing manager"
  },
  {
-  "id": "6cc19251-763b-4de1-b4f7-526c9ff732d2",
-  "label": "Public relations manager"
- },
- {
   "id": "c0489e22-6a1b-4e52-974a-eb71bbb42134",
   "label": "Public relations officer"
  },
@@ -8826,10 +11242,6 @@
  {
   "id": "29fa406d-de89-4515-be8d-0fe7bda993f1",
   "label": "Purchaser"
- },
- {
-  "id": "377865f0-c327-4599-8c7e-d428c6588edf",
-  "label": "Purchasing manager"
  },
  {
   "id": "a0ebd342-8f89-4947-893d-fee9468cf001",
@@ -8960,10 +11372,6 @@
   "label": "Raw materials warehouse specialist"
  },
  {
-  "id": "8ec8df02-e9dd-43b7-b416-5846ae0414ab",
-  "label": "Real estate agent"
- },
- {
   "id": "7e46c066-2b98-4eaf-bed6-9848c79902e0",
   "label": "Real estate investor"
  },
@@ -8978,10 +11386,6 @@
  {
   "id": "bbefa1b2-521e-4d87-a7ad-9bbd0b32e271",
   "label": "Real estate surveyor"
- },
- {
-  "id": "f7b04542-d8c7-42db-8475-e63b507cce82",
-  "label": "Receptionist"
  },
  {
   "id": "ae3f1edd-d191-4a8d-8dfc-099dcdc6f1e8",
@@ -9006,10 +11410,6 @@
  {
   "id": "f9395e4d-d66f-49ce-a8f5-721991139e79",
   "label": "Recreational therapist"
- },
- {
-  "id": "068370e0-9c27-4814-87d0-44fbb3140815",
-  "label": "Recruitment consultant"
  },
  {
   "id": "7a523273-9fff-4f11-beb6-110eeaec1436",
@@ -9200,10 +11600,6 @@
   "label": "Restaurant host/restaurant hostess"
  },
  {
-  "id": "d5eb6150-bbff-4a9c-9d0c-21eab4dbe2b6",
-  "label": "Restaurant manager"
- },
- {
   "id": "158965f1-bd83-441c-bca8-1975b74dedc5",
   "label": "Restoration technician"
  },
@@ -9226,10 +11622,6 @@
  {
   "id": "a4c5fb46-1d72-47de-b349-f579a0f1edfb",
   "label": "Rigging supervisor"
- },
- {
-  "id": "b09acdda-6680-49d1-a411-129610ee3bc0",
-  "label": "Risk manager"
  },
  {
   "id": "0a7e24a8-19bd-4b45-83f0-f05d8fedf62d",
@@ -9398,14 +11790,6 @@
  {
   "id": "9ba74e8a-c40c-4228-9998-eb3c7a5c11df",
   "label": "Sales assistant"
- },
- {
-  "id": "8529edc5-96ad-4cde-b34a-f86ad3753e4d",
-  "label": "Sales engineer"
- },
- {
-  "id": "a7594892-ff23-4e2a-aedf-2f967ebca15c",
-  "label": "Sales manager"
  },
  {
   "id": "73357956-f607-4baa-9ce6-03beb9b39da2",
@@ -9892,16 +12276,8 @@
   "label": "Software architect"
  },
  {
-  "id": "f2b15a0e-e65a-438a-affb-29b9d50b77d1",
-  "label": "Software developer"
- },
- {
   "id": "f31f487b-4ce2-40f3-90e8-7d0011b4ef1d",
   "label": "Software manager"
- },
- {
-  "id": "106f79e4-6264-45f1-9e7a-297435cd684b",
-  "label": "Software tester"
  },
  {
   "id": "6a3d3d28-0ab6-49b0-9a32-697e5e104bf1",
@@ -10360,10 +12736,6 @@
   "label": "Supply chain assistant"
  },
  {
-  "id": "aacc3918-b5d3-484b-9480-5d29aa550d74",
-  "label": "Supply chain manager"
- },
- {
   "id": "353c19d6-62d6-4dfc-85e9-f59d219d457c",
   "label": "Supreme court judge"
  },
@@ -10488,10 +12860,6 @@
   "label": "Technical communicator"
  },
  {
-  "id": "00030d09-2b3a-4efd-87cc-c4ea39d27c34",
-  "label": "Technical director"
- },
- {
   "id": "c956be07-53a3-4b01-b8f8-f0c5a428eaa8",
   "label": "Technical sales representative"
  },
@@ -10578,10 +12946,6 @@
  {
   "id": "8249697a-3dc8-417d-9acf-3a7e0864069a",
   "label": "Terrazzo setter supervisor"
- },
- {
-  "id": "c8fa93eb-7c2c-42c3-b135-c2e825a6615e",
-  "label": "Test engineer"
  },
  {
   "id": "16bc69b8-5abc-49e4-a860-befb734d54d3",
@@ -11244,10 +13608,6 @@
   "label": "Waiting list coordinator"
  },
  {
-  "id": "2f5de1ab-eddf-4715-8193-e994912c22ea",
-  "label": "Warehouse manager"
- },
- {
   "id": "040fcfa5-24be-43eb-afd5-828297175b16",
   "label": "Warehouse operator for clothing"
  },
@@ -11402,10 +13762,6 @@
  {
   "id": "a74f6c51-37e5-423e-aa5b-044e98663027",
   "label": "Web content manager"
- },
- {
-  "id": "c40a2919-48a9-40ea-b506-1f34f693496d",
-  "label": "Web developer"
  },
  {
   "id": "dc8ef7da-d2c0-4474-96a0-6d0385eeec1e",
@@ -12056,10 +14412,6 @@
   "label": "Coffee shop manager"
  },
  {
-  "id": "53cdd34e-22f2-41bd-b3c7-de22bf9bbcae~3",
-  "label": "Hotel manager"
- },
- {
   "id": "53cdd34e-22f2-41bd-b3c7-de22bf9bbcae~4",
   "label": "Hospitality establishment director"
  },
@@ -12106,10 +14458,6 @@
  {
   "id": "eda0d957-3c3c-4139-b89a-a18bc9e18897~7",
   "label": "Account auditor"
- },
- {
-  "id": "eda0d957-3c3c-4139-b89a-a18bc9e18897~8",
-  "label": "Auditor"
  },
  {
   "id": "eda0d957-3c3c-4139-b89a-a18bc9e18897~9",
@@ -12612,10 +14960,6 @@
   "label": "Administrative office assistant"
  },
  {
-  "id": "044d78cc-f62f-4532-83a5-8e04f2889652~3",
-  "label": "Office administrator"
- },
- {
   "id": "044d78cc-f62f-4532-83a5-8e04f2889652~5",
   "label": "Executive administrative assistant"
  },
@@ -12944,16 +15288,8 @@
   "label": "Copy-based creative"
  },
  {
-  "id": "b1ab3572-fa2f-4624-8eac-3c3d986d237b~15",
-  "label": "Copywriter"
- },
- {
   "id": "b1ab3572-fa2f-4624-8eac-3c3d986d237b~16",
   "label": "Creative copy"
- },
- {
-  "id": "b1ab3572-fa2f-4624-8eac-3c3d986d237b~17",
-  "label": "Content writer"
  },
  {
   "id": "c28cb56b-003e-499a-8dbf-b654864e7867~0",
@@ -15392,10 +17728,6 @@
   "label": "Airport environmental operations manager"
  },
  {
-  "id": "fc35b7ca-ecec-40d7-91b5-5065f662d955~11",
-  "label": "Finance director"
- },
- {
   "id": "fc35b7ca-ecec-40d7-91b5-5065f662d955~12",
   "label": "Airport security manager"
  },
@@ -15966,10 +18298,6 @@
  {
   "id": "15cc27b1-7358-48ed-9fb8-69ffe9f1fc98~1",
   "label": "Artificial inseminator"
- },
- {
-  "id": "15cc27b1-7358-48ed-9fb8-69ffe9f1fc98~2",
-  "label": "AI engineer"
  },
  {
   "id": "15cc27b1-7358-48ed-9fb8-69ffe9f1fc98~3",
@@ -18644,14 +20972,6 @@
   "label": "Wealth management adviser"
  },
  {
-  "id": "e20eee17-4876-4f21-a0cb-5d7f40c63cd8~1",
-  "label": "Wealth manager"
- },
- {
-  "id": "e20eee17-4876-4f21-a0cb-5d7f40c63cd8~2",
-  "label": "Financial advisor"
- },
- {
   "id": "e20eee17-4876-4f21-a0cb-5d7f40c63cd8~3",
   "label": "Independent financial advisor"
  },
@@ -18784,10 +21104,6 @@
   "label": "Research assistant professor"
  },
  {
-  "id": "c262bb96-03bb-4c97-a45b-0cf36db5b048~15",
-  "label": "Assistant professor"
- },
- {
   "id": "c262bb96-03bb-4c97-a45b-0cf36db5b048~16",
   "label": "Assistant lecturer at a college"
  },
@@ -18838,10 +21154,6 @@
  {
   "id": "e1106f6d-81fc-44f8-af94-8b7d2763065c~4",
   "label": "Orchestra assistant"
- },
- {
-  "id": "71898b81-fc2f-4a97-826d-f45e49a8160a~0",
-  "label": "Assistant director"
  },
  {
   "id": "71898b81-fc2f-4a97-826d-f45e49a8160a~1",
@@ -22880,10 +25192,6 @@
   "label": "Junior bioinformatics scientist"
  },
  {
-  "id": "68d973df-bf10-4bf7-9a1b-fbd9f604b9db~5",
-  "label": "Research scientist"
- },
- {
   "id": "68d973df-bf10-4bf7-9a1b-fbd9f604b9db~6",
   "label": "Computer analyst"
  },
@@ -24724,10 +27032,6 @@
   "label": "Regional administrative manager"
  },
  {
-  "id": "0917ab6b-18a8-4cfd-8e7a-843b88cf9457~1",
-  "label": "Regional manager"
- },
- {
   "id": "0917ab6b-18a8-4cfd-8e7a-843b88cf9457~2",
   "label": "Branch office administrator"
  },
@@ -24754,10 +27058,6 @@
  {
   "id": "0917ab6b-18a8-4cfd-8e7a-843b88cf9457~8",
   "label": "Recruitment agency manager"
- },
- {
-  "id": "0917ab6b-18a8-4cfd-8e7a-843b88cf9457~9",
-  "label": "Regional director"
  },
  {
   "id": "de80bbf0-447d-4a6a-845a-fdba4e0dc30c~0",
@@ -26016,10 +28316,6 @@
   "label": "Business strategy consultant"
  },
  {
-  "id": "60082a99-d8ef-4e84-9290-78902681b6ed~5",
-  "label": "Management consultant"
- },
- {
   "id": "60082a99-d8ef-4e84-9290-78902681b6ed~6",
   "label": "Standardisation manager"
  },
@@ -26092,10 +28388,6 @@
   "label": "Leadership coach"
  },
  {
-  "id": "d9612966-e295-4d81-ba2b-9f36bad0b392~6",
-  "label": "Executive coach"
- },
- {
   "id": "d9612966-e295-4d81-ba2b-9f36bad0b392~7",
   "label": "Corporate coach"
  },
@@ -26110,10 +28402,6 @@
  {
   "id": "b76178c0-a03a-4793-b079-1e61e636c521~0",
   "label": "Business developers"
- },
- {
-  "id": "b76178c0-a03a-4793-b079-1e61e636c521~1",
-  "label": "Business development executive"
  },
  {
   "id": "b76178c0-a03a-4793-b079-1e61e636c521~2",
@@ -26182,10 +28470,6 @@
  {
   "id": "207d7b18-6540-432e-8aa6-785ed434572f~0",
   "label": "Business intelligence managers"
- },
- {
-  "id": "207d7b18-6540-432e-8aa6-785ed434572f~1",
-  "label": "Business intelligence analyst"
  },
  {
   "id": "207d7b18-6540-432e-8aa6-785ed434572f~2",
@@ -26370,10 +28654,6 @@
  {
   "id": "30058b71-fe16-45ea-a2b8-d5461c706372~22",
   "label": "Business docent"
- },
- {
-  "id": "544cd9cf-e2ee-4ac0-8a02-7147af6b97d7~0",
-  "label": "General manager"
  },
  {
   "id": "544cd9cf-e2ee-4ac0-8a02-7147af6b97d7~4",
@@ -27122,10 +29402,6 @@
  {
   "id": "30ca97f4-a4fd-4189-a781-ac08f6b09b78~9",
   "label": "Graduate call centre analyst"
- },
- {
-  "id": "30ca97f4-a4fd-4189-a781-ac08f6b09b78~10",
-  "label": "Senior data analyst"
  },
  {
   "id": "30ca97f4-a4fd-4189-a781-ac08f6b09b78~11",
@@ -28908,10 +31184,6 @@
   "label": "Check out supervisor"
  },
  {
-  "id": "c76dda38-938c-404e-8a6d-78c8705eebc0~13",
-  "label": "Customer service manager"
- },
- {
   "id": "c76dda38-938c-404e-8a6d-78c8705eebc0~14",
   "label": "Till team leader"
  },
@@ -29720,32 +31992,8 @@
   "label": "Chief data officers"
  },
  {
-  "id": "e297ec12-4712-40a4-ad98-ba004cacb205~1",
-  "label": "Chief analytics officer"
- },
- {
-  "id": "e297ec12-4712-40a4-ad98-ba004cacb205~2",
-  "label": "CDO"
- },
- {
   "id": "6c3fd65e-2d24-47d8-bc22-9e93512bdcc2~0",
   "label": "Senior executive officer"
- },
- {
-  "id": "6c3fd65e-2d24-47d8-bc22-9e93512bdcc2~1",
-  "label": "Chairman"
- },
- {
-  "id": "6c3fd65e-2d24-47d8-bc22-9e93512bdcc2~2",
-  "label": "CEO"
- },
- {
-  "id": "6c3fd65e-2d24-47d8-bc22-9e93512bdcc2~3",
-  "label": "Managing director"
- },
- {
-  "id": "6c3fd65e-2d24-47d8-bc22-9e93512bdcc2~4",
-  "label": "President"
  },
  {
   "id": "a05d0a6d-7b60-445a-8dcb-282c7d5a6852~0",
@@ -29784,28 +32032,12 @@
   "label": "Fead of IT security"
  },
  {
-  "id": "276ba420-ef09-4a0e-b215-2c2e2f80ad28~1",
-  "label": "Chief information security officer"
- },
- {
   "id": "276ba420-ef09-4a0e-b215-2c2e2f80ad28~2",
   "label": "Chief ICT security officers"
  },
  {
   "id": "276ba420-ef09-4a0e-b215-2c2e2f80ad28~3",
   "label": "Head IT security officer"
- },
- {
-  "id": "276ba420-ef09-4a0e-b215-2c2e2f80ad28~4",
-  "label": "CISO"
- },
- {
-  "id": "82f90e87-de92-4678-adae-61d3e5f7e1e4~0",
-  "label": "CIO"
- },
- {
-  "id": "82f90e87-de92-4678-adae-61d3e5f7e1e4~1",
-  "label": "IT director"
  },
  {
   "id": "82f90e87-de92-4678-adae-61d3e5f7e1e4~2",
@@ -29820,20 +32052,8 @@
   "label": "Senior marketing officer"
  },
  {
-  "id": "0ddbf393-38f1-4c22-b14c-fe775008f321~2",
-  "label": "Director of marketing"
- },
- {
   "id": "0ddbf393-38f1-4c22-b14c-fe775008f321~3",
   "label": "Chief commercial strategist"
- },
- {
-  "id": "0ddbf393-38f1-4c22-b14c-fe775008f321~4",
-  "label": "Head of marketing"
- },
- {
-  "id": "0ddbf393-38f1-4c22-b14c-fe775008f321~5",
-  "label": "Chief commercial officer"
  },
  {
   "id": "c64a6e4e-5b38-4f93-b26d-aded817aeaf3~0",
@@ -29866,10 +32086,6 @@
  {
   "id": "7b1b5da8-573a-49bb-a38e-68725a949f4f~2",
   "label": "Information technology director"
- },
- {
-  "id": "7b1b5da8-573a-49bb-a38e-68725a949f4f~3",
-  "label": "CTO"
  },
  {
   "id": "526ba8e1-fc71-4657-8d27-52f03e8ca81d~0",
@@ -31568,10 +33784,6 @@
   "label": "Client service manager"
  },
  {
-  "id": "725090a7-9943-4dae-8079-a6999d21ddba~2",
-  "label": "Client relationship manager"
- },
- {
   "id": "725090a7-9943-4dae-8079-a6999d21ddba~4",
   "label": "Consumer relations manager"
  },
@@ -32868,14 +35080,6 @@
   "label": "Commercial strategy director"
  },
  {
-  "id": "2d3d7188-47ab-49b9-9045-e452d9db06f1~3",
-  "label": "Marketing director"
- },
- {
-  "id": "2d3d7188-47ab-49b9-9045-e452d9db06f1~5",
-  "label": "Business development director"
- },
- {
   "id": "2d3d7188-47ab-49b9-9045-e452d9db06f1~6",
   "label": "International commercial director"
  },
@@ -32908,10 +35112,6 @@
   "label": "Sales and marketing consultant"
  },
  {
-  "id": "14031d4a-6e99-442f-b4fe-18262b6432b2~4",
-  "label": "Business development representative"
- },
- {
   "id": "14031d4a-6e99-442f-b4fe-18262b6432b2~5",
   "label": "Technical and commercial sales representative"
  },
@@ -32924,14 +35124,6 @@
   "label": "Commercial sales consultant"
  },
  {
-  "id": "14031d4a-6e99-442f-b4fe-18262b6432b2~8",
-  "label": "Sales executive"
- },
- {
-  "id": "14031d4a-6e99-442f-b4fe-18262b6432b2~9",
-  "label": "Sales consultant"
- },
- {
   "id": "14031d4a-6e99-442f-b4fe-18262b6432b2~10",
   "label": "Commercial salesman"
  },
@@ -32942,10 +35134,6 @@
  {
   "id": "14031d4a-6e99-442f-b4fe-18262b6432b2~12",
   "label": "Technical and commercial sales consultant"
- },
- {
-  "id": "14031d4a-6e99-442f-b4fe-18262b6432b2~13",
-  "label": "Sales representative"
  },
  {
   "id": "14031d4a-6e99-442f-b4fe-18262b6432b2~14",
@@ -33054,14 +35242,6 @@
  {
   "id": "cd7b838c-51f6-41ec-9067-bb974c0f991b~3",
   "label": "Public relations and communication manager"
- },
- {
-  "id": "cd7b838c-51f6-41ec-9067-bb974c0f991b~4",
-  "label": "Communications manager"
- },
- {
-  "id": "cd7b838c-51f6-41ec-9067-bb974c0f991b~5",
-  "label": "Social media manager"
  },
  {
   "id": "cd7b838c-51f6-41ec-9067-bb974c0f991b~6",
@@ -36064,20 +38244,12 @@
   "label": "Company solicitor"
  },
  {
-  "id": "fdfce14e-992d-4ff4-9f9d-7a353c75654e~9",
-  "label": "Corporate counsel"
- },
- {
   "id": "fdfce14e-992d-4ff4-9f9d-7a353c75654e~10",
   "label": "Corporate advocate"
  },
  {
   "id": "1313aeea-63a9-4b4d-82d1-dbe00ff9ed10~0",
   "label": "Corporate sustainability director"
- },
- {
-  "id": "1313aeea-63a9-4b4d-82d1-dbe00ff9ed10~1",
-  "label": "Chief sustainability officer"
  },
  {
   "id": "1313aeea-63a9-4b4d-82d1-dbe00ff9ed10~2",
@@ -36208,16 +38380,8 @@
   "label": "Corporate training director"
  },
  {
-  "id": "a14e96a7-6c4d-4d69-8c6f-7ccadf77bac5~17",
-  "label": "Training manager"
- },
- {
   "id": "a14e96a7-6c4d-4d69-8c6f-7ccadf77bac5~18",
   "label": "Workplace training manager"
- },
- {
-  "id": "a14e96a7-6c4d-4d69-8c6f-7ccadf77bac5~19",
-  "label": "Learning and development manager"
  },
  {
   "id": "a14e96a7-6c4d-4d69-8c6f-7ccadf77bac5~20",
@@ -36888,10 +39052,6 @@
   "label": "Court legal advisor"
  },
  {
-  "id": "76884a72-d8b8-4819-bd40-71d6420a9a42~6",
-  "label": "Paralegal"
- },
- {
   "id": "76884a72-d8b8-4819-bd40-71d6420a9a42~7",
   "label": "Solicitor"
  },
@@ -37034,10 +39194,6 @@
  {
   "id": "d2db926b-8b14-4686-9c98-fb0dc3a38cbb~1",
   "label": "Creative manager"
- },
- {
-  "id": "d2db926b-8b14-4686-9c98-fb0dc3a38cbb~3",
-  "label": "Design director"
  },
  {
   "id": "d2db926b-8b14-4686-9c98-fb0dc3a38cbb~4",
@@ -38870,10 +41026,6 @@
  {
   "id": "258e46f9-0075-4a2e-adae-1ff0477e0f30~0",
   "label": "Data scientists"
- },
- {
-  "id": "258e46f9-0075-4a2e-adae-1ff0477e0f30~1",
-  "label": "Data engineer"
  },
  {
   "id": "258e46f9-0075-4a2e-adae-1ff0477e0f30~2",
@@ -47604,10 +49756,6 @@
   "label": "Equity programme director"
  },
  {
-  "id": "949ab84f-5d76-4139-a568-45691b7ebc53~10",
-  "label": "Diversity and inclusion manager"
- },
- {
   "id": "949ab84f-5d76-4139-a568-45691b7ebc53~11",
   "label": "Equity and inclusion specialist"
  },
@@ -48022,14 +50170,6 @@
  {
   "id": "2a04a1df-a3b9-403e-a245-e7f93fdddd44~4",
   "label": "Senior administrative secretary"
- },
- {
-  "id": "2a04a1df-a3b9-403e-a245-e7f93fdddd44~5",
-  "label": "Assistant manager"
- },
- {
-  "id": "2a04a1df-a3b9-403e-a245-e7f93fdddd44~7",
-  "label": "Personal assistant"
  },
  {
   "id": "2a04a1df-a3b9-403e-a245-e7f93fdddd44~8",
@@ -49352,10 +51492,6 @@
   "label": "M&a analyst"
  },
  {
-  "id": "1ad59946-d13e-441e-9b36-56e1df055e21~0",
-  "label": "Internal auditor"
- },
- {
   "id": "1ad59946-d13e-441e-9b36-56e1df055e21~1",
   "label": "Chartered accountant"
  },
@@ -49456,10 +51592,6 @@
   "label": "Financial control officer"
  },
  {
-  "id": "5e5b1b61-1351-4d3b-a293-deb3661715dd~6",
-  "label": "Corporate controller"
- },
- {
   "id": "5e5b1b61-1351-4d3b-a293-deb3661715dd~7",
   "label": "Finance officer"
  },
@@ -49478,10 +51610,6 @@
  {
   "id": "5e5b1b61-1351-4d3b-a293-deb3661715dd~11",
   "label": "Finance controller"
- },
- {
-  "id": "5e5b1b61-1351-4d3b-a293-deb3661715dd~12",
-  "label": "Finance manager"
  },
  {
   "id": "a04eedcf-8424-475a-8dc5-f30a9da4b151~0",
@@ -49522,10 +51650,6 @@
  {
   "id": "30f3ea93-882a-4525-841c-1d5b4b64076f~2",
   "label": "Corporate finance manager"
- },
- {
-  "id": "30f3ea93-882a-4525-841c-1d5b4b64076f~4",
-  "label": "CFO"
  },
  {
   "id": "35fbb8cd-c044-49a1-850c-010481c99b4a~0",
@@ -49606,10 +51730,6 @@
  {
   "id": "7a6ca615-a2bc-499d-8288-d186ce2594ea~3",
   "label": "Operational risk analyst"
- },
- {
-  "id": "7a6ca615-a2bc-499d-8288-d186ce2594ea~4",
-  "label": "Chief risk officer"
  },
  {
   "id": "7a6ca615-a2bc-499d-8288-d186ce2594ea~5",
@@ -49778,10 +51898,6 @@
  {
   "id": "f2413988-f76a-4636-a4b1-9952517aa21f~2",
   "label": "Fire brigade commissioner"
- },
- {
-  "id": "f2413988-f76a-4636-a4b1-9952517aa21f~4",
-  "label": "Area manager"
  },
  {
   "id": "c302791c-6864-4ec5-9a6c-2fca38764f0e~0",
@@ -53238,10 +55354,6 @@
  {
   "id": "0552ff45-b282-455c-b431-fb05a0e00801~3",
   "label": "Process manager"
- },
- {
-  "id": "0552ff45-b282-455c-b431-fb05a0e00801~4",
-  "label": "Engineering manager"
  },
  {
   "id": "0552ff45-b282-455c-b431-fb05a0e00801~5",
@@ -58560,10 +60672,6 @@
   "label": "Waste disposal adviser"
  },
  {
-  "id": "b3867d0a-e902-4d88-b0c2-3e0d2cf35c83~7",
-  "label": "Compliance manager"
- },
- {
   "id": "b3867d0a-e902-4d88-b0c2-3e0d2cf35c83~8",
   "label": "Hazardous waste control specialist"
  },
@@ -59896,10 +62004,6 @@
   "label": "University lecturer"
  },
  {
-  "id": "684fd8d5-9b40-4b02-a680-438f0082d923~1",
-  "label": "Professor"
- },
- {
   "id": "684fd8d5-9b40-4b02-a680-438f0082d923~2",
   "label": "Higher education instructor"
  },
@@ -60564,10 +62668,6 @@
   "label": "Hospitality revenues manager"
  },
  {
-  "id": "002da35b-7808-43f3-83bf-63596b8b351f~3",
-  "label": "Revenue manager"
- },
- {
   "id": "1801583e-34b3-4c89-97ac-db2a346b4a3e~0",
   "label": "Hospitality and catering teacher"
  },
@@ -60996,10 +63096,6 @@
   "label": "Human resources executive assistant"
  },
  {
-  "id": "d8ed1703-9c03-4ea0-83cc-b6169bc54ffd~1",
-  "label": "Human resources associate"
- },
- {
   "id": "d8ed1703-9c03-4ea0-83cc-b6169bc54ffd~2",
   "label": "Human resources secretary"
  },
@@ -61008,24 +63104,12 @@
   "label": "Human resources administrative assistant"
  },
  {
-  "id": "f605bcd2-90b6-45a0-a558-d05016d68a77~0",
-  "label": "Human resources specialist"
- },
- {
   "id": "f605bcd2-90b6-45a0-a558-d05016d68a77~1",
   "label": "Career advice office manager"
  },
  {
   "id": "f605bcd2-90b6-45a0-a558-d05016d68a77~2",
   "label": "Employee benefits manager"
- },
- {
-  "id": "f605bcd2-90b6-45a0-a558-d05016d68a77~3",
-  "label": "Staffing manager"
- },
- {
-  "id": "f605bcd2-90b6-45a0-a558-d05016d68a77~4",
-  "label": "Recruitment manager"
  },
  {
   "id": "f605bcd2-90b6-45a0-a558-d05016d68a77~5",
@@ -61056,10 +63140,6 @@
   "label": "Personnel director"
  },
  {
-  "id": "f605bcd2-90b6-45a0-a558-d05016d68a77~12",
-  "label": "Human resources director"
- },
- {
   "id": "d3e32e5e-7f24-48e3-b939-e4f800eb62fb~0",
   "label": "Personnel administrator"
  },
@@ -61084,16 +63164,8 @@
   "label": "HR supervisor"
  },
  {
-  "id": "d3e32e5e-7f24-48e3-b939-e4f800eb62fb~8",
-  "label": "HR manager"
- },
- {
   "id": "d3e32e5e-7f24-48e3-b939-e4f800eb62fb~9",
   "label": "Skills trainer"
- },
- {
-  "id": "d3e32e5e-7f24-48e3-b939-e4f800eb62fb~10",
-  "label": "HR assistant"
  },
  {
   "id": "d3e32e5e-7f24-48e3-b939-e4f800eb62fb~12",
@@ -61130,10 +63202,6 @@
  {
   "id": "d3e32e5e-7f24-48e3-b939-e4f800eb62fb~20",
   "label": "Personnel recruiter"
- },
- {
-  "id": "d3e32e5e-7f24-48e3-b939-e4f800eb62fb~22",
-  "label": "HR director"
  },
  {
   "id": "d3e32e5e-7f24-48e3-b939-e4f800eb62fb~23",
@@ -61728,10 +63796,6 @@
   "label": "ICT ERP consultant"
  },
  {
-  "id": "b1c80369-067e-4041-84c8-dbe65640a5d8~3",
-  "label": "IT consultant"
- },
- {
   "id": "b1c80369-067e-4041-84c8-dbe65640a5d8~4",
   "label": "ICT consultants"
  },
@@ -61992,10 +64056,6 @@
   "label": "Network technician"
  },
  {
-  "id": "64c7d461-152c-477f-a8e2-c2c537e9d617~1",
-  "label": "Network engineer"
- },
- {
   "id": "64c7d461-152c-477f-a8e2-c2c537e9d617~2",
   "label": "Network maintenance professional"
  },
@@ -62094,10 +64154,6 @@
  {
   "id": "8b6388a4-4904-471b-9331-d3b1211f5525~0",
   "label": "IT projects manager"
- },
- {
-  "id": "8b6388a4-4904-471b-9331-d3b1211f5525~1",
-  "label": "IT project manager"
  },
  {
   "id": "8b6388a4-4904-471b-9331-d3b1211f5525~2",
@@ -62370,10 +64426,6 @@
  {
   "id": "a6a0b60f-08da-4faa-bf54-942987efb471~4",
   "label": "ICT system analysts"
- },
- {
-  "id": "a6a0b60f-08da-4faa-bf54-942987efb471~5",
-  "label": "Systems analyst"
  },
  {
   "id": "a6a0b60f-08da-4faa-bf54-942987efb471~6",
@@ -66904,10 +68956,6 @@
   "label": "CAD design expert"
  },
  {
-  "id": "ab7bccb2-6f81-4a3d-a0c0-fca5d47d2775~7",
-  "label": "Product designer"
- },
- {
   "id": "ab7bccb2-6f81-4a3d-a0c0-fca5d47d2775~8",
   "label": "Industrial designers"
  },
@@ -67942,10 +69990,6 @@
  {
   "id": "594170bc-5663-40b0-97ef-c9f1ad51b2a0~2",
   "label": "Insurance services branch managers"
- },
- {
-  "id": "594170bc-5663-40b0-97ef-c9f1ad51b2a0~3",
-  "label": "Insurance agent"
  },
  {
   "id": "594170bc-5663-40b0-97ef-c9f1ad51b2a0~4",
@@ -69162,10 +71206,6 @@
  {
   "id": "b7f47c25-bdf3-42fa-a68e-ad32754b2dba~2",
   "label": "Investment accounting analyst"
- },
- {
-  "id": "b7f47c25-bdf3-42fa-a68e-ad32754b2dba~3",
-  "label": "Investment banking analyst"
  },
  {
   "id": "b7f47c25-bdf3-42fa-a68e-ad32754b2dba~4",
@@ -71964,10 +74004,6 @@
   "label": "Industrial property lawyer"
  },
  {
-  "id": "974d4eab-fbee-4c52-b16e-73bdd8c25b53~24",
-  "label": "Attorney"
- },
- {
   "id": "974d4eab-fbee-4c52-b16e-73bdd8c25b53~25",
   "label": "Medical lawyer"
  },
@@ -73338,10 +75374,6 @@
  {
   "id": "7b89d3e0-c6fb-4c95-bf0d-3b4acf05f9d6~1",
   "label": "Parliamentary draftsperson"
- },
- {
-  "id": "7b89d3e0-c6fb-4c95-bf0d-3b4acf05f9d6~2",
-  "label": "Researcher"
  },
  {
   "id": "7b89d3e0-c6fb-4c95-bf0d-3b4acf05f9d6~3",
@@ -74896,10 +76928,6 @@
   "label": "Logistics consultant"
  },
  {
-  "id": "51cd3a7a-eae6-4dc6-9f24-179d7ec6d230~5",
-  "label": "Supply chain analyst"
- },
- {
   "id": "51cd3a7a-eae6-4dc6-9f24-179d7ec6d230~6",
   "label": "Logistics and supply chain analyst"
  },
@@ -74914,10 +76942,6 @@
  {
   "id": "51cd3a7a-eae6-4dc6-9f24-179d7ec6d230~9",
   "label": "Distribution consultant"
- },
- {
-  "id": "823db06f-25e1-4658-b063-d6ef956b41f5~0",
-  "label": "Logistics manager"
  },
  {
   "id": "823db06f-25e1-4658-b063-d6ef956b41f5~1",
@@ -76608,10 +78632,6 @@
   "label": "Marketing campaign planner"
  },
  {
-  "id": "4791e217-d607-40d5-9f84-df1d0a071cbc~2",
-  "label": "Marketing specialist"
- },
- {
   "id": "4791e217-d607-40d5-9f84-df1d0a071cbc~3",
   "label": "Air transport marketer"
  },
@@ -76632,16 +78652,8 @@
   "label": "Marketing adviser"
  },
  {
-  "id": "4791e217-d607-40d5-9f84-df1d0a071cbc~9",
-  "label": "Marketing analyst"
- },
- {
   "id": "47e81c7f-2d04-4a60-a8ff-9913c36d8344~0",
   "label": "Marketing officer"
- },
- {
-  "id": "47e81c7f-2d04-4a60-a8ff-9913c36d8344~1",
-  "label": "Marketing associate"
  },
  {
   "id": "47e81c7f-2d04-4a60-a8ff-9913c36d8344~2",
@@ -76662,14 +78674,6 @@
  {
   "id": "6fcf4638-e7c7-4978-9302-9a7b63a3d57c~0",
   "label": "Advertising sales manager"
- },
- {
-  "id": "6fcf4638-e7c7-4978-9302-9a7b63a3d57c~2",
-  "label": "Marketing executive"
- },
- {
-  "id": "6fcf4638-e7c7-4978-9302-9a7b63a3d57c~4",
-  "label": "Product marketing manager"
  },
  {
   "id": "6fcf4638-e7c7-4978-9302-9a7b63a3d57c~5",
@@ -78584,10 +80588,6 @@
   "label": "Health centre manager"
  },
  {
-  "id": "8c8b5cba-14b2-4728-b22c-eb90f1786e00~1",
-  "label": "Practice manager"
- },
- {
   "id": "8c8b5cba-14b2-4728-b22c-eb90f1786e00~2",
   "label": "Medical practice administrator"
  },
@@ -79302,10 +81302,6 @@
  {
   "id": "528e63a7-91be-4477-be2f-69ce82deb726~0",
   "label": "Blast furnace operator"
- },
- {
-  "id": "528e63a7-91be-4477-be2f-69ce82deb726~2",
-  "label": "Plant manager"
  },
  {
   "id": "528e63a7-91be-4477-be2f-69ce82deb726~4",
@@ -81740,10 +83736,6 @@
   "label": "Mobile app specialist"
  },
  {
-  "id": "2ed56c3f-61d6-4f7e-9ef8-8849eb102e4c~2",
-  "label": "Mobile app developer"
- },
- {
   "id": "2ed56c3f-61d6-4f7e-9ef8-8849eb102e4c~3",
   "label": "Mobile application developers"
  },
@@ -82602,10 +84594,6 @@
  {
   "id": "b21b5952-1658-44f8-b719-e5be7fb39866~14",
   "label": "Dealership showroom manager"
- },
- {
-  "id": "b21b5952-1658-44f8-b719-e5be7fb39866~15",
-  "label": "Senior sales manager"
  },
  {
   "id": "b21b5952-1658-44f8-b719-e5be7fb39866~16",
@@ -85664,10 +87652,6 @@
   "label": "Monitoring and control technician"
  },
  {
-  "id": "217e7ae2-605d-4225-afd2-6319c2408116~7",
-  "label": "Supervisor"
- },
- {
   "id": "217e7ae2-605d-4225-afd2-6319c2408116~8",
   "label": "Petroleum process operator"
  },
@@ -85750,10 +87734,6 @@
  {
   "id": "137b1d11-c4bc-4016-89ba-45345d4c71f0~4",
   "label": "Online content and community manager"
- },
- {
-  "id": "137b1d11-c4bc-4016-89ba-45345d4c71f0~5",
-  "label": "Social media specialist"
  },
  {
   "id": "137b1d11-c4bc-4016-89ba-45345d4c71f0~6",
@@ -85874,14 +87854,6 @@
  {
   "id": "c6bd511a-d966-4df9-a48e-4f800354f268~3",
   "label": "Operations general manager"
- },
- {
-  "id": "c6bd511a-d966-4df9-a48e-4f800354f268~4",
-  "label": "Operations director"
- },
- {
-  "id": "c6bd511a-d966-4df9-a48e-4f800354f268~5",
-  "label": "Business operations manager"
  },
  {
   "id": "a4ab8347-782f-4ca1-940d-44ffea256ebf~0",
@@ -86996,10 +88968,6 @@
   "label": "Trainee packaging manager"
  },
  {
-  "id": "8de99659-5b10-4825-ac67-0c50189bcc3c~8",
-  "label": "Senior operations manager"
- },
- {
   "id": "8de99659-5b10-4825-ac67-0c50189bcc3c~9",
   "label": "Packaging technologist"
  },
@@ -87854,10 +89822,6 @@
  {
   "id": "d9004a14-bda2-4c63-ab64-17ca163ac1bd~15",
   "label": "MP's PA"
- },
- {
-  "id": "7720f392-6ea0-4455-a805-7b7eef38a709~0",
-  "label": "Controller"
  },
  {
   "id": "7720f392-6ea0-4455-a805-7b7eef38a709~1",
@@ -91880,10 +93844,6 @@
   "label": "Strategy advisor"
  },
  {
-  "id": "caf7b8fb-b2d6-46b7-bffa-bea7f8e4aed8~3",
-  "label": "Strategy manager"
- },
- {
   "id": "caf7b8fb-b2d6-46b7-bffa-bea7f8e4aed8~4",
   "label": "Policy researcher"
  },
@@ -92102,10 +94062,6 @@
  {
   "id": "c593ded7-2e97-44a5-a5f3-f6115ff98233~12",
   "label": "Lecturer in politics and international studies"
- },
- {
-  "id": "c593ded7-2e97-44a5-a5f3-f6115ff98233~13",
-  "label": "Teacher"
  },
  {
   "id": "c593ded7-2e97-44a5-a5f3-f6115ff98233~14",
@@ -92546,10 +94502,6 @@
  {
   "id": "f33a70bd-c5b6-495d-8e0c-5e2c6e56d93e~11",
   "label": "Electricity generating plant worker"
- },
- {
-  "id": "cb446db8-e8b3-418c-a21c-2d10faea42a5~0",
-  "label": "Demand generation manager"
  },
  {
   "id": "cb446db8-e8b3-418c-a21c-2d10faea42a5~1",
@@ -94520,16 +96472,8 @@
   "label": "Product specialist"
  },
  {
-  "id": "61d9270c-491d-438d-8d41-77ba2e0ef023~4",
-  "label": "QA engineer"
- },
- {
   "id": "61d9270c-491d-438d-8d41-77ba2e0ef023~7",
   "label": "Junior quality engineer"
- },
- {
-  "id": "61d9270c-491d-438d-8d41-77ba2e0ef023~8",
-  "label": "Quality assurance engineer"
  },
  {
   "id": "61d9270c-491d-438d-8d41-77ba2e0ef023~9",
@@ -95136,10 +97080,6 @@
   "label": "Projects portfolio manager"
  },
  {
-  "id": "c94f3565-d987-431f-a46b-6f4e018e0bd7~3",
-  "label": "Program manager"
- },
- {
   "id": "c94f3565-d987-431f-a46b-6f4e018e0bd7~4",
   "label": "Program management coordinator"
  },
@@ -95162,10 +97102,6 @@
  {
   "id": "bea99fea-0383-4c63-b944-70d4799de2c5~3",
   "label": "Project expediter"
- },
- {
-  "id": "bea99fea-0383-4c63-b944-70d4799de2c5~4",
-  "label": "Senior project manager"
  },
  {
   "id": "bea99fea-0383-4c63-b944-70d4799de2c5~5",
@@ -96260,10 +98196,6 @@
   "label": "Public institution director"
  },
  {
-  "id": "0752ed49-03e7-4d75-8314-a051b3771a1d~11",
-  "label": "Chief of staff"
- },
- {
   "id": "0752ed49-03e7-4d75-8314-a051b3771a1d~12",
   "label": "District council manager"
  },
@@ -97278,10 +99210,6 @@
  {
   "id": "29fa406d-de89-4515-be8d-0fe7bda993f1~14",
   "label": "Buying agent"
- },
- {
-  "id": "29fa406d-de89-4515-be8d-0fe7bda993f1~15",
-  "label": "Procurement manager"
  },
  {
   "id": "29fa406d-de89-4515-be8d-0fe7bda993f1~16",
@@ -98396,10 +100324,6 @@
   "label": "Residential real estate agents"
  },
  {
-  "id": "8ec8df02-e9dd-43b7-b416-5846ae0414ab~35",
-  "label": "Real estate broker"
- },
- {
   "id": "8ec8df02-e9dd-43b7-b416-5846ae0414ab~36",
   "label": "Real estate rental agents"
  },
@@ -99452,10 +101376,6 @@
   "label": "Regulatory manager"
  },
  {
-  "id": "779d13be-60b4-48f3-a339-fe483be96c7f~5",
-  "label": "Chief compliance officer"
- },
- {
   "id": "779d13be-60b4-48f3-a339-fe483be96c7f~6",
   "label": "Bank compliance officer"
  },
@@ -99522,10 +101442,6 @@
  {
   "id": "d96de969-d43d-4082-8559-7fc35484a217~7",
   "label": "Private banking relationship managers"
- },
- {
-  "id": "d96de969-d43d-4082-8559-7fc35484a217~8",
-  "label": "Relationship manager"
  },
  {
   "id": "d96de969-d43d-4082-8559-7fc35484a217~9",
@@ -101440,10 +103356,6 @@
   "label": "Retail innovator"
  },
  {
-  "id": "bf89925d-00a1-4f94-ab3b-2148c887af33~10",
-  "label": "Entrepreneur"
- },
- {
   "id": "bf89925d-00a1-4f94-ab3b-2148c887af33~11",
   "label": "Retail experience entrepreneur"
  },
@@ -103276,18 +105188,6 @@
   "label": "Customer relations manager"
  },
  {
-  "id": "2eac08c2-a81a-46fc-8d75-eb0e0f3e0f6d~6",
-  "label": "Business development manager"
- },
- {
-  "id": "2eac08c2-a81a-46fc-8d75-eb0e0f3e0f6d~7",
-  "label": "Key account manager"
- },
- {
-  "id": "2eac08c2-a81a-46fc-8d75-eb0e0f3e0f6d~8",
-  "label": "Senior account manager"
- },
- {
   "id": "2eac08c2-a81a-46fc-8d75-eb0e0f3e0f6d~9",
   "label": "Sales coordinator"
  },
@@ -103444,18 +105344,6 @@
   "label": "Group sales manager"
  },
  {
-  "id": "a7594892-ff23-4e2a-aedf-2f967ebca15c~2",
-  "label": "Area sales manager"
- },
- {
-  "id": "a7594892-ff23-4e2a-aedf-2f967ebca15c~3",
-  "label": "Inside sales manager"
- },
- {
-  "id": "a7594892-ff23-4e2a-aedf-2f967ebca15c~4",
-  "label": "Sales director"
- },
- {
   "id": "a7594892-ff23-4e2a-aedf-2f967ebca15c~5",
   "label": "International sales manage"
  },
@@ -103562,10 +105450,6 @@
  {
   "id": "5c1eba1e-7820-4287-9746-4c5906320100~7",
   "label": "Sales operations assistant"
- },
- {
-  "id": "5c1eba1e-7820-4287-9746-4c5906320100~8",
-  "label": "Sales associate"
  },
  {
   "id": "24161923-e3e6-4096-b377-f1ee8a7ea31b~0",
@@ -104188,10 +106072,6 @@
   "label": "Search engine optimisation specialist"
  },
  {
-  "id": "092fdeeb-a76f-4ed2-b248-90fd6eaaffef~1",
-  "label": "SEO specialist"
- },
- {
   "id": "092fdeeb-a76f-4ed2-b248-90fd6eaaffef~2",
   "label": "Search engine marketing specialist"
  },
@@ -104202,10 +106082,6 @@
  {
   "id": "092fdeeb-a76f-4ed2-b248-90fd6eaaffef~4",
   "label": "SEO expert"
- },
- {
-  "id": "092fdeeb-a76f-4ed2-b248-90fd6eaaffef~5",
-  "label": "Growth hacker"
  },
  {
   "id": "092fdeeb-a76f-4ed2-b248-90fd6eaaffef~6",
@@ -105254,10 +107130,6 @@
  {
   "id": "bcc2c1db-f969-4355-bebf-4878ff6c2a94~9",
   "label": "Corporate service coordinator"
- },
- {
-  "id": "bcc2c1db-f969-4355-bebf-4878ff6c2a94~10",
-  "label": "Client services manager"
  },
  {
   "id": "34e1c889-0fd1-4d1f-aba9-3b6263ae667a~0",
@@ -106414,10 +108286,6 @@
  {
   "id": "9e81adde-9983-44fa-b74b-c548d0dbfbdd~3",
   "label": "Retail shop manager"
- },
- {
-  "id": "9e81adde-9983-44fa-b74b-c548d0dbfbdd~4",
-  "label": "Store manager"
  },
  {
   "id": "9e81adde-9983-44fa-b74b-c548d0dbfbdd~5",
@@ -108038,10 +109906,6 @@
  {
   "id": "f2b15a0e-e65a-438a-affb-29b9d50b77d1~6",
   "label": "Software developers"
- },
- {
-  "id": "f2b15a0e-e65a-438a-affb-29b9d50b77d1~7",
-  "label": "Software engineer"
  },
  {
   "id": "f2b15a0e-e65a-438a-affb-29b9d50b77d1~8",
@@ -110130,10 +111994,6 @@
  {
   "id": "825ab049-2f0c-4acf-b402-9c6bb51acca2~0",
   "label": "Stadium manager"
- },
- {
-  "id": "825ab049-2f0c-4acf-b402-9c6bb51acca2~1",
-  "label": "Director"
  },
  {
   "id": "825ab049-2f0c-4acf-b402-9c6bb51acca2~2",
@@ -113792,10 +115652,6 @@
   "label": "API writer"
  },
  {
-  "id": "8cb59bc4-1f39-477e-beea-effed12d186c~10",
-  "label": "Technical writer"
- },
- {
   "id": "8cb59bc4-1f39-477e-beea-effed12d186c~12",
   "label": "Advanced technical communicator"
  },
@@ -116896,10 +118752,6 @@
   "label": "Regional product sales manager"
  },
  {
-  "id": "3a4c4e33-ee34-4abe-ba5c-26f9037d292f~5",
-  "label": "Regional sales manager"
- },
- {
   "id": "3a4c4e33-ee34-4abe-ba5c-26f9037d292f~6",
   "label": "Assistant trade regional manager"
  },
@@ -118416,10 +120268,6 @@
   "label": "User interface designers"
  },
  {
-  "id": "96e20037-0a25-4bf6-a25e-808d1605d890~2",
-  "label": "UI designer"
- },
- {
   "id": "866c7813-2c03-47d7-9bdc-192cfbace57c~0",
   "label": "Front end developer"
  },
@@ -119440,10 +121288,6 @@
   "label": "Angel investors"
  },
  {
-  "id": "659b0ffd-337c-4a1f-82e3-2730812279de~1",
-  "label": "Investor"
- },
- {
   "id": "659b0ffd-337c-4a1f-82e3-2730812279de~2",
   "label": "Seed capital investor"
  },
@@ -119454,10 +121298,6 @@
  {
   "id": "659b0ffd-337c-4a1f-82e3-2730812279de~4",
   "label": "Financier"
- },
- {
-  "id": "659b0ffd-337c-4a1f-82e3-2730812279de~5",
-  "label": "Angel investor"
  },
  {
   "id": "659b0ffd-337c-4a1f-82e3-2730812279de~6",
@@ -120274,10 +122114,6 @@
  {
   "id": "c995fe34-0909-4ce3-b7b7-97945efede56~2",
   "label": "Graphics & video designer"
- },
- {
-  "id": "c995fe34-0909-4ce3-b7b7-97945efede56~3",
-  "label": "Visual designer"
  },
  {
   "id": "c995fe34-0909-4ce3-b7b7-97945efede56~4",
@@ -125838,10 +127674,6 @@
  {
   "id": "62204bd8-98b5-418f-b189-7333904cbde7~10",
   "label": "Senior zoo keeper"
- },
- {
-  "id": "62204bd8-98b5-418f-b189-7333904cbde7~11",
-  "label": "Team leader"
  },
  {
   "id": "62204bd8-98b5-418f-b189-7333904cbde7~12",
