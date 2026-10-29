@@ -46,6 +46,9 @@ _FILES = {
     "field_of_study": "fields_of_study.json",
 }
 
+# Snapshots that only exist after scripts/sync_linkedin_catalogs.py ran with a LinkedIn token.
+_OPTIONAL = frozenset({"degree", "field_of_study"})
+
 # Two industry labels differ between LinkedIn's Label column and its Hierarchy path.
 _INDUSTRY_ALIASES = {
     "3251": ("Climate Technology Products Manufacturing",),
@@ -76,8 +79,13 @@ class OptionCatalog:
             path = data_dir / filename
             if not path.exists():
                 continue
-            rows = json.loads(path.read_text(encoding="utf-8"))
-            opts = [self._build(facet, row) for row in rows]
+            if facet in _OPTIONAL:
+                opts = self._load_optional(facet, path)
+                if not opts:
+                    continue  # empty or malformed: treated as absent, so has() stays False
+            else:
+                rows = json.loads(path.read_text(encoding="utf-8"))
+                opts = [self._build(facet, row) for row in rows]
             self._options[facet] = opts
             lookup: dict[str, Option] = {}
             for opt in opts:
@@ -85,6 +93,22 @@ class OptionCatalog:
                     lookup.setdefault(_norm(key), opt)
             self._lookup[facet] = lookup
             self._by_id[facet] = {opt.id: opt for opt in opts}
+
+    @classmethod
+    def _load_optional(cls, facet: str, path: Path) -> list[Option]:
+        """Options of a synced snapshot, or [] when the file is empty, not a JSON list, or has
+        a row without an id and a label (a half-written or hand-edited file must not enable
+        a card that cannot be answered)."""
+        try:
+            rows = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(rows, list) or not all(
+                isinstance(r, dict) and r.get("id") not in (None, "") and r.get("label")
+                for r in rows
+            ):
+                return []
+            return [cls._build(facet, row) for row in rows]
+        except (ValueError, TypeError, OSError):
+            return []
 
     @staticmethod
     def _build(facet: str, row: dict) -> Option:
