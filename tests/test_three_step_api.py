@@ -32,8 +32,6 @@ HR_FRESHER = {
     "target_functions": ["Engineering"],
     "target_roles": ["Backend Engineer"],
     "experience_level": ["Fresher"],
-    "candidate_locations": ["India"],
-    "required_skills": ["Python"],
 }
 
 
@@ -121,7 +119,7 @@ async def test_cards_carry_labels_choices_and_skip_rules(world):
           for f in c["fields"]}  # fmt: skip
     assert hr["experience_level"]["choices"] == ["Fresher", "Experienced", "Both"]
     assert hr["years_experience"]["depends_on"] == [["experience_level", "Fresher"]]
-    assert hr["candidate_locations"]["label"] == slot_map("hr")["candidate_locations"].label
+    assert "candidate_locations" not in hr and "required_skills" not in hr
 
 
 # -- step 2 --------------------------------------------------------------------------------------

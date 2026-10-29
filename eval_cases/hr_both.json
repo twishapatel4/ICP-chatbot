@@ -29,15 +29,6 @@
     ],
     "current_company_size": [
       "Any"
-    ],
-    "candidate_locations": [
-      "India",
-      "Bengaluru",
-      "Hyderabad"
-    ],
-    "required_skills": [
-      "SQL",
-      "Excel"
     ]
   },
   "answers": [
@@ -51,11 +42,9 @@
       "1-6"
     ],
     "required_skills": [
-      "SQL",
-      "Excel"
+      "SQL"
     ],
     "candidate_locations": [
-      "India",
       "Bengaluru",
       "Hyderabad"
     ],

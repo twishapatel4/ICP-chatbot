@@ -31,15 +31,6 @@
     "current_company_size": [
       "51-200",
       "201-500"
-    ],
-    "candidate_locations": [
-      "United Kingdom",
-      "London"
-    ],
-    "required_skills": [
-      "Go",
-      "Kubernetes",
-      "PostgreSQL"
     ]
   },
   "answers": [
@@ -55,14 +46,8 @@
     "years_experience": [
       "5-10"
     ],
-    "required_skills": [
-      "Go",
-      "Kubernetes",
-      "PostgreSQL"
-    ],
     "candidate_locations": [
-      "United Kingdom",
-      "London"
+      "United Kingdom"
     ],
     "work_mode": [
       "Remote"

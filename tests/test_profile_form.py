@@ -9,6 +9,7 @@ from icp_chatbot.domain.state import SessionState, SlotSource, SlotValue
 from icp_chatbot.engine import profile_form
 from icp_chatbot.engine.profile_form import (
     apply_profile,
+    clean_answers,
     parse_years,
     profile_cards,
     validate_profile,
@@ -32,8 +33,6 @@ HR_EXPERIENCED = {
     "years_experience": ["3-8"],
     "current_industries": ["Software Development"],
     "current_company_size": ["11-50"],
-    "candidate_locations": ["India"],
-    "required_skills": ["Python"],
 }
 
 
@@ -153,12 +152,29 @@ def test_hr_experienced_cards_and_validation():
         "role_hiring_for",
         "experience_level",
         "background",
-        "candidate_location",
-        "must_have_skills",
     ]
     assert validate_profile("hr", HR_EXPERIENCED) == []
-    assert ids(visible_cards("hr", {})) == ["role_hiring_for", "experience_level",
-                                            "candidate_location", "must_have_skills"]  # fmt: skip
+    assert ids(visible_cards("hr", {})) == ["role_hiring_for", "experience_level"]
+
+
+def test_hr_cards_are_role_experience_education_background():
+    assert ids(profile_cards("hr")) == [
+        "role_hiring_for",
+        "experience_level",
+        "education",
+        "background",
+    ]
+    asked = {f.slot for c in profile_cards("hr") for f in c.fields}
+    assert not {"required_skills", "candidate_locations"} & asked
+
+
+def test_stale_draft_with_required_skills_key_is_ignored_not_422():
+    stale = {**HR_EXPERIENCED, "required_skills": ["Python"], "candidate_locations": ["India"]}
+    assert validate_profile("hr", stale) == []
+    assert not {"required_skills", "candidate_locations"} & set(clean_answers("hr", stale))
+    state = SessionState(track="hr")
+    written = apply_profile(state, stale)
+    assert not {"required_skills", "candidate_locations"} & (set(written) | set(state.slots))
 
 
 def test_education_card_hidden_without_catalog():

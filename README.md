@@ -31,7 +31,7 @@ A session has three steps and one of two roles (`track`).
 | | Sales / BDE | HR |
 |---|---|---|
 | Output | Ideal Customer Profile | Ideal Candidate Profile |
-| Form cards | industries, geography, buyer roles (the business model is seeded B2B and company size is asked in the chat) | role hiring for, experience level (Fresher, Experienced, Both), education, background, candidate location, must-have skills |
+| Form cards | industries, geography, buyer roles (the business model is seeded B2B and company size is asked in the chat) | role hiring for, experience level (Fresher, Experienced, Both), education, background (candidate location and must-have skills are asked in the chat) |
 | Skipped when | nothing in the form; a B2C answer in the chat skips the industry and buyer questions | Fresher: background hidden; Experienced or Both: graduation year and field of study hidden |
 | Scoring | six default criteria, weights sum to 100 | Role 25, Experience 20, Skills 20, Education 15, Location 10, Background 10 |
 

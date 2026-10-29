@@ -28,12 +28,6 @@
     ],
     "current_company_size": [
       "Any"
-    ],
-    "candidate_locations": [
-      "Any"
-    ],
-    "required_skills": [
-      "Communication"
     ]
   },
   "answers": [
@@ -45,9 +39,6 @@
   "expected": {
     "target_roles": [
       "Someone to help the team"
-    ],
-    "required_skills": [
-      "Communication"
     ]
   },
   "forbidden": {

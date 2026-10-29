@@ -120,7 +120,7 @@ All fields required:
 
 Submitting step 1 creates the session and starts website enrichment in the background, so it runs while the user fills step 2.
 
-### Step 2: Core profile (3 cards for Sales/BDE, 5 for HR)
+### Step 2: Core profile (3 cards for Sales/BDE, up to 4 for HR)
 
 All cards are taps and chips. Each card is required except where marked. Multi-select and range cards accept an explicit **Any**.
 
@@ -143,8 +143,8 @@ All cards are taps and chips. Each card is required except where marked. Multi-s
 | 2 | Experience level | `experience_level` | single: Fresher / Experienced / Both | always |
 | 3a | Education | `education_level`, `field_of_study`, `graduation_year` | LinkedIn degree categories; LinkedIn field-of-study list; pass-out year range | Fresher: all three. Both: `education_level` only. |
 | 3b | Background | `years_experience`, `current_industries`, `current_company_size`, `current_company_hq` | years of experience from / to (1 to 12+); LinkedIn industry picker; LinkedIn size codes; country(+city) picker (HQ optional) | Experienced or Both |
-| 4 | Candidate location | `candidate_locations` | country(+city) picker | always |
-| 5 | Must-have skills | `required_skills` | free-text skill chips, suggested from the roles in card 1 | always |
+
+- Decision 2026-10-29: the form asks neither for must-have skills nor for candidate location. `required_skills` and `candidate_locations` stay tier A slots and are asked in the chat like any other unknown must-ask slot (the HR opener asks the first one still unknown). The HR fallback form still lists both as required, since it replaces the chat. A step-2-only submit knows at most the role, functions and `education_level` or `years_experience`, which is below the HR floor (role plus three facts), so a user who submits step 2 and stops gets a partial profile. HR scoring of location and skills therefore rests on chat answers.
 
 Years of experience is matched against years computed from `experience[].period`.
 
@@ -245,7 +245,7 @@ HR criteria (defaults, editable like Sales):
 
 **Review, edit, verdict for HR.** Same edit and approve flow, with an HR section map. The verdict question is relabelled for HR and kept.
 
-**Step 2 validation.** Every card shown for the user's answers is required, except `current_company_hq` and the title chips in Sales card 5. Fresher requires `education_level`, `field_of_study`, `graduation_year`. Experienced requires `years_experience` (at least the lower bound), `current_industries`, `current_company_size`. Both requires `education_level` plus the Experienced set. Required means at least one value or Any.
+**Step 2 validation.** Every card shown for the user's answers is required, except `current_company_hq` and the title chips in Sales card 5. Fresher requires `education_level`, `field_of_study`, `graduation_year`. Experienced requires `years_experience` (at least the lower bound), `current_industries`, `current_company_size`. Both requires `education_level` plus the Experienced set. Required means at least one value or Any. The form never asks `required_skills`; a stale saved draft that still carries the key is cleaned of it and never fails validation.
 
 ## Left to the builder
 

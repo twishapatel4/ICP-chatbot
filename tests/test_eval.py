@@ -284,6 +284,15 @@ def test_b2c_retail_stays_chat_only_and_has_no_form_version():
     )
 
 
+def test_hr_eval_cases_do_not_carry_skills_in_profile_answers():
+    hr_cases = [c for c in load_cases(CASES_DIR) if c.track == "hr"]
+    assert hr_cases
+    for c in hr_cases:
+        for slot in ("required_skills", "candidate_locations"):  # asked in the chat now
+            assert slot not in (c.profile_answers or {}), (c.name, slot)
+        assert case_problems(c) == [], c.name
+
+
 def test_case_problems_flags_a_bad_step_two_form():
     ok = {
         "industries": ["Any"],

@@ -88,10 +88,9 @@ _HR_CARDS = (
         CardField("current_company_size", "multi", "company_size", any_allowed=True),
         CardField("current_company_hq", "geo", "country", optional=True, any_allowed=True),
     )),
-    Card("candidate_location", "Candidate location",
-         (CardField("candidate_locations", "geo", "country", any_allowed=True),)),
-    Card("must_have_skills", "Must-have skills", (CardField("required_skills", "chips"),)),
 )  # fmt: skip
+# Neither the must-have skills nor the candidate location is a card: required_skills and
+# candidate_locations are asked in the chat like any other unknown must-ask slot.
 
 
 def profile_cards(track: Track) -> list[Card]:

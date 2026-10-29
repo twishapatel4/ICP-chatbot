@@ -381,3 +381,66 @@ def test_refresh_model_is_track_agnostic_for_an_hr_model():
     refreshed = refresh_model(model, {"required_skills": ["Python"]})
     assert validate_model(refreshed, "hr") == []
     assert any("required_skills" in c.rules for c in refreshed.criteria)
+
+
+# -- Task 12d: the must-have skills are asked in the chat, not in the step 2 form -----------------
+
+from icp_chatbot.engine.planner import missing_core_slots  # noqa: E402
+from icp_chatbot.engine.profile_form import apply_profile, profile_cards  # noqa: E402
+
+_FORM_EXPERIENCED = {
+    "target_functions": ["Engineering"],
+    "target_roles": ["Backend Engineer"],
+    "experience_level": ["Experienced"],
+    "years_experience": ["3-8"],
+    "current_industries": ["Software Development"],
+    "current_company_size": ["11-50"],
+}
+_FORM_FRESHER = {
+    "target_functions": ["Engineering"],
+    "target_roles": ["Backend Engineer"],
+    "experience_level": ["Fresher"],
+}
+
+
+def _seeded(answers: dict) -> SessionState:
+    state = SessionState(track="hr")
+    apply_profile(state, answers)
+    return state
+
+
+def test_required_skills_is_not_in_the_form_but_is_asked_in_chat():
+    chat_slots = ("required_skills", "candidate_locations")
+    assert not set(chat_slots) & {s for c in profile_cards("hr") for s in c.slots}
+    for key in chat_slots:
+        assert slot_map("hr")[key].tier is Tier.A and slot_map("hr")[key].blocks
+    for answers in (_FORM_EXPERIENCED, _FORM_FRESHER):
+        state = _seeded(answers)
+        unknown = [s.key for s in missing_core_slots(state)]
+        for key in chat_slots:
+            assert key not in state.slots and key in unknown
+
+
+async def test_hr_opener_asks_the_first_unknown_must_ask_after_the_form():
+    state = _seeded(_FORM_EXPERIENCED)
+    unknown = [s.key for s in missing_core_slots(state)]
+    assert unknown[0] == "required_skills", unknown  # registry order: the skills come first
+    llm = FakeLLM({"opener": [QuestionOutput(question="Which skills must they have?")]})
+    await generate_opener(llm, CONFIG, SignupInfo("Acme"), {}, state=state)
+    label = slot_map("hr")[unknown[0]].label
+    assert f"First question to ask: about {label}" in llm.calls_for("opener")[0].user
+
+
+def test_hr_step2_only_submit_is_still_partial():
+    for answers in (_FORM_EXPERIENCED, _FORM_FRESHER):
+        state = _seeded(answers)
+        assert not enough_for_icp(state)
+        state.agent_enough = True  # an eager model cannot lift it past the floor
+        assert not enough_for_icp(state)
+
+
+def test_fallback_form_hr_still_requires_skills():
+    form = {f.key: f for f in fallback_form("hr")}
+    assert form["required_skills"].required and form["candidate_locations"].required
+    missing = missing_required({"target_roles": ["Analyst"]}, SessionState(track="hr"))
+    assert {"required_skills", "candidate_locations"} <= set(missing)
