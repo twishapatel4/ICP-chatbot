@@ -206,10 +206,11 @@ async def test_builder_emits_hr_scoring_model_for_hr_state():
     result = await build_icp(FakeLLM({"final_icp": [LLMError("x", "y")]}), CONFIG, state, today=TODAY)
     model = result.document.scoring_model
     assert [c.key for c in model.criteria] == [
-        "role_fit", "experience_fit", "skills_fit", "education_fit", "location_fit",
-        "background_fit",
+        "role_fit", "function_fit", "seniority_fit", "experience_fit", "skills_fit",
+        "certifications_fit", "education_fit", "school_fit", "location_fit", "background_fit",
+        "employer_fit",
     ]  # fmt: skip
     assert {c.key for c in model.criteria if c.applicable} == {
-        "role_fit", "experience_fit", "skills_fit"
+        "function_fit", "experience_fit", "skills_fit"
     }
     assert validate_model(model, track="hr") == []

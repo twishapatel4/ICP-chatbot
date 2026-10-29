@@ -1,5 +1,8 @@
+from datetime import date
+
 import pytest
 
+from icp_chatbot.domain.slots import registry, slot_map
 from icp_chatbot.icp.scoring import (
     CRITERIA_DEFS,
     Criterion,
@@ -18,6 +21,7 @@ from icp_chatbot.icp.scoring import (
     set_weights,
     validate_model,
 )
+from icp_chatbot.linkedin.profile_map import slots_from_profile
 
 
 @pytest.mark.parametrize(
@@ -73,7 +77,7 @@ def test_build_rule_reads_linkedin_size_bands():
 
 def test_geographic_fit_reads_lead_and_hq_geographies():
     geo = next(d for d in CRITERIA_DEFS if d[0] == "geographic_fit")
-    assert geo[2] == 25.0 and geo[3] == ("lead_geographies", "company_hq_geographies")
+    assert geo[2] == 20.0 and geo[3] == ("lead_geographies", "company_hq_geographies")
     model = default_scoring_model(
         {"lead_geographies": ["India"], "company_hq_geographies": ["United States"]}
     )
@@ -107,10 +111,12 @@ PERFECT_LEAD = {
 def test_default_model_has_the_spec_weights_and_is_valid():
     model = default_scoring_model(FULL)
     assert [(c.key, c.weight) for c in model.criteria] == [(k, w) for k, _, w, _ in CRITERIA_DEFS]
-    assert [c.weight for c in model.criteria] == [35, 25, 15, 25]
+    assert [c.weight for c in model.criteria] == [25, 15, 5, 5, 10, 20, 10, 5, 5]
     assert sum(c.weight for c in model.criteria) == 100
     assert validate_model(model) == []
-    assert all(c.applicable for c in model.criteria)
+    assert {c.key for c in model.criteria if c.applicable} == {
+        "industry_fit", "company_size", "buying_signals", "geographic_fit"
+    }
 
 
 def test_a_criterion_without_icp_data_is_not_applicable():
@@ -124,17 +130,17 @@ def test_a_perfect_lead_scores_100_and_a_poor_one_scores_low():
     perfect = score_lead(model, PERFECT_LEAD)
     assert perfect.score == 100.0 and perfect.qualified and perfect.completeness == 1.0
     poor = score_lead(model, {**PERFECT_LEAD, "industries": ["Retail"], "lead_geographies": ["Asia"]})
-    assert poor.score == pytest.approx(100 - 35 / 2 - 25)  # segments still fit: half of industry_fit
+    assert poor.score == pytest.approx(100 * (25 / 2 + 15 + 10) / 70)  # segments half-fit industry
 
 
 def test_unknown_lead_data_drops_the_criterion_and_renormalizes():
     model = default_scoring_model(FULL)
-    lead = {"industries": ["Fintech"], "lead_geographies": ["Europe"]}  # only 35 + 25 weight is known
+    lead = {"industries": ["Fintech"], "lead_geographies": ["Europe"]}  # only 25 + 20 weight is known
     result = score_lead(model, lead)
     assert result.score == 100.0
     assert result.completeness == pytest.approx(2 / 4)
     half = score_lead(model, {"industries": ["Fintech"], "lead_geographies": ["Asia"]})
-    assert half.score == pytest.approx(100 * 35 / 60)
+    assert half.score == pytest.approx(100 * 25 / 45)
 
 
 def test_partial_slot_data_averages_within_a_criterion():
@@ -153,7 +159,7 @@ def test_required_criteria_decide_qualification_not_the_score():
     model = set_requirement(default_scoring_model(FULL), "geographic_fit", "required")
     wrong_place = score_lead(model, {**PERFECT_LEAD, "lead_geographies": ["Asia"]})
     assert not wrong_place.qualified and wrong_place.failed_required == ["geographic_fit"]
-    assert wrong_place.score == pytest.approx(75.0)  # still scored, but not qualified
+    assert wrong_place.score == pytest.approx(100 * 50 / 70)  # still scored, but not qualified
     unknown_place = {k: v for k, v in PERFECT_LEAD.items() if k != "lead_geographies"}
     assert score_lead(model, unknown_place).failed_required == ["geographic_fit"]
     assert score_lead(model, PERFECT_LEAD).qualified
@@ -215,13 +221,13 @@ def test_validate_model_reports_every_kind_of_problem():
 def test_validate_model_reports_weights_that_do_not_sum_to_100():
     model = default_scoring_model(FULL)
     broken = model.model_copy(update={"criteria": model.criteria[:-1]})
-    assert any("weights sum to 75" in e for e in validate_model(broken))
+    assert any("weights sum to 95" in e for e in validate_model(broken))
 
 
 def test_set_weights_requires_a_total_of_100():
     model = default_scoring_model(FULL)
-    updated = set_weights(model, {"industry_fit": 40, "geographic_fit": 20})
-    assert {c.key: c.weight for c in updated.criteria}["industry_fit"] == 40
+    updated = set_weights(model, {"industry_fit": 30, "geographic_fit": 15})
+    assert {c.key: c.weight for c in updated.criteria}["industry_fit"] == 30
     with pytest.raises(ValueError, match="sum to 100"):
         set_weights(model, {"industry_fit": 30})
     with pytest.raises(ValueError, match="unknown"):
@@ -241,7 +247,7 @@ def test_set_requirement_validates_its_input():
 def test_refresh_model_updates_rules_but_keeps_the_users_choices():
     model = default_scoring_model(FULL)
     model = set_requirement(
-        set_weights(model, {"industry_fit": 45, "geographic_fit": 15}), "industry_fit", "required"
+        set_weights(model, {"industry_fit": 30, "geographic_fit": 15}), "industry_fit", "required"
     )
     model = model.model_copy(
         update={
@@ -253,7 +259,7 @@ def test_refresh_model_updates_rules_but_keeps_the_users_choices():
     refreshed = refresh_model(model, {"industries": ["Retail"]})
     industry = next(c for c in refreshed.criteria if c.key == "industry_fit")
     assert industry.rules["industries"].primary == ["Retail"]
-    assert industry.weight == 45 and industry.requirement == "required"
+    assert industry.weight == 30 and industry.requirement == "required"
     assert [c.key for c in refreshed.criteria if c.applicable] == ["industry_fit"]
     assert refreshed.disqualifiers == model.disqualifiers
 
@@ -274,17 +280,203 @@ def _crit(model, key):
     return next(c for c in model.criteria if c.key == key)
 
 
-def test_hr_default_weights_sum_to_100_and_use_the_six_criteria():
+HR_WEIGHTS = [
+    ("role_fit", 20.0), ("function_fit", 5.0), ("seniority_fit", 5.0), ("experience_fit", 15.0),
+    ("skills_fit", 15.0), ("certifications_fit", 5.0), ("education_fit", 10.0),
+    ("school_fit", 5.0), ("location_fit", 10.0), ("background_fit", 5.0), ("employer_fit", 5.0),
+]
+SALES_WEIGHTS = [
+    ("industry_fit", 25.0), ("company_size", 15.0), ("company_type_fit", 5.0),
+    ("company_age_fit", 5.0), ("buying_signals", 10.0), ("geographic_fit", 20.0),
+    ("buyer_fit", 10.0), ("seniority_fit", 5.0), ("department_fit", 5.0),
+]
+
+
+def test_hr_default_weights_sum_to_100_and_use_the_eleven_criteria():
     model = _hr_model({})
-    assert [(c.key, c.weight) for c in model.criteria] == [
-        ("role_fit", 25.0), ("experience_fit", 20.0), ("skills_fit", 20.0),
-        ("education_fit", 15.0), ("location_fit", 10.0), ("background_fit", 10.0),
-    ]  # fmt: skip
+    assert [(c.key, c.weight) for c in model.criteria] == HR_WEIGHTS
     assert sum(c.weight for c in model.criteria) == 100.0
     assert _crit(model, "education_fit").reads == [
         "education_level", "field_of_study", "graduation_year"
     ]
+    assert _crit(model, "function_fit").reads == ["target_functions"]
+    assert _crit(model, "seniority_fit").reads == ["target_seniority"]
     assert validate_model(model, track="hr") == []
+
+
+def test_sales_default_weights_sum_to_100_and_use_the_nine_criteria():
+    model = default_scoring_model({})
+    assert [(c.key, c.weight) for c in model.criteria] == SALES_WEIGHTS
+    assert sum(c.weight for c in model.criteria) == 100.0
+    reads = {c.key: c.reads for c in model.criteria}
+    assert reads["buyer_fit"] == ["buyer_roles"]
+    assert reads["seniority_fit"] == ["buyer_seniority"]
+    assert reads["department_fit"] == ["buyer_departments"]
+    assert reads["company_type_fit"] == ["company_type"]
+    assert reads["company_age_fit"] == ["years_in_operation"]
+    assert validate_model(model) == []
+
+
+def test_derived_criteria_never_weigh_more_than_five():
+    for track, derived in (
+        ("hr", ("target_functions", "target_seniority")),
+        ("sales", ("buyer_seniority", "buyer_departments")),
+    ):
+        for c in default_scoring_model({}, track=track).criteria:
+            if set(c.reads) & set(derived):
+                assert c.weight <= 5.0, c.key
+
+
+def test_criterion_labels_for_hr_avoid_sales_words():
+    for c in _hr_model({}).criteria:
+        assert not any(w in c.label.lower() for w in ("icp", "lead", "customer")), c.label
+
+
+def test_nice_to_have_skills_give_half_credit_to_required_skills():
+    model = _hr_model({"required_skills": ["Python"], "nice_to_have_skills": ["Docker"]})
+    skills = _crit(model, "skills_fit")
+    assert skills.applicable and validate_model(model, track="hr") == []
+    assert skills.reads == ["required_skills", "nice_to_have_skills"]
+    assert skills.rules["required_skills"] == MatchRule(
+        kind="list", primary=["Python"], secondary=["Docker"]
+    )
+    assert set(skills.rules) == {"required_skills"}
+    assert score_lead(model, {"required_skills": ["Python"]}).breakdown["skills_fit"] == 1.0
+    assert score_lead(model, {"required_skills": ["Docker"]}).breakdown["skills_fit"] == 0.5
+    assert score_lead(model, {"required_skills": ["Go"]}).breakdown["skills_fit"] == 0.0
+
+
+def test_nice_to_have_alone_builds_no_skills_rule_and_any_builds_none():
+    assert not _crit(_hr_model({"nice_to_have_skills": ["Docker"]}), "skills_fit").applicable
+    assert not _crit(_hr_model({"required_skills": ["Any"]}), "skills_fit").applicable
+    only_required = _crit(_hr_model({"required_skills": ["Python"]}), "skills_fit")
+    assert only_required.rules["required_skills"].secondary == []
+
+
+def test_refresh_keeps_the_secondary_skills_list():
+    model = _hr_model({"required_skills": ["Python"]})
+    refreshed = refresh_model(model, {"required_skills": ["Go"], "nice_to_have_skills": ["Rust"]})
+    assert _crit(refreshed, "skills_fit").rules["required_skills"].secondary == ["Rust"]
+
+
+@pytest.mark.parametrize(
+    ("key", "values", "lead", "expected"),
+    [
+        ("role_fit", {"target_roles": ["Backend Developer"]},
+         {"target_roles": ["Senior Backend Developer"]}, 1.0),
+        ("function_fit", {"target_functions": ["Engineering"]},
+         {"target_functions": ["Engineering"]}, 1.0),
+        ("function_fit", {"target_functions": ["Engineering"]},
+         {"target_functions": ["Sales"]}, 0.0),
+        ("seniority_fit", {"target_seniority": ["Senior"]},
+         {"target_seniority": ["Senior"]}, 1.0),
+        ("certifications_fit", {"certifications": ["AWS Certified"]},
+         {"certifications": ["AWS Certified Solutions Architect"]}, 1.0),
+        ("school_fit", {"target_schools": ["IIT Bombay"]}, {"target_schools": ["IIT Bombay"]}, 1.0),
+        ("school_fit", {"target_schools": ["IIT Bombay"]}, {"target_schools": ["COEP"]}, 0.0),
+        ("employer_fit", {"source_companies": ["Infosys"]},
+         {"source_companies": ["Infosys Ltd"]}, 1.0),
+        ("background_fit", {"current_industries": ["Banking"]},
+         {"current_industries": ["Banking"]}, 1.0),
+        ("experience_fit", {"years_experience": ["3-8"]}, {"years_experience": ["5"]}, 1.0),
+        ("education_fit", {"graduation_year": ["2020-2024"]}, {"graduation_year": ["2022"]}, 1.0),
+        ("location_fit", {"candidate_locations": ["India"]},
+         {"candidate_locations": ["India", "Pune"]}, 1.0),
+    ],
+)  # fmt: skip
+def test_each_new_hr_criterion_scores_its_slot(key, values, lead, expected):
+    model = _hr_model(values)
+    assert _crit(model, key).applicable
+    assert score_lead(model, lead).breakdown[key] == expected
+
+
+@pytest.mark.parametrize(
+    ("key", "values", "lead", "expected"),
+    [
+        ("company_type_fit", {"company_type": ["Privately Held"]},
+         {"company_type": ["Privately Held"]}, 1.0),
+        ("company_type_fit", {"company_type": ["Privately Held"]},
+         {"company_type": ["Nonprofit"]}, 0.0),
+        ("company_age_fit", {"years_in_operation": ["5-20"]}, {"years_in_operation": ["10"]}, 1.0),
+        ("company_age_fit", {"years_in_operation": ["5-20"]}, {"years_in_operation": ["1"]}, 0.0),
+        ("buyer_fit", {"buyer_roles": ["VP Sales"]}, {"buyer_roles": ["VP Sales, EMEA"]}, 1.0),
+        ("seniority_fit", {"buyer_seniority": ["Director"]},
+         {"buyer_seniority": ["Director"]}, 1.0),
+        ("department_fit", {"buyer_departments": ["Sales"]},
+         {"buyer_departments": ["Marketing"]}, 0.0),
+    ],
+)  # fmt: skip
+def test_each_new_sales_criterion_scores_its_slot(key, values, lead, expected):
+    model = default_scoring_model(values)
+    assert _crit(model, key).applicable
+    assert score_lead(model, lead).breakdown[key] == expected
+
+
+def test_years_in_operation_is_a_range_slot():
+    rule = build_rule("years_in_operation", ["5+"])
+    assert rule.kind == "range" and rule.min == 5 and rule.max is None
+
+
+def test_avoid_companies_is_a_hr_disqualifier():
+    d = make_disqualifier("avoid_companies", "in", ["Competitor Inc"])
+    assert d is not None
+    model = _hr_model({"required_skills": ["Python"]}, disqualifiers=[d])
+    assert validate_model(model, track="hr") == []
+    result = score_lead(model, {"avoid_companies": ["Acme", "Competitor Inc"]})
+    assert not result.qualified and result.score == 0.0
+    assert score_lead(model, {"avoid_companies": ["Acme"]}).disqualified_by is None
+
+
+UNSCORED_WITH_PATH = {
+    "hr": {
+        "current_company_hq": "no Lite filter and no criterion",
+        "avoid_companies": "scored as a disqualifier, not a criterion",
+    },
+    "sales": {},
+}
+
+
+@pytest.mark.parametrize("track", ["sales", "hr"])
+def test_every_criterion_reads_slots_of_its_track(track):
+    reg = {s.key for s in registry(track)}
+    for c in default_scoring_model({}, track=track).criteria:
+        assert set(c.reads) <= reg, c.key
+
+
+@pytest.mark.parametrize("track", ["sales", "hr"])
+def test_every_slot_with_a_profile_path_is_scored_unless_allow_listed(track):
+    read = {slot for c in default_scoring_model({}, track=track).criteria for slot in c.reads}
+    for s in registry(track):
+        if s.profile_paths and s.key not in UNSCORED_WITH_PATH[track]:
+            assert s.key in read, s.key
+    for key in UNSCORED_WITH_PATH[track]:
+        assert key not in read and slot_map(track)[key].profile_paths
+
+
+def test_slots_without_a_profile_path_are_unscored():
+    read = {slot for c in _hr_model({}).criteria for slot in c.reads}
+    for key in ("languages", "employment_type", "work_mode", "salary_range", "notice_period"):
+        assert not slot_map("hr")[key].profile_paths and key not in read
+
+
+def test_mapped_profile_scores_against_the_hr_defaults():
+    profile = {
+        "title": "Senior Backend Developer", "city": "Pune", "country": "IN",
+        "skills": ["Python", "Docker"],
+        "experience": [{"companyName": "Infosys", "period": "Jan 2018 – Present"}],
+        "education": [
+            {"school": "COEP", "degree": "BE", "field": "Computer Science", "period": "2014 – 2018"}
+        ],
+    }
+    lead = slots_from_profile(profile, None, "hr", date(2026, 10, 29))
+    model = _hr_model({
+        "target_roles": ["Backend Developer"], "target_functions": ["Engineering"],
+        "target_seniority": ["Senior"], "years_experience": ["5+"],
+        "required_skills": ["Python"], "nice_to_have_skills": ["Go"],
+        "candidate_locations": ["India"], "graduation_year": ["2016-2020"],
+    })
+    result = score_lead(model, lead)
+    assert result.score == 100.0 and result.completeness == 1.0
 
 
 def test_fresher_profile_scores_without_experience_and_background():
@@ -305,9 +497,9 @@ def test_fresher_profile_scores_without_experience_and_background():
         "candidate_locations": ["Germany"],
     }
     result = score_lead(model, lead)
-    # role 25 + skills 20 + education 15 score 1, location 10 scores 0; 60 of 70 applicable weight
-    assert result.score == pytest.approx(100 * 60 / 70, abs=1e-3)
-    assert set(result.breakdown) == {"role_fit", "skills_fit", "education_fit", "location_fit"}
+    # function 5 + skills 15 + education 10 score 1, location 10 scores 0; 30 of 40 applicable
+    assert result.score == pytest.approx(100 * 30 / 40, abs=1e-3)
+    assert set(result.breakdown) == {"function_fit", "skills_fit", "education_fit", "location_fit"}
     assert result.completeness == 1.0
 
 

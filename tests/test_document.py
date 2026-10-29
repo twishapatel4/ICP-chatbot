@@ -503,3 +503,42 @@ async def test_carry_over_keeps_fresh_handmade_ids_and_recomputes_only_the_edite
     assert by_slot["industries"].ids == ["x-custom"] and by_slot["industries"].unmapped == ["foo"]
     assert by_slot["company_size"].ids and "y-custom" not in by_slot["company_size"].ids
     assert by_slot["company_size"].labels == ["201-500"]
+
+
+# -- Task 12c: each entry names its LinkedIn filter; scoring-only slots are not filters ----------------
+
+
+async def test_filter_entries_carry_the_linkedin_filter_name():
+    state = _filters_state(lead_geographies=["India"], company_type=["Privately Held"])
+    state.slots["industries"] = _resolved("industries", ["Financial Services"])
+    state.slots["company_size"] = _resolved("company_size", ["51-200"])
+    state.slots["buyer_seniority"] = _resolved("buyer_seniority", ["Director"])
+    doc = await _build(state)
+    names = {f.slot: f.filter_name for f in doc.linkedin_filters}
+    assert names["industries"] == "Industry"
+    assert names["company_size"] == "Company headcount"
+    assert names["lead_geographies"] == "Geography"
+    assert names["buyer_seniority"] == "Seniority level"
+
+
+async def test_scoring_only_slots_stay_out_of_the_filters_block_but_in_the_document():
+    state = _filters_state(
+        track="hr",
+        target_seniority=["Senior"],
+        current_company_hq=["India"],
+        candidate_locations=["India"],
+    )
+    doc = await _build(state)
+    by_slot = {f.slot: f for f in doc.linkedin_filters}
+    assert "target_seniority" not in by_slot and "current_company_hq" not in by_slot
+    assert by_slot["candidate_locations"].filter_name == "Locations"
+    fields = {k for section in doc.sections.values() for k in section}
+    assert {"target_seniority", "current_company_hq"} <= fields
+
+
+def test_editing_a_scoring_only_slot_adds_no_filter():
+    from icp_chatbot.icp.document import with_slot_filter
+
+    assert with_slot_filter([], "target_seniority", ["Senior"], "hr") == []
+    (entry,) = with_slot_filter([], "candidate_locations", ["India"], "hr")
+    assert entry.filter_name == "Locations"

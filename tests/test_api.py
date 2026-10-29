@@ -159,7 +159,7 @@ async def test_the_full_flow_from_signup_to_an_approved_icp(world):
     assert (body["version"], body["author"]) == (1, "bot")
     assert "Fintech" in body["document"]["summary"]
     weights = [c["weight"] for c in body["document"]["scoring_model"]["criteria"]]
-    assert weights == [35, 25, 15, 25]
+    assert weights == [25, 15, 5, 5, 10, 20, 10, 5, 5]
 
     edited = await w.call(
         "PATCH",
@@ -170,7 +170,7 @@ async def test_the_full_flow_from_signup_to_an_approved_icp(world):
     reweighted = await w.call(
         "PATCH",
         f"/sessions/{sid}/icp",
-        json={"kind": "weights", "weights": {"industry_fit": 40, "geographic_fit": 20}},
+        json={"kind": "weights", "weights": {"industry_fit": 30, "geographic_fit": 15}},
     )
     assert reweighted.status_code == 200
     toggled = await w.call(
@@ -315,7 +315,7 @@ async def test_detail_mode_rebuild_keeps_the_companys_earlier_edits(world):
     await w.call(
         "PATCH",
         f"/sessions/{sid}/icp",
-        json={"kind": "weights", "weights": {"industry_fit": 40, "geographic_fit": 20}},
+        json={"kind": "weights", "weights": {"industry_fit": 30, "geographic_fit": 15}},
     )
 
     w.llm.queue("interviewer", ask("Any buying triggers?"))
@@ -331,7 +331,7 @@ async def test_detail_mode_rebuild_keeps_the_companys_earlier_edits(world):
     assert entries["buying_triggers"]["values"] == ["GDPR"]  # the new detail answer is there
     assert entries["industries"]["values"] == ["Insurance"]  # the earlier edit survived
     weights = {c["key"]: c["weight"] for c in rebuilt["document"]["scoring_model"]["criteria"]}
-    assert weights["industry_fit"] == 40 and weights["geographic_fit"] == 20
+    assert weights["industry_fit"] == 30 and weights["geographic_fit"] == 15
 
 
 async def test_a_returning_user_gets_the_pending_question_back(world):

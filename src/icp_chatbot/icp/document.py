@@ -49,6 +49,7 @@ class FilterEntry(BaseModel):
 
     facet: str
     slot: str
+    filter_name: str | None = None  # LinkedIn's own name for the filter, from the slot registry
     ids: list[str] = Field(default_factory=list)
     labels: list[str] = Field(default_factory=list)
     unmapped: list[str] = Field(default_factory=list)  # values with no LinkedIn option
@@ -291,9 +292,19 @@ def known_slot_keys(track: Track = "sales") -> set[str]:
     return set(slot_map(track))
 
 
+def _filter_name(slot: str, track: Track) -> str | None:
+    """The LinkedIn filter this slot feeds in this track, None for scoring-only slots."""
+    definition = slot_map(track).get(slot)
+    return definition.linkedin_filter if definition else None
+
+
 def _filter_entry(
-    slot: str, values: list[str], refs: list, unmapped: list[str]
+    slot: str, values: list[str], refs: list, unmapped: list[str], track: Track
 ) -> FilterEntry | None:
+    # scoring-only slots (no LinkedIn filter of their own) never produce an entry
+    filter_name = _filter_name(slot, track)
+    if filter_name is None:
+        return None
     # non-answers carry no filter, and "Any" (no preference) never travels with other values
     values = [v for v in real_values(slot, values) if v != ANY]
     if not values:
@@ -305,7 +316,12 @@ def _filter_entry(
         if ref.id not in ids:
             ids.append(ref.id)
     return FilterEntry(
-        facet=SLOT_FACETS[slot], slot=slot, ids=ids, labels=list(values), unmapped=list(unmapped)
+        facet=SLOT_FACETS[slot],
+        slot=slot,
+        filter_name=filter_name,
+        ids=ids,
+        labels=list(values),
+        unmapped=list(unmapped),
     )
 
 
@@ -317,7 +333,7 @@ def build_linkedin_filters(state: SessionState) -> list[FilterEntry]:
         value = state.slots.get(slot)
         if slot not in own or value is None:
             continue
-        entry = _filter_entry(slot, value.values, value.refs, value.unmapped)
+        entry = _filter_entry(slot, value.values, value.refs, value.unmapped, state.track)
         if entry:
             found.append(entry)
     return found
@@ -332,7 +348,7 @@ def with_slot_filter(
     kept = [f for f in filters if f.slot != slot]
     if slot not in SLOT_FACETS or slot not in slot_map(track):
         return kept
-    entry = _filter_entry(slot, values, [], [])
+    entry = _filter_entry(slot, values, [], [], track)
     if entry is None:
         return kept
     merged = {f.slot: f for f in [*kept, entry]}

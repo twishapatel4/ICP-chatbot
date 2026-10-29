@@ -86,11 +86,11 @@ def test_editing_an_unknown_field_is_rejected():
 
 def test_weight_edits_must_total_100_and_record_only_changed_criteria():
     doc, specs = apply_edit(
-        make_doc(), WeightEdit(weights={"industry_fit": 45, "geographic_fit": 15}), TODAY
+        make_doc(), WeightEdit(weights={"industry_fit": 30, "geographic_fit": 15}), TODAY
     )
-    assert {c.key: c.weight for c in doc.scoring_model.criteria}["industry_fit"] == 45
+    assert {c.key: c.weight for c in doc.scoring_model.criteria}["industry_fit"] == 30
     assert [(s.type, s.field, s.old, s.new) for s in specs] == [
-        ("weight_edit", "industry_fit", 35.0, 45.0), ("weight_edit", "geographic_fit", 25.0, 15.0),
+        ("weight_edit", "industry_fit", 25.0, 30.0), ("weight_edit", "geographic_fit", 20.0, 15.0),
     ]  # fmt: skip
     with pytest.raises(ValueError, match="sum to 100"):
         apply_edit(make_doc(), WeightEdit(weights={"industry_fit": 45}), TODAY)

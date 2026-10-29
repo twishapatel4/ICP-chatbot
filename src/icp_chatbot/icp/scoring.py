@@ -18,8 +18,11 @@ from icp_chatbot.domain.slots import Track, slot_map
 from icp_chatbot.domain.state import ANY
 
 RANGE_SLOTS = frozenset(
-    {"company_size", "years_experience", "current_company_size", "graduation_year"}
-)
+    {
+        "company_size", "years_experience", "current_company_size", "graduation_year",
+        "years_in_operation",
+    }
+)  # fmt: skip
 # A graduation year one off is half a match, further off is none.
 RANGE_TOLERANCE: dict[str, float] = {"graduation_year": 0.001}
 DEFAULT_TOLERANCE = 0.2
@@ -27,23 +30,41 @@ DEFAULT_TOLERANCE = 0.2
 Criteria = tuple[tuple[str, str, float, tuple[str, ...]], ...]
 
 # (key, label, default weight, slots read). Illustrative defaults; users edit them.
+# Criteria on a derived slot (guessed from a job title) weigh 5 at most.
 SALES_CRITERIA: Criteria = (
-    ("industry_fit", "Industry fit", 35.0, ("industries", "customer_segments")),
-    ("company_size", "Company size", 25.0, ("company_size",)),
-    ("buying_signals", "Buying signals", 15.0, ("buying_triggers",)),
-    ("geographic_fit", "Geographic fit", 25.0, ("lead_geographies", "company_hq_geographies")),
+    ("industry_fit", "Industry fit", 25.0, ("industries", "customer_segments")),
+    ("company_size", "Company size", 15.0, ("company_size",)),
+    ("company_type_fit", "Company type fit", 5.0, ("company_type",)),
+    ("company_age_fit", "Company age fit", 5.0, ("years_in_operation",)),
+    ("buying_signals", "Buying signals", 10.0, ("buying_triggers",)),
+    ("geographic_fit", "Geographic fit", 20.0, ("lead_geographies", "company_hq_geographies")),
+    ("buyer_fit", "Buyer fit", 10.0, ("buyer_roles",)),
+    ("seniority_fit", "Seniority fit", 5.0, ("buyer_seniority",)),
+    ("department_fit", "Department fit", 5.0, ("buyer_departments",)),
 )
 HR_CRITERIA: Criteria = (
-    ("role_fit", "Role fit", 25.0, ("target_functions", "target_roles")),
-    ("experience_fit", "Experience fit", 20.0, ("years_experience",)),
-    ("skills_fit", "Skills fit", 20.0, ("required_skills",)),
+    ("role_fit", "Role fit", 20.0, ("target_roles",)),
+    ("function_fit", "Function fit", 5.0, ("target_functions",)),
+    ("seniority_fit", "Seniority fit", 5.0, ("target_seniority",)),
+    ("experience_fit", "Experience fit", 15.0, ("years_experience",)),
+    ("skills_fit", "Skills fit", 15.0, ("required_skills", "nice_to_have_skills")),
+    ("certifications_fit", "Certifications fit", 5.0, ("certifications",)),
     (
-        "education_fit", "Education fit", 15.0,
+        "education_fit", "Education fit", 10.0,
         ("education_level", "field_of_study", "graduation_year"),
     ),
+    ("school_fit", "School fit", 5.0, ("target_schools",)),
     ("location_fit", "Location fit", 10.0, ("candidate_locations",)),
-    ("background_fit", "Background fit", 10.0, ("current_industries", "current_company_size")),
+    ("background_fit", "Background fit", 5.0, ("current_industries", "current_company_size")),
+    ("employer_fit", "Employer fit", 5.0, ("source_companies",)),
 )  # fmt: skip
+# Criteria whose second read slot is not a rule of its own but the half-credit list of the first:
+# {criterion key: {primary slot: secondary slot}}. The rule is keyed by the primary slot (the
+# secondary slot stays in `reads`, so editing it refreshes the rule); with no primary values
+# there is no rule, so a nice-to-have list alone scores nothing.
+SECONDARY_READS: dict[str, dict[str, str]] = {
+    "skills_fit": {"required_skills": "nice_to_have_skills"},
+}
 CRITERIA_BY_TRACK: dict[Track, Criteria] = {"sales": SALES_CRITERIA, "hr": HR_CRITERIA}
 CRITERIA_DEFS = SALES_CRITERIA  # kept for callers that predate tracks
 WEIGHT_TOTAL = 100.0
@@ -165,7 +186,10 @@ def _slot_score(rule: MatchRule, lead_values: list[str]) -> float | None:
 # -- building and editing the model --------------------------------------------------------------
 
 
-def build_rule(slot_key: str, values: list[str]) -> MatchRule | None:
+def build_rule(
+    slot_key: str, values: list[str], secondary: list[str] | None = None
+) -> MatchRule | None:
+    """A rule for one slot; `secondary` (list rules only) earns half credit."""
     values = [v for v in values if v.strip()]
     if not values or any(v.strip().lower() == ANY.lower() for v in values):
         return None
@@ -180,13 +204,23 @@ def build_rule(slot_key: str, values: list[str]) -> MatchRule | None:
                 max=hi,
                 tolerance=RANGE_TOLERANCE.get(slot_key, DEFAULT_TOLERANCE),
             )
-    return MatchRule(kind="list", primary=values)
+    extra = [v for v in (secondary or []) if v.strip() and v.strip().lower() != ANY.lower()]
+    return MatchRule(kind="list", primary=values, secondary=extra)
 
 
-def _rules_for(reads: tuple[str, ...] | list[str], slot_values: dict[str, list[str]]):
+def _rules_for(
+    reads: tuple[str, ...] | list[str],
+    slot_values: dict[str, list[str]],
+    secondary: dict[str, str] | None = None,
+):
+    secondary = secondary or {}
+    fed = set(secondary.values())  # slots that only feed another slot's half-credit list
     rules = {}
     for slot in reads:
-        rule = build_rule(slot, slot_values.get(slot, []))
+        if slot in fed:
+            continue
+        extra = slot_values.get(secondary[slot], []) if slot in secondary else None
+        rule = build_rule(slot, slot_values.get(slot, []), extra)
         if rule:
             rules[slot] = rule
     return rules
@@ -199,7 +233,7 @@ def default_scoring_model(
 ) -> ScoringModel:
     criteria = []
     for key, label, weight, reads in CRITERIA_BY_TRACK[track]:
-        rules = _rules_for(reads, slot_values)
+        rules = _rules_for(reads, slot_values, SECONDARY_READS.get(key))
         criteria.append(
             Criterion(
                 key=key,
@@ -218,7 +252,7 @@ def refresh_model(model: ScoringModel, slot_values: dict[str, list[str]]) -> Sco
     flags and disqualifiers as the user set them."""
     criteria = []
     for c in model.criteria:
-        rules = _rules_for(c.reads, slot_values)
+        rules = _rules_for(c.reads, slot_values, SECONDARY_READS.get(c.key))
         criteria.append(c.model_copy(update={"rules": rules, "applicable": bool(rules)}))
     return model.model_copy(update={"criteria": criteria})
 
@@ -255,6 +289,7 @@ DISQUALIFIER_FIELDS = frozenset(
     {
         "industries", "lead_geographies", "company_hq_geographies", "company_size",
         "company_type", "candidate_locations", "current_industries", "current_company_size",
+        "avoid_companies",
     }
 )  # fmt: skip
 
