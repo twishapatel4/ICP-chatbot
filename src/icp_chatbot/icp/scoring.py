@@ -9,6 +9,7 @@ matching service should reproduce.
 """
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -162,7 +163,10 @@ _LEGAL_SUFFIXES = frozenset(
 
 
 def _company_tokens(name: str) -> list[str]:
-    tokens = re.sub(r"\W+", " ", name.casefold()).split()
+    folded = "".join(
+        c for c in unicodedata.normalize("NFKD", name.casefold()) if not unicodedata.combining(c)
+    )  # "Société Générale" is "Societe Generale"
+    tokens = re.sub(r"\W+", " ", folded.replace("&", " and ")).split()  # "AT&T" is "AT and T"
     while tokens and tokens[-1] in _LEGAL_SUFFIXES:
         tokens.pop()  # "Acme Corp." and "Acme Corporation" are the same company
     return tokens
@@ -254,6 +258,9 @@ def _slot_score(rule: MatchRule, lead_values: list[str], slot: str = "") -> floa
     """Score for one slot, or None when the lead's data cannot be read."""
     if rule.kind == "list":
         return list_match(lead_values, rule, slot)
+    # text values kept next to the range ("Self-employed") match the lead's text as a list would
+    if rule.primary and list_match(lead_values, rule, slot):
+        return 1.0
     for text in lead_values:
         bounds = parse_range(text)
         value = _midpoint(bounds) if bounds else None
@@ -277,8 +284,10 @@ def build_rule(
         if ranges:
             lo = None if any(r[0] is None for r in ranges) else min(r[0] for r in ranges)
             hi = None if any(r[1] is None for r in ranges) else max(r[1] for r in ranges)
+            words = [v for v in values if not parse_range(v)]  # kept, not silently dropped
             return MatchRule(
                 kind="range",
+                primary=words,
                 min=lo,
                 max=hi,
                 tolerance=RANGE_TOLERANCE.get(slot_key, DEFAULT_TOLERANCE),
