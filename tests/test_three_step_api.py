@@ -610,3 +610,25 @@ async def test_engine_uses_hr_prompts_for_hr_session(world):
     assert w.llm.calls_for("interviewer")[-1].system == (
         prompts_for("sales")["interviewer"] + render_slot_catalog("sales")
     )
+
+
+async def test_api_approve_hr_document_passes_track(world):
+    w = await world()
+    sid = (await w.start(track="hr", profile=HR_FRESHER))["session_id"]
+    partial = await w.call("POST", f"/sessions/{sid}/fallback", json={"answers": {}})
+    missing = partial.json()["detail"]["missing_required"]
+    done = await w.call(
+        "POST", f"/sessions/{sid}/fallback", json={"answers": {k: [f"value {k}"] for k in missing}}
+    )
+    assert done.status_code == 200 and done.json()["icp_ready"]
+
+    from icp_chatbot.icp.builder import ICPSynthesis
+
+    w.llm.queue("final_icp", ICPSynthesis())
+    built = await w.call("POST", f"/sessions/{sid}/icp")
+    assert built.status_code == 200, built.text
+    assert built.json()["document"]["track"] == "hr"
+    assert built.json()["document"]["summary"].startswith("Ideal candidate:")
+    approved = await w.call("POST", f"/sessions/{sid}/approve")
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["document"]["track"] == "hr"

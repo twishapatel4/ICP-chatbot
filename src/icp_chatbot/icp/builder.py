@@ -18,6 +18,7 @@ from icp_chatbot.domain.state import SessionState, SlotSource, normalize_values
 from icp_chatbot.icp.document import (
     FieldEntry,
     ICPDocument,
+    build_linkedin_filters,
     compute_completeness,
     group_by_section,
     missing_slots,
@@ -188,21 +189,23 @@ async def build_icp(
         open_questions.extend(_keep_questions(synthesis.open_questions, exclusions))
 
     shell = ICPDocument(
+        track=state.track,
         sections={},
         scoring_model=default_scoring_model({}, track=state.track),
-        completeness=compute_completeness({}),
+        completeness=compute_completeness({}, track=state.track),
         custom_fields=list(state.domain.fields) if state.domain else [],
         not_needed=list(state.domain.not_needed) if state.domain else [],
     )
     needed = shell.needed_defs()
-    open_questions.extend(missing_slots(entries, defs=needed))
+    open_questions.extend(missing_slots(entries, defs=needed, track=state.track))
     slot_values = {key: e.values for key, e in entries.items() if e.values}
     document = shell.model_copy(
         update={
-            "sections": group_by_section(entries, shell.slot_defs()),
+            "sections": group_by_section(entries, shell.slot_defs(), state.track),
             "scoring_model": default_scoring_model(slot_values, disqualifiers, track=state.track),
-            "summary": render_summary(entries, shell.slot_defs()),
-            "completeness": compute_completeness(entries, needed),
+            "summary": render_summary(entries, shell.slot_defs(), state.track),
+            "completeness": compute_completeness(entries, needed, state.track),
+            "linkedin_filters": build_linkedin_filters(state),
             "open_questions": open_questions,
         }
     )

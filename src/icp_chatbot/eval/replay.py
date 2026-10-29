@@ -113,7 +113,7 @@ async def replay_case(
             name=case.name, tags=case.tags, status=result.status, stop_reason=result.stop_reason,
             questions_asked=record.state.questions_asked, precision=precision, recall=recall,
             f1=f1, violations=violations,
-            scoring_valid=not validate_model(built.document.scoring_model),
+            scoring_valid=not validate_model(built.document.scoring_model, built.document.track),
             cost_usd=record.cost_usd + built.cost_usd, errors=errors,
         )  # fmt: skip
     except Exception as exc:  # a broken case must not stop the whole run

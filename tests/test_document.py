@@ -179,3 +179,108 @@ def test_a_document_with_the_new_keys_is_unchanged_by_the_legacy_hook():
     )
     dumped = doc.model_dump(mode="json")
     assert ICPDocument.model_validate(dumped).model_dump(mode="json") == dumped
+
+
+# -- the LinkedIn filters block and the document's track ---------------------------------------
+
+
+def _filters_state(track="sales", **slots):
+    from icp_chatbot.domain.state import SessionState, SlotValue
+
+    state = SessionState(track=track)
+    for key, values in slots.items():
+        state.slots[key] = SlotValue(values=values, confidence=0.9, source=SlotSource.STATED)
+    return state
+
+
+async def _build(state):
+    from datetime import date
+
+    from icp_chatbot.config import Settings
+    from icp_chatbot.icp.builder import ICPSynthesis, build_icp
+    from icp_chatbot.llm.fake import FakeLLM
+    from icp_chatbot.versions import default_config
+
+    llm = FakeLLM({"final_icp": [ICPSynthesis()]})
+    config = default_config(Settings(_env_file=None))
+    return (await build_icp(llm, config, state, today=date(2026, 10, 15))).document
+
+
+def _resolved(slot_key, values):
+    from icp_chatbot.domain.state import SlotValue, resolve_slot_values
+
+    labels, refs, unmapped = resolve_slot_values(slot_key, values)
+    return SlotValue(
+        values=labels, refs=refs, unmapped=unmapped, confidence=0.9, source=SlotSource.STATED
+    )
+
+
+async def test_linkedin_filters_block_lists_ids_for_industries_and_size():
+    state = _filters_state(lead_geographies=["Europe"])
+    state.slots["industries"] = _resolved("industries", ["Financial Services"])
+    state.slots["company_size"] = _resolved("company_size", ["51-200"])
+    doc = await _build(state)
+    by_slot = {f.slot: f for f in doc.linkedin_filters}
+    industries, size = by_slot["industries"], by_slot["company_size"]
+    assert industries.facet == "industry" and size.facet == "company_size"
+    assert industries.ids == [r.id for r in state.slots["industries"].refs] and industries.ids
+    assert size.ids == [r.id for r in state.slots["company_size"].refs] and size.ids
+    assert industries.labels == state.slots["industries"].values
+    assert industries.unmapped == [] and size.unmapped == []
+    assert "lead_geographies" in by_slot and set(by_slot) <= set(state.slots)
+
+
+async def test_any_adds_no_filter():
+    state = _filters_state(industries=["Any"], company_size=["Any"], lead_geographies=["Any"])
+    doc = await _build(state)
+    assert doc.linkedin_filters == []
+
+
+async def test_unmapped_values_are_flagged():
+    state = _filters_state()
+    state.slots["industries"] = _resolved("industries", ["Financial Services", "Zorblax Farming"])
+    doc = await _build(state)
+    (entry,) = [f for f in doc.linkedin_filters if f.slot == "industries"]
+    assert entry.unmapped == ["Zorblax Farming"]
+    assert len(entry.ids) == 1 and "Zorblax Farming" in entry.labels
+
+
+async def test_missing_refs_are_resolved_at_build_time():
+    state = _filters_state(industries=["Financial Services"])  # inferred or confirmed: no refs
+    assert state.slots["industries"].refs == []
+    doc = await _build(state)
+    (entry,) = [f for f in doc.linkedin_filters if f.slot == "industries"]
+    assert len(entry.ids) == 1 and entry.labels
+    assert state.slots["industries"].refs == []  # the stored state is not changed
+
+
+async def test_filters_block_dedupes_ids():
+    from icp_chatbot.domain.state import SlotValue
+
+    one = _resolved("industries", ["Financial Services"])
+    ref = one.refs[0]
+    state = _filters_state()
+    state.slots["industries"] = SlotValue(
+        values=one.values, refs=[ref, ref], confidence=0.9, source=SlotSource.STATED
+    )
+    doc = await _build(state)
+    (entry,) = [f for f in doc.linkedin_filters if f.slot == "industries"]
+    assert entry.ids == [ref.id]
+
+
+async def test_sales_document_unchanged_apart_from_filters_block():
+    state = _filters_state(
+        product=["Payroll software"], industries=["Fintech"], buyer_roles=["CFO"]
+    )
+    doc = await _build(state)
+    assert doc.track == "sales"
+    assert list(doc.sections) == ["seller_context", "target_firmographics", "buying_structure"]
+    assert doc.summary == (
+        "About the company: What they do: Payroll software.\n"
+        "Ideal customer: Target industries: Fintech.\nBuyers: CFO."
+    )
+
+
+def test_legacy_sales_document_loads_with_track_sales_and_empty_filters():
+    doc = ICPDocument.model_validate(legacy_document())
+    assert doc.track == "sales" and doc.linkedin_filters == []

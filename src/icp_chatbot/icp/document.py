@@ -5,22 +5,27 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from icp_chatbot.domain.slots import (
-    SECTION_ORDER,
-    SLOT_LIST,
-    SLOTS,
     CustomField,
     SlotDef,
     Tier,
+    Track,
+    registry,
+    section_order,
+    slot_map,
     with_custom,
 )
 from icp_chatbot.domain.state import (
+    ANY,
+    SessionState,
     SlotSource,
     real_values,
     rename_slot_items,
     rename_slot_keys,
     renamed_slot,
+    resolve_slot_values,
 )
 from icp_chatbot.icp.scoring import ScoringModel
+from icp_chatbot.linkedin.catalog import SLOT_FACETS
 
 KNOWN_CONFIDENCE = 0.7
 
@@ -39,8 +44,19 @@ class Completeness(BaseModel):
     tier_b: float  # share of tier B slots known at confidence >= 0.7
 
 
+class FilterEntry(BaseModel):
+    """One LinkedIn search filter: the catalog ids of what the company asked for in one slot."""
+
+    facet: str
+    slot: str
+    ids: list[str] = Field(default_factory=list)
+    labels: list[str] = Field(default_factory=list)
+    unmapped: list[str] = Field(default_factory=list)  # values with no LinkedIn option
+
+
 class ICPDocument(BaseModel):
     schema_version: Literal["1"] = "1"
+    track: Track = "sales"  # documents stored before tracks existed are Sales documents
     sections: dict[str, dict[str, FieldEntry]]
     scoring_model: ScoringModel
     summary: str = ""
@@ -50,6 +66,7 @@ class ICPDocument(BaseModel):
     custom_fields: list[CustomField] = Field(default_factory=list)  # this industry's own fields
     not_needed: list[str] = Field(default_factory=list)  # standard fields this industry skips
     partial: bool = False  # built before the basics were known, because the user stopped early
+    linkedin_filters: list[FilterEntry] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
@@ -71,7 +88,7 @@ class ICPDocument(BaseModel):
         return data
 
     def slot_defs(self) -> list[SlotDef]:
-        return with_custom(self.custom_fields)
+        return with_custom(self.custom_fields, self.track)
 
     def needed_defs(self) -> list[SlotDef]:
         """The fields this industry cares about: completeness and gaps ignore the rest."""
@@ -106,12 +123,12 @@ def _rename_in_scoring_model(model: dict) -> dict:
 
 
 def group_by_section(
-    entries: dict[str, FieldEntry], defs: list[SlotDef] | None = None
+    entries: dict[str, FieldEntry], defs: list[SlotDef] | None = None, track: Track = "sales"
 ) -> dict[str, dict[str, FieldEntry]]:
     """Place entries in their sections, in registry order; empty sections are omitted."""
-    defs = defs or with_custom([])
+    defs = defs or with_custom([], track)
     grouped: dict[str, dict[str, FieldEntry]] = {}
-    for section in SECTION_ORDER:
+    for section in section_order(track):
         fields = {
             s.key: entries[s.key]
             for s in defs
@@ -138,14 +155,17 @@ def _is_known(slot, entries: dict[str, FieldEntry]) -> bool:
 
 
 def missing_slots(
-    entries: dict[str, FieldEntry], limit: int = 5, defs: list[SlotDef] | None = None
+    entries: dict[str, FieldEntry],
+    limit: int = 5,
+    defs: list[SlotDef] | None = None,
+    track: Track = "sales",
 ) -> list[str]:
     """Plain-language notes for the tier A and B fields that are still unknown (not recorded,
     only a non-answer, or below the known confidence), most important first. Worked out from the
     data, so the list does not depend on what the model remembers to mention."""
     gaps = [
         s
-        for s in defs or SLOT_LIST
+        for s in defs or registry(track)
         if s.tier in (Tier.A, Tier.B) and _applicable(s, entries) and not _is_known(s, entries)
     ]
     gaps.sort(key=lambda s: (s.tier != Tier.A, -s.importance))
@@ -163,7 +183,7 @@ def _gap_note(slot: SlotDef, entries: dict[str, FieldEntry]) -> str:
 
 
 def compute_completeness(
-    entries: dict[str, FieldEntry], defs: list[SlotDef] | None = None
+    entries: dict[str, FieldEntry], defs: list[SlotDef] | None = None, track: Track = "sales"
 ) -> Completeness:
     def share(slots) -> float:
         slots = [s for s in slots if _applicable(s, entries)]
@@ -171,13 +191,15 @@ def compute_completeness(
             return 1.0
         return round(sum(1 for s in slots if _is_known(s, entries)) / len(slots), 4)
 
-    defs = defs or list(SLOT_LIST)
+    defs = defs or list(registry(track))
     tier_a = [s for s in defs if s.tier == Tier.A and s.blocks]
     tier_b = [s for s in defs if s.tier == Tier.B]
     return Completeness(tier_a=share(tier_a), tier_b=share(tier_b))
 
 
-def render_summary(entries: dict[str, FieldEntry], defs: list[SlotDef] | None = None) -> str:
+def render_summary(
+    entries: dict[str, FieldEntry], defs: list[SlotDef] | None = None, track: Track = "sales"
+) -> str:
     """A readable summary generated only from the fields, so the two cannot disagree. Values that
     were inferred rather than stated are marked."""
 
@@ -189,6 +211,8 @@ def render_summary(entries: dict[str, FieldEntry], defs: list[SlotDef] | None = 
         inferred = entry.source in (SlotSource.INFERRED, SlotSource.DEFAULT)
         return f"{text} (inferred)" if inferred else text
 
+    if track == "hr":
+        return _render_hr_summary(show, defs or list(registry("hr")), entries)
     lines = []
     about = [
         ("What they do", "product"),
@@ -223,6 +247,25 @@ def render_summary(entries: dict[str, FieldEntry], defs: list[SlotDef] | None = 
     return "\n".join(lines)
 
 
+def _render_hr_summary(show, defs: list[SlotDef], entries: dict[str, FieldEntry]) -> str:
+    """The Ideal candidate summary: one line per section that has answers, in the HR order. The
+    first section, who the role is for, opens the "Ideal candidate" line."""
+    lines = []
+    for section in section_order("hr"):
+        parts = [
+            f"{s.label.lower()}: {v}" for s in defs if s.section == section and (v := show(s.key))
+        ]
+        if not parts:
+            continue
+        body = "; ".join(parts)
+        if section == "role_and_seniority":
+            lines.append(f"Ideal candidate: {body}.")
+        else:
+            title = section.replace("_", " ").capitalize()
+            lines.append(f"{title}: {body}.")
+    return "\n".join(lines)
+
+
 def sync_field_requirements(document: ICPDocument) -> ICPDocument:
     """A field takes the requirement of the criterion that reads it; fields no criterion reads
     stay "none". Keeps the per-field flags and the scoring model consistent."""
@@ -244,5 +287,47 @@ def sync_field_requirements(document: ICPDocument) -> ICPDocument:
     return document.model_copy(update={"sections": sections})
 
 
-def known_slot_keys() -> set[str]:
-    return set(SLOTS)
+def known_slot_keys(track: Track = "sales") -> set[str]:
+    return set(slot_map(track))
+
+
+def _filter_entry(
+    slot: str, values: list[str], refs: list, unmapped: list[str]
+) -> FilterEntry | None:
+    if not values or values == [ANY]:  # "Any" is no preference: no filter at all
+        return None
+    if not refs and not unmapped:  # inferred or confirmed values were never matched to options
+        values, refs, unmapped = resolve_slot_values(slot, values)
+    ids: list[str] = []
+    for ref in refs:
+        if ref.id not in ids:
+            ids.append(ref.id)
+    return FilterEntry(
+        facet=SLOT_FACETS[slot], slot=slot, ids=ids, labels=list(values), unmapped=list(unmapped)
+    )
+
+
+def build_linkedin_filters(state: SessionState) -> list[FilterEntry]:
+    """One entry per answered slot that LinkedIn can filter on, in catalog order."""
+    own = slot_map(state.track)
+    found = []
+    for slot in SLOT_FACETS:
+        value = state.slots.get(slot)
+        if slot not in own or value is None:
+            continue
+        entry = _filter_entry(slot, value.values, value.refs, value.unmapped)
+        if entry:
+            found.append(entry)
+    return found
+
+
+def filters_from_entries(entries: dict[str, FieldEntry], track: Track) -> list[FilterEntry]:
+    """The same block worked out from a document's fields, after the company edited them."""
+    own = slot_map(track)
+    found = [
+        entry
+        for slot in SLOT_FACETS
+        if slot in own and slot in entries
+        if (entry := _filter_entry(slot, entries[slot].values, [], []))
+    ]
+    return found

@@ -8,12 +8,12 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
-from icp_chatbot.domain.slots import Track
 from icp_chatbot.domain.state import SlotSource, normalize_values
 from icp_chatbot.icp.document import (
     FieldEntry,
     ICPDocument,
     compute_completeness,
+    filters_from_entries,
     group_by_section,
     render_summary,
     sync_field_requirements,
@@ -68,10 +68,11 @@ class FeedbackSpec:
 def _rebuild(document: ICPDocument, entries: dict[str, FieldEntry], model) -> ICPDocument:
     rebuilt = document.model_copy(
         update={
-            "sections": group_by_section(entries, document.slot_defs()),
+            "sections": group_by_section(entries, document.slot_defs(), document.track),
             "scoring_model": model,
-            "summary": render_summary(entries, document.slot_defs()),
-            "completeness": compute_completeness(entries, document.needed_defs()),
+            "summary": render_summary(entries, document.slot_defs(), document.track),
+            "completeness": compute_completeness(entries, document.needed_defs(), document.track),
+            "linkedin_filters": filters_from_entries(entries, document.track),
         }
     )
     return sync_field_requirements(rebuilt)
@@ -134,11 +135,9 @@ def apply_edit(
     ]
 
 
-def approve(
-    document: ICPDocument, today: date, track: Track = "sales"
-) -> tuple[ICPDocument, list[FeedbackSpec]]:
+def approve(document: ICPDocument, today: date) -> tuple[ICPDocument, list[FeedbackSpec]]:
     """Approval verifies every field as of today. The scoring model must be valid."""
-    problems = validate_model(document.scoring_model, track)
+    problems = validate_model(document.scoring_model, document.track)
     if problems:
         raise ValueError("; ".join(problems))
     sections = {
