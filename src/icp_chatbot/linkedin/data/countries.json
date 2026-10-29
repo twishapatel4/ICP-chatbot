@@ -47,7 +47,8 @@
   "level": 2,
   "parent": "Middle East",
   "match": [
-   "UAE"
+   "UAE",
+   "Emirates"
   ]
  },
  {
@@ -126,7 +127,11 @@
   "id": "AX",
   "label": "Åland Islands",
   "level": 2,
-  "parent": "Europe"
+  "parent": "Europe",
+  "match": [
+   "Aland",
+   "Aland Islands"
+  ]
  },
  {
   "id": "AZ",
@@ -204,19 +209,26 @@
   "id": "BN",
   "label": "Brunei Darussalam",
   "level": 2,
-  "parent": "Asia-Pacific"
+  "parent": "Asia-Pacific",
+  "match": [
+   "Brunei"
+  ]
  },
  {
   "id": "BO",
   "label": "Bolivia",
   "level": 2,
-  "parent": "Latin America & Caribbean"
+  "parent": "Latin America & Caribbean",
+  "match": []
  },
  {
   "id": "BQ",
   "label": "Bonaire, Sint Eustatius and Saba",
   "level": 2,
-  "parent": "Latin America & Caribbean"
+  "parent": "Latin America & Caribbean",
+  "match": [
+   "Bonaire"
+  ]
  },
  {
   "id": "BR",
@@ -276,7 +288,13 @@
   "id": "CD",
   "label": "Congo, The Democratic Republic of the",
   "level": 2,
-  "parent": "Africa"
+  "parent": "Africa",
+  "match": [
+   "DR Congo",
+   "DRC",
+   "Democratic Republic of the Congo",
+   "Congo-Kinshasa"
+  ]
  },
  {
   "id": "CF",
@@ -288,7 +306,11 @@
   "id": "CG",
   "label": "Congo",
   "level": 2,
-  "parent": "Africa"
+  "parent": "Africa",
+  "match": [
+   "Republic of the Congo",
+   "Congo-Brazzaville"
+  ]
  },
  {
   "id": "CH",
@@ -352,13 +374,19 @@
   "id": "CV",
   "label": "Cabo Verde",
   "level": 2,
-  "parent": "Africa"
+  "parent": "Africa",
+  "match": [
+   "Cape Verde"
+  ]
  },
  {
   "id": "CW",
   "label": "Curaçao",
   "level": 2,
-  "parent": "Latin America & Caribbean"
+  "parent": "Latin America & Caribbean",
+  "match": [
+   "Curacao"
+  ]
  },
  {
   "id": "CX",
@@ -385,7 +413,10 @@
   "id": "DE",
   "label": "Germany",
   "level": 2,
-  "parent": "Europe"
+  "parent": "Europe",
+  "match": [
+   "Deutschland"
+  ]
  },
  {
   "id": "DJ",
@@ -475,13 +506,20 @@
   "id": "FK",
   "label": "Falkland Islands (Malvinas)",
   "level": 2,
-  "parent": "Latin America & Caribbean"
+  "parent": "Latin America & Caribbean",
+  "match": [
+   "Falkland Islands",
+   "Falklands"
+  ]
  },
  {
   "id": "FM",
   "label": "Micronesia, Federated States of",
   "level": 2,
-  "parent": "Asia-Pacific"
+  "parent": "Asia-Pacific",
+  "match": [
+   "Micronesia"
+  ]
  },
  {
   "id": "FO",
@@ -511,7 +549,10 @@
    "U.K.",
    "Great Britain",
    "Britain",
-   "England"
+   "England",
+   "Scotland",
+   "Wales",
+   "Northern Ireland"
   ]
  },
  {
@@ -560,7 +601,10 @@
   "id": "GM",
   "label": "Gambia",
   "level": 2,
-  "parent": "Africa"
+  "parent": "Africa",
+  "match": [
+   "The Gambia"
+  ]
  },
  {
   "id": "GN",
@@ -620,7 +664,8 @@
   "id": "HK",
   "label": "Hong Kong",
   "level": 2,
-  "parent": "Asia-Pacific"
+  "parent": "Asia-Pacific",
+  "match": []
  },
  {
   "id": "HM",
@@ -698,7 +743,8 @@
   "id": "IR",
   "label": "Iran",
   "level": 2,
-  "parent": "Middle East"
+  "parent": "Middle East",
+  "match": []
  },
  {
   "id": "IS",
@@ -770,13 +816,18 @@
   "id": "KN",
   "label": "Saint Kitts and Nevis",
   "level": 2,
-  "parent": "Latin America & Caribbean"
+  "parent": "Latin America & Caribbean",
+  "match": [
+   "St Kitts",
+   "St. Kitts and Nevis"
+  ]
  },
  {
   "id": "KP",
   "label": "North Korea",
   "level": 2,
-  "parent": "Asia-Pacific"
+  "parent": "Asia-Pacific",
+  "match": []
  },
  {
   "id": "KR",
@@ -809,7 +860,8 @@
   "id": "LA",
   "label": "Laos",
   "level": 2,
-  "parent": "Asia-Pacific"
+  "parent": "Asia-Pacific",
+  "match": []
  },
  {
   "id": "LB",
@@ -821,7 +873,10 @@
   "id": "LC",
   "label": "Saint Lucia",
   "level": 2,
-  "parent": "Latin America & Caribbean"
+  "parent": "Latin America & Caribbean",
+  "match": [
+   "St Lucia"
+  ]
  },
  {
   "id": "LI",
@@ -887,7 +942,8 @@
   "id": "MD",
   "label": "Moldova",
   "level": 2,
-  "parent": "Europe"
+  "parent": "Europe",
+  "match": []
  },
  {
   "id": "ME",
@@ -917,7 +973,10 @@
   "id": "MK",
   "label": "North Macedonia",
   "level": 2,
-  "parent": "Europe"
+  "parent": "Europe",
+  "match": [
+   "Macedonia"
+  ]
  },
  {
   "id": "ML",
@@ -929,7 +988,10 @@
   "id": "MM",
   "label": "Myanmar",
   "level": 2,
-  "parent": "Asia-Pacific"
+  "parent": "Asia-Pacific",
+  "match": [
+   "Burma"
+  ]
  },
  {
   "id": "MN",
@@ -941,7 +1003,10 @@
   "id": "MO",
   "label": "Macao",
   "level": 2,
-  "parent": "Asia-Pacific"
+  "parent": "Asia-Pacific",
+  "match": [
+   "Macau"
+  ]
  },
  {
   "id": "MP",
@@ -1049,7 +1114,11 @@
   "id": "NL",
   "label": "Netherlands",
   "level": 2,
-  "parent": "Europe"
+  "parent": "Europe",
+  "match": [
+   "Holland",
+   "The Netherlands"
+  ]
  },
  {
   "id": "NO",
@@ -1151,7 +1220,13 @@
   "id": "PS",
   "label": "Palestine, State of",
   "level": 2,
-  "parent": "Middle East"
+  "parent": "Middle East",
+  "match": [
+   "Palestine",
+   "Palestinian Territories",
+   "Gaza",
+   "West Bank"
+  ]
  },
  {
   "id": "PT",
@@ -1181,7 +1256,10 @@
   "id": "RE",
   "label": "Réunion",
   "level": 2,
-  "parent": "Africa"
+  "parent": "Africa",
+  "match": [
+   "Reunion"
+  ]
  },
  {
   "id": "RO",
@@ -1214,7 +1292,10 @@
   "id": "SA",
   "label": "Saudi Arabia",
   "level": 2,
-  "parent": "Middle East"
+  "parent": "Middle East",
+  "match": [
+   "KSA"
+  ]
  },
  {
   "id": "SB",
@@ -1262,7 +1343,10 @@
   "id": "SJ",
   "label": "Svalbard and Jan Mayen",
   "level": 2,
-  "parent": "Europe"
+  "parent": "Europe",
+  "match": [
+   "Svalbard"
+  ]
  },
  {
   "id": "SK",
@@ -1328,13 +1412,17 @@
   "id": "SY",
   "label": "Syria",
   "level": 2,
-  "parent": "Middle East"
+  "parent": "Middle East",
+  "match": []
  },
  {
   "id": "SZ",
   "label": "Eswatini",
   "level": 2,
-  "parent": "Africa"
+  "parent": "Africa",
+  "match": [
+   "Swaziland"
+  ]
  },
  {
   "id": "TC",
@@ -1382,7 +1470,10 @@
   "id": "TL",
   "label": "Timor-Leste",
   "level": 2,
-  "parent": "Asia-Pacific"
+  "parent": "Asia-Pacific",
+  "match": [
+   "East Timor"
+  ]
  },
  {
   "id": "TM",
@@ -1416,7 +1507,11 @@
   "id": "TT",
   "label": "Trinidad and Tobago",
   "level": 2,
-  "parent": "Latin America & Caribbean"
+  "parent": "Latin America & Caribbean",
+  "match": [
+   "Trinidad",
+   "Tobago"
+  ]
  },
  {
   "id": "TV",
@@ -1428,13 +1523,15 @@
   "id": "TW",
   "label": "Taiwan",
   "level": 2,
-  "parent": "Asia-Pacific"
+  "parent": "Asia-Pacific",
+  "match": []
  },
  {
   "id": "TZ",
   "label": "Tanzania",
   "level": 2,
-  "parent": "Africa"
+  "parent": "Africa",
+  "match": []
  },
  {
   "id": "UA",
@@ -1464,7 +1561,8 @@
    "U.S.",
    "U.S.A.",
    "US",
-   "United States of America"
+   "United States of America",
+   "America"
   ]
  },
  {
@@ -1483,19 +1581,28 @@
   "id": "VA",
   "label": "Holy See (Vatican City State)",
   "level": 2,
-  "parent": "Europe"
+  "parent": "Europe",
+  "match": [
+   "Vatican",
+   "Vatican City",
+   "Holy See"
+  ]
  },
  {
   "id": "VC",
   "label": "Saint Vincent and the Grenadines",
   "level": 2,
-  "parent": "Latin America & Caribbean"
+  "parent": "Latin America & Caribbean",
+  "match": [
+   "St Vincent"
+  ]
  },
  {
   "id": "VE",
   "label": "Venezuela",
   "level": 2,
-  "parent": "Latin America & Caribbean"
+  "parent": "Latin America & Caribbean",
+  "match": []
  },
  {
   "id": "VG",

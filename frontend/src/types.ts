@@ -19,6 +19,7 @@ export interface ProfileOption {
   label: string;
   level: number;
   parent: string | null;
+  match?: string[]; // other names the search also finds ("AI" for a tech industry)
   selectable?: boolean; // false: a heading only (e.g. the region "Other territories"); missing means true
 }
 

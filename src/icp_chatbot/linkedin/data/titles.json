@@ -10148,6 +10148,170 @@
   "label": "Proprietor and Founder"
  },
  {
+  "id": "extra~2744",
+  "label": "Artificial Intelligence Engineer"
+ },
+ {
+  "id": "extra~2745",
+  "label": "Artificial Intelligence Specialist"
+ },
+ {
+  "id": "extra~2746",
+  "label": "Artificial Intelligence Researcher"
+ },
+ {
+  "id": "extra~2747",
+  "label": "Artificial Intelligence Scientist"
+ },
+ {
+  "id": "extra~2748",
+  "label": "Artificial Intelligence Consultant"
+ },
+ {
+  "id": "extra~2749",
+  "label": "Artificial Intelligence Architect"
+ },
+ {
+  "id": "extra~2750",
+  "label": "Artificial Intelligence Manager"
+ },
+ {
+  "id": "extra~2751",
+  "label": "Artificial Intelligence Developer"
+ },
+ {
+  "id": "extra~2752",
+  "label": "Artificial Intelligence Product Manager"
+ },
+ {
+  "id": "extra~2753",
+  "label": "Artificial Intelligence Lead"
+ },
+ {
+  "id": "extra~2754",
+  "label": "Head of Artificial Intelligence"
+ },
+ {
+  "id": "extra~2755",
+  "label": "Director of Artificial Intelligence"
+ },
+ {
+  "id": "extra~2756",
+  "label": "VP of Artificial Intelligence"
+ },
+ {
+  "id": "extra~2759",
+  "label": "AI Scientist"
+ },
+ {
+  "id": "extra~2760",
+  "label": "AI Developer"
+ },
+ {
+  "id": "extra~2762",
+  "label": "AI Architect"
+ },
+ {
+  "id": "extra~2766",
+  "label": "AI Director"
+ },
+ {
+  "id": "extra~2767",
+  "label": "AI Strategist"
+ },
+ {
+  "id": "extra~2768",
+  "label": "AI Ethicist"
+ },
+ {
+  "id": "extra~2769",
+  "label": "AI Trainer"
+ },
+ {
+  "id": "extra~2770",
+  "label": "AI Data Annotator"
+ },
+ {
+  "id": "extra~2771",
+  "label": "AI Research Engineer"
+ },
+ {
+  "id": "extra~2772",
+  "label": "AI Research Scientist"
+ },
+ {
+  "id": "extra~2773",
+  "label": "AI/ML Engineer"
+ },
+ {
+  "id": "extra~2774",
+  "label": "AI and Machine Learning Engineer"
+ },
+ {
+  "id": "extra~2775",
+  "label": "Machine Learning Scientist"
+ },
+ {
+  "id": "extra~2776",
+  "label": "Machine Learning Researcher"
+ },
+ {
+  "id": "extra~2779",
+  "label": "Machine Learning Architect"
+ },
+ {
+  "id": "extra~2780",
+  "label": "Machine Learning Developer"
+ },
+ {
+  "id": "extra~2781",
+  "label": "Deep Learning Engineer"
+ },
+ {
+  "id": "extra~2782",
+  "label": "Deep Learning Researcher"
+ },
+ {
+  "id": "extra~2784",
+  "label": "Data Science Director"
+ },
+ {
+  "id": "extra~2785",
+  "label": "Generative AI Developer"
+ },
+ {
+  "id": "extra~2786",
+  "label": "Generative AI Consultant"
+ },
+ {
+  "id": "extra~2787",
+  "label": "Generative AI Architect"
+ },
+ {
+  "id": "extra~2788",
+  "label": "Agentic AI Engineer"
+ },
+ {
+  "id": "extra~2789",
+  "label": "Conversational AI Developer"
+ },
+ {
+  "id": "extra~2790",
+  "label": "Chatbot Developer"
+ },
+ {
+  "id": "extra~2791",
+  "label": "Robotics Engineer"
+ },
+ {
+  "id": "extra~2792",
+  "label": "Automation Specialist"
+ },
+ {
+  "id": "extra~2793",
+  "label": "RPA Developer"
+ },
+ {
   "id": "onet~p0",
   "label": "Chief Executives"
  },
@@ -23186,10 +23350,6 @@
  {
   "id": "c0749528-ee2a-41bd-a1f6-c13825b5e569",
   "label": "Roadside vehicle technician"
- },
- {
-  "id": "551a6797-3ca9-41fc-9dca-9a982a8fd8a6",
-  "label": "Robotics engineer"
  },
  {
   "id": "7833d5cd-873d-4fdd-b2f8-9762d68494a7",
@@ -151524,10 +151684,6 @@
   "label": "Machine Learning Research Scientist"
  },
  {
-  "id": "onet~a4269",
-  "label": "Machine Learning Scientist"
- },
- {
   "id": "onet~a4270",
   "label": "Multi-Disciplined Language Analyst"
  },
@@ -153338,10 +153494,6 @@
  {
   "id": "onet~a5015",
   "label": "World Designer"
- },
- {
-  "id": "onet~a5016",
-  "label": "Artificial Intelligence Specialist"
  },
  {
   "id": "onet~a5018",

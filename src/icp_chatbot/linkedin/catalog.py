@@ -84,6 +84,7 @@ class OptionCatalog:
         self._lookup: dict[str, dict[str, Option]] = {}
         self._by_id: dict[str, dict[str, Option]] = {}
         self._norms: dict[str, list[str]] = {}
+        self._alias_norms: dict[str, list[list[str]]] = {}
         for facet, filename in _FILES.items():
             path = data_dir / filename
             if not path.exists():
@@ -103,6 +104,7 @@ class OptionCatalog:
             self._lookup[facet] = lookup
             self._by_id[facet] = {opt.id: opt for opt in opts}
             self._norms[facet] = [_norm(opt.label) for opt in opts]
+            self._alias_norms[facet] = [[_norm(m) for m in opt.match] for opt in opts]
 
     @classmethod
     def _load_optional(cls, facet: str, path: Path) -> list[Option]:
@@ -160,12 +162,13 @@ class OptionCatalog:
         norms = self._norms[facet]
         starts: list[Option] = []
         rest: list[Option] = []
-        for opt, label in zip(opts, norms):
+        aliases = self._alias_norms[facet]
+        for opt, label, alts in zip(opts, norms, aliases):
             if label.startswith(needle):
                 starts.append(opt)
                 if len(starts) >= limit:
                     break  # enough prefix matches to fill the page
-            elif needle in label:
+            elif needle in label or any(needle in a for a in alts):
                 rest.append(opt)
         return (starts + rest)[:limit]
 

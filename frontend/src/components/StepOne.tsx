@@ -43,6 +43,7 @@ export default function StepOne({ busy, status, error, onTrack, onSubmit }: Prop
   const [industry, setIndustry] = useState("");
   const [groups, setGroups] = useState<string[]>([]);
   const [parents, setParents] = useState<Record<string, string>>({});
+  const [aliases, setAliases] = useState<Record<string, string[]>>({});
   const [levels, setLevels] = useState<Record<string, number>>({});
   const [groupsFailed, setGroupsFailed] = useState(false);
 
@@ -53,6 +54,7 @@ export default function StepOne({ busy, status, error, onTrack, onSubmit }: Prop
         // every industry, sub-industries too, so a search here finds what Step 2 finds
         const pickable = all.filter((o) => o.selectable !== false);
         setGroups(pickable.map((o) => o.label));
+        setAliases(Object.fromEntries(pickable.filter((o) => o.match?.length).map((o) => [o.label, o.match as string[]])));
         setLevels(Object.fromEntries(pickable.map((o) => [o.label, o.level])));
         setParents(Object.fromEntries(pickable.filter((o) => o.parent).map((o) => [o.label, o.parent as string])));
       })
@@ -166,6 +168,7 @@ export default function StepOne({ busy, status, error, onTrack, onSubmit }: Prop
               disabled={busy || groups.length === 0}
               options={groups}
               detail={parents}
+              aliases={aliases}
               levels={levels}
               onPick={setIndustry}
             />

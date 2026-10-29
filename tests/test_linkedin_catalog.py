@@ -13,10 +13,10 @@ VOCAB = json.loads((Path(__file__).parent / "data" / "linkedin_db_vocab.json").r
 KNOWN_BAD_COUNTRY_CODES = {"OO"}
 
 
-def test_industry_snapshot_has_434_unique_ids():
+def test_industry_snapshot_has_487_unique_ids():
     opts = default_catalog().options("industry")
-    assert len(opts) == 434
-    assert len({o.id for o in opts}) == 434
+    assert len(opts) == 487
+    assert len({o.id for o in opts}) == 487
 
 
 def test_every_db_industry_resolves():

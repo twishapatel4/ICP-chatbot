@@ -300,6 +300,7 @@ async def test_options_endpoint_search_industry(world):
     assert items[0] == {
         "id": "4", "label": "Software Development", "level": 3,
         "parent": "Technology, Information and Internet", "selectable": True,
+        "match": ["AI", "Artificial Intelligence", "Generative AI", "LLM", "NLP", "Computer Vision"],
     }  # fmt: skip
     assert all("soft" in i["label"].lower() for i in items)
     assert (await w.call("GET", "/options/industry?q=soft&limit=2")).json() == items[:2]

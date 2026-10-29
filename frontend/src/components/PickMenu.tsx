@@ -12,6 +12,7 @@ interface Props {
   placeholder: string;
   value?: string; // shown on the button once something is chosen
   disabled?: boolean;
+  aliases?: Record<string, string[]>; // other names that also find an option
   detail?: Record<string, string>; // a muted note after an option, e.g. the region of a country
   levels?: Record<string, number>; // nesting depth (1 = top): the unsearched list is indented by it, and the note is left out
   onPick: (v: string) => void;
@@ -19,14 +20,14 @@ interface Props {
 
 // A searchable dropdown that only picks on click or Enter. A native <select> fires change on every
 // arrow key, which would add a value per key press.
-export default function PickMenu({ options, label, placeholder, value, disabled, detail, levels, onPick }: Props) {
+export default function PickMenu({ options, label, placeholder, value, disabled, detail, aliases, levels, onPick }: Props) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
   const [up, setUp] = useState(false); // not enough room below the button: open above it
   const button = useRef<HTMLButtonElement>(null);
   const base = useId();
-  const results = fuzzyFilter(options, q, (o) => o);
+  const results = fuzzyFilter(options, q, (o) => [o, ...(aliases?.[o] ?? [])].join(" "));
   const nested = !!levels && q.trim() === "";
 
   // keep the highlighted option in view: the country list is 249 long

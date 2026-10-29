@@ -331,12 +331,12 @@ function SearchPicker({
     ? pending && searching
       ? // until the server answers: what already matches here, else the list as it was (never a blank flash)
         (() => {
-          const near = fuzzyFilter(options, q, (o) => o.label);
+          const near = fuzzyFilter(options, q, (o) => [o.label, ...(o.match ?? [])].join(" "));
           return near.length > 0 ? near : options;
         })()
       : options
     : searching
-      ? fuzzyFilter(options, q, (o) => o.label)
+      ? fuzzyFilter(options, q, (o) => [o.label, ...(o.match ?? [])].join(" "))
       : suggest;
   const shown = open && results.length > 0;
   const optionId = (i: number) => `${base}-o${i}`;

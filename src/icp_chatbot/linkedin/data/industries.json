@@ -2510,7 +2510,12 @@
   "label": "Data Infrastructure and Analytics",
   "hierarchy": "Technology, Information and Media > Technology, Information and Internet > Data Infrastructure and Analytics",
   "level": 3,
-  "parent": "Technology, Information and Internet"
+  "parent": "Technology, Information and Internet",
+  "match": [
+   "Machine Learning",
+   "ML",
+   "Deep Learning"
+  ]
  },
  {
   "id": 3134,
@@ -2601,7 +2606,15 @@
   "label": "Software Development",
   "hierarchy": "Technology, Information and Media > Technology, Information and Internet > Software Development",
   "level": 3,
-  "parent": "Technology, Information and Internet"
+  "parent": "Technology, Information and Internet",
+  "match": [
+   "AI",
+   "Artificial Intelligence",
+   "Generative AI",
+   "LLM",
+   "NLP",
+   "Computer Vision"
+  ]
  },
  {
   "id": 109,
@@ -3036,5 +3049,376 @@
   "hierarchy": "Wholesale > Wholesale Recyclable Materials",
   "level": 2,
   "parent": "Wholesale"
+ },
+ {
+  "id": 3215,
+  "label": "Animation",
+  "hierarchy": "Animation",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3190,
+  "label": "Apparel and Fashion",
+  "hierarchy": "Apparel and Fashion",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3204,
+  "label": "Arts and Crafts",
+  "hierarchy": "Arts and Crafts",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3198,
+  "label": "Automotive",
+  "hierarchy": "Automotive",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3226,
+  "label": "Aviation & Aerospace",
+  "hierarchy": "Aviation & Aerospace",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3238,
+  "label": "Biotechnology",
+  "hierarchy": "Biotechnology",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3197,
+  "label": "Building Materials",
+  "hierarchy": "Building Materials",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3211,
+  "label": "Business Supplies and Equipment",
+  "hierarchy": "Business Supplies and Equipment",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3219,
+  "label": "Commercial Real Estate",
+  "hierarchy": "Commercial Real Estate",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3235,
+  "label": "Computer Hardware",
+  "hierarchy": "Computer Hardware",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3234,
+  "label": "Computer Networking",
+  "hierarchy": "Computer Networking",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3191,
+  "label": "Consumer Electronics",
+  "hierarchy": "Consumer Electronics",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3192,
+  "label": "Consumer Goods",
+  "hierarchy": "Consumer Goods",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3189,
+  "label": "Cosmetics",
+  "hierarchy": "Cosmetics",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3199,
+  "label": "Dairy",
+  "hierarchy": "Dairy",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3187,
+  "label": "Defense & Space",
+  "hierarchy": "Defense & Space",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3227,
+  "label": "Design",
+  "hierarchy": "Design",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3208,
+  "label": "E-Learning",
+  "hierarchy": "E-Learning",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3200,
+  "label": "Education Management",
+  "hierarchy": "Education Management",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3237,
+  "label": "Entertainment",
+  "hierarchy": "Entertainment",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3196,
+  "label": "Fine Art",
+  "hierarchy": "Fine Art",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3195,
+  "label": "Food & Beverages",
+  "hierarchy": "Food & Beverages",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3224,
+  "label": "Food Production",
+  "hierarchy": "Food Production",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3193,
+  "label": "Furniture",
+  "hierarchy": "Furniture",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3232,
+  "label": "Government Relations",
+  "hierarchy": "Government Relations",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3207,
+  "label": "Health, Wellness and Fitness",
+  "hierarchy": "Health, Wellness and Fitness",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3210,
+  "label": "Human Resources",
+  "hierarchy": "Human Resources",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3209,
+  "label": "Import and Export",
+  "hierarchy": "Import and Export",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3216,
+  "label": "Industrial Automation",
+  "hierarchy": "Industrial Automation",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3231,
+  "label": "Information Technology and Services",
+  "hierarchy": "Information Technology and Services",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3194,
+  "label": "Leisure, Travel & Tourism",
+  "hierarchy": "Leisure, Travel & Tourism",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3212,
+  "label": "Luxury Goods and Jewelry",
+  "hierarchy": "Luxury Goods and Jewelry",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3236,
+  "label": "Maritime",
+  "hierarchy": "Maritime",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3221,
+  "label": "Mechanical or Industrial Engineering",
+  "hierarchy": "Mechanical or Industrial Engineering",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3217,
+  "label": "Medical Devices",
+  "hierarchy": "Medical Devices",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3205,
+  "label": "Music",
+  "hierarchy": "Music",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3202,
+  "label": "Non-profit Organization Management",
+  "hierarchy": "Non-profit Organization Management",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3214,
+  "label": "Online Media",
+  "hierarchy": "Online Media",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3206,
+  "label": "Outsourcing/Offshoring",
+  "hierarchy": "Outsourcing/Offshoring",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3223,
+  "label": "Packaging and Containers",
+  "hierarchy": "Packaging and Containers",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3239,
+  "label": "Paper and Forest Products",
+  "hierarchy": "Paper and Forest Products",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3230,
+  "label": "Philanthropy",
+  "hierarchy": "Philanthropy",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3203,
+  "label": "Program Development",
+  "hierarchy": "Program Development",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3201,
+  "label": "Public Policy",
+  "hierarchy": "Public Policy",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3213,
+  "label": "Renewables & Environment",
+  "hierarchy": "Renewables & Environment",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3233,
+  "label": "Research",
+  "hierarchy": "Research",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3218,
+  "label": "Semiconductors",
+  "hierarchy": "Semiconductors",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3225,
+  "label": "Sporting Goods",
+  "hierarchy": "Sporting Goods",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3228,
+  "label": "Tobacco",
+  "hierarchy": "Tobacco",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3222,
+  "label": "Transportation/Trucking/Railroad",
+  "hierarchy": "Transportation/Trucking/Railroad",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3188,
+  "label": "Veterinary",
+  "hierarchy": "Veterinary",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3229,
+  "label": "Warehousing",
+  "hierarchy": "Warehousing",
+  "level": 1,
+  "parent": null
+ },
+ {
+  "id": 3220,
+  "label": "Wine and Spirits",
+  "hierarchy": "Wine and Spirits",
+  "level": 1,
+  "parent": null
  }
 ]

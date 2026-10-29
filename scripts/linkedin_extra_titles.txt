@@ -2745,3 +2745,53 @@ Chief Executive
 Owner and Founder
 Owner and CEO
 Proprietor and Founder
+Artificial Intelligence Engineer
+Artificial Intelligence Specialist
+Artificial Intelligence Researcher
+Artificial Intelligence Scientist
+Artificial Intelligence Consultant
+Artificial Intelligence Architect
+Artificial Intelligence Manager
+Artificial Intelligence Developer
+Artificial Intelligence Product Manager
+Artificial Intelligence Lead
+Head of Artificial Intelligence
+Director of Artificial Intelligence
+VP of Artificial Intelligence
+VP of AI
+Director of AI
+AI Scientist
+AI Developer
+AI Consultant
+AI Architect
+AI Specialist
+AI Lead
+AI Manager
+AI Director
+AI Strategist
+AI Ethicist
+AI Trainer
+AI Data Annotator
+AI Research Engineer
+AI Research Scientist
+AI/ML Engineer
+AI and Machine Learning Engineer
+Machine Learning Scientist
+Machine Learning Researcher
+Machine Learning Manager
+Machine Learning Consultant
+Machine Learning Architect
+Machine Learning Developer
+Deep Learning Engineer
+Deep Learning Researcher
+Data Science Manager
+Data Science Director
+Generative AI Developer
+Generative AI Consultant
+Generative AI Architect
+Agentic AI Engineer
+Conversational AI Developer
+Chatbot Developer
+Robotics Engineer
+Automation Specialist
+RPA Developer
