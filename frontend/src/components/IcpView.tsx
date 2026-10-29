@@ -65,7 +65,7 @@ export default function IcpView({ icp, approved, busy, readOnly, onApprove, onIm
           <h4 className={H4}>LinkedIn filters</h4>
           {filters.map((f) => (
             <div className="flex justify-between gap-3 py-1 border-b border-line last-of-type:border-b-0 max-[520px]:flex-col max-[520px]:gap-0" key={`${f.facet}-${f.slot}`}>
-              <span className="text-muted flex-[0_0_38%] capitalize">{f.filter_name || label(f.facet)}</span>
+              <span className={`text-muted flex-[0_0_38%] ${f.filter_name ? "" : "capitalize"}`}>{f.filter_name || label(f.facet)}</span>
               <span className="flex-1 text-right [overflow-wrap:anywhere] max-[520px]:text-left">
                 {f.labels.join(", ")}
                 {f.unmapped.length > 0 && (

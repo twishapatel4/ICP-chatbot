@@ -112,10 +112,10 @@ function useOptions(facet: string | null): Loaded {
   return { options: now.options, error: now.error, retry: () => setTries((t) => t + 1) };
 }
 
-function LoadError({ retry }: { retry: () => void }) {
+function LoadError({ retry, what = "options" }: { retry: () => void; what?: string }) {
   return (
     <p className="m-0 text-[13px] text-warn" role="alert">
-      Could not load the options.{" "}
+      Could not load the {what}.{" "}
       <button type="button" className="underline border-0 bg-transparent p-0 text-warn" onClick={retry}>
         Retry
       </button>
@@ -408,7 +408,9 @@ function GeoField({ values, disabled, countries: { options, error, retry }, fiel
   // The region the Region button shows and the Country list narrows to: the last one picked, else the
   // first one already in the answer (so a restored draft shows it too).
   const [picked, setPicked] = useState<string | null>(null);
-  const region = picked ?? values.map(known).find((v) => v && regionNames.has(v) && quick.includes(v)) ?? "";
+  // a picked region only counts while it is still in the answer (a chip removed, Any chosen, or the cap hit)
+  const stillIn = (r: string) => values.some((v) => v.toLowerCase() === r.toLowerCase());
+  const region = (picked && stillIn(picked) ? picked : values.map(known).find((v) => v && regionNames.has(v) && quick.includes(v))) ?? "";
   const [showAll, setShowAll] = useState(false);
   const narrowed = !!region && !showAll;
 
@@ -431,15 +433,16 @@ function GeoField({ values, disabled, countries: { options, error, retry }, fiel
     <fieldset className="flex flex-col gap-2 min-w-0 m-0 p-0 border-0">
       <legend className="sr-only">{field.label}</legend>
       {error && <LoadError retry={retry} />}
-      <div className={WRAP}>{field.any_allowed && <AnyChip values={values} onChange={onChange} disabled={disabled} />}</div>
+      <div className={WRAP}>{field.any_allowed && <AnyChip values={values} onChange={(v) => { setShowAll(false); setPicked(null); onChange(v); }} disabled={disabled} />}</div>
       <div className="flex flex-wrap gap-2">
         <PickMenu
           label="Region"
           placeholder="Add a region"
           value={region}
-          disabled={disabled || quick.length === 0}
+          disabled={disabled || full || quick.length === 0}
           options={quick}
           onPick={(r) => {
+            if (!values.includes(r) && full) return;
             setPicked(r);
             setShowAll(false);
             // adds the region (the cap and Any are handled by toggle); countries already chosen stay
@@ -661,6 +664,8 @@ export default function StepTwo({ sessionId, cards, saved, disabled, missing, er
 
   const problems = problemSlots(cards, answers, countries);
   const pageProblems = cur ? problemSlots([cur], answers, countries) : [];
+  // on the last screen Continue can wait on an earlier screen: say which
+  const earlier = last ? pages.map((c, i) => ({ c, i, bad: problemSlots([c], answers, countries).length > 0 })).filter((x) => x.i !== at && x.bad) : [];
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -681,7 +686,7 @@ export default function StepTwo({ sessionId, cards, saved, disabled, missing, er
           <p className="m-0 text-center text-[12px] text-muted">
             Question {at + 1} of {pages.length}
           </p>
-          <h1 ref={heading} tabIndex={-1} className="mt-0 mb-1 text-center outline-0 text-[clamp(22px,3vw,28px)] leading-[1.15] font-medium tracking-[-.025em]">{cur.title}</h1>
+          <h2 ref={heading} tabIndex={-1} className="mt-0 mb-1 text-center outline-0 text-[clamp(22px,3vw,28px)] leading-[1.15] font-medium tracking-[-.025em]">{cur.title}</h2>
           <section key={cur.id} className={`${card} flex flex-col gap-3 text-left`} aria-label={cur.title}>
             {fields.map((f) => (
               <div key={f.slot} className="flex flex-col gap-2.5 not-first:mt-2 not-first:pt-4 not-first:border-t not-first:border-line">
@@ -712,6 +717,20 @@ export default function StepTwo({ sessionId, cards, saved, disabled, missing, er
         <button className={primaryBtn} type="submit" disabled={disabled || pageProblems.length > 0 || (last && problems.length > 0)}>
           Continue
         </button>
+        {pageProblems.length === 0 && earlier.length > 0 && (
+          <span className="self-center text-[12px] text-muted">
+            An earlier question needs attention:{" "}
+            {earlier.map((x, k) => (
+              <span key={x.c.id}>
+                {k > 0 && ", "}
+                <button type="button" className="underline border-0 bg-transparent p-0 text-[12px] text-warn" onClick={() => setPage(x.i)}>
+                  {x.c.title}
+                </button>
+              </span>
+            ))}
+          </span>
+        )}
+        {hasGeo && country.error && <LoadError retry={country.retry} what="country list" />}
         {pageProblems.length > 0 && <span className="self-center text-[12px] text-muted">Answer every question above to continue.</span>}
       </div>
     </form>

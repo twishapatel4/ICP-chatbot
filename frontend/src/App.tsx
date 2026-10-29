@@ -459,6 +459,7 @@ export default function App() {
           ) : (
             sessionId && (
               <>
+                <h1 className="sr-only">Profile builder</h1>
                 <StepTwo
                   key={`${sessionId}-${savedAnswers ? "saved" : "none"}`}
                   sessionId={sessionId}
