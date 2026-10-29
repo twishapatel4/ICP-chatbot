@@ -2,6 +2,10 @@ import { useEffect, useId, useRef, useState } from "react";
 import { pillInput } from "../ui";
 import { fuzzyFilter } from "./fuzzy";
 
+const ROW = 36; // px per option
+const LIST_MAX = 240; // the list scrolls past this (max-h-60)
+const CHROME = 64; // search box, padding and the gap to the button
+
 interface Props {
   options: string[];
   label: string;
@@ -18,6 +22,7 @@ export default function PickMenu({ options, label, placeholder, value, disabled,
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
+  const [up, setUp] = useState(false); // not enough room below the button: open above it
   const button = useRef<HTMLButtonElement>(null);
   const base = useId();
   const results = fuzzyFilter(options, q, (o) => o);
@@ -54,6 +59,13 @@ export default function PickMenu({ options, label, placeholder, value, disabled,
         aria-expanded={open}
         disabled={disabled}
         onClick={() => {
+          const r = button.current?.getBoundingClientRect();
+          if (r) {
+            // open below unless the panel would not fit there and there is more room above
+            const need = Math.min(options.length * ROW, LIST_MAX) + CHROME;
+            const below = window.innerHeight - r.bottom;
+            setUp(below < need && r.top > below);
+          }
           setActive(0);
           open ? close() : setOpen(true);
         }}
@@ -73,9 +85,9 @@ export default function PickMenu({ options, label, placeholder, value, disabled,
         {open ? (results.length ? `${results.length} ${results.length === 1 ? "match" : "matches"}` : "No matches") : ""}
       </div>
       {open && (
-        <div className="absolute z-20 left-0 right-0 mt-1 p-1 bg-panel border border-line rounded-[18px] shadow-soft">
+        <div className={`absolute z-20 left-0 right-0 p-1 flex bg-panel border border-line rounded-[18px] shadow-soft ${up ? "bottom-full mb-1 flex-col-reverse" : "mt-1 flex-col"}`}>
           <input
-            className={`${pillInput} block w-full py-2 px-3 mb-1`}
+            className={`${pillInput} block w-full py-2 px-3 ${up ? "mt-1" : "mb-1"}`}
             type="text"
             role="combobox"
             aria-expanded

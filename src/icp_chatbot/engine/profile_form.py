@@ -20,9 +20,8 @@ from icp_chatbot.domain.state import (
 )
 from icp_chatbot.linkedin.catalog import default_catalog
 
-MAX_VALUES = 10
 MAX_VALUE_CHARS = 80
-MAX_RAW_ITEMS = 50  # more than this is rejected without looking at the items
+MAX_RAW_ITEMS = 500  # no limit on picks; more than this is a malformed request, rejected unread
 MAX_RAW_CHARS = 1000  # a longer raw string is rejected without cleaning it
 FORM_EVIDENCE = "step 2 form"
 FORM_CONFIDENCE = 0.9
@@ -226,7 +225,7 @@ def _field_valid(track: Track, field: CardField, values: list[str]) -> bool:
         return False
     if ANY in values:
         return field.any_allowed and values == [ANY]
-    if len(values) > MAX_VALUES or any(len(v) > MAX_VALUE_CHARS for v in values):
+    if any(len(v) > MAX_VALUE_CHARS for v in values):
         return False
     if field.input == "chips":
         return True
@@ -281,7 +280,7 @@ def clean_answers(track: Track, answers: Any) -> dict[str, list[str]]:
         for field in card.fields:
             values = [v for v in _answer(answers, field) or [] if len(v) <= MAX_VALUE_CHARS]
             if values:
-                out[field.slot] = values[:MAX_VALUES]
+                out[field.slot] = values
     return out
 
 

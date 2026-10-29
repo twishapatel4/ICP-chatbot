@@ -136,13 +136,11 @@ def test_geo_needs_a_country_with_free_text_cities():
     assert validate_profile("sales", only_city) == ["lead_geographies"]
 
 
-def test_values_longer_than_80_chars_or_more_than_10_are_rejected():
+def test_values_longer_than_80_chars_are_rejected_but_the_number_of_picks_is_not_limited():
     long = {**B2B, "buyer_roles": ["x" * 81]}
     assert validate_profile("sales", long) == ["buyer_roles"]
-    many = {**B2B, "buyer_roles": [f"title {i}" for i in range(11)]}
-    assert validate_profile("sales", many) == ["buyer_roles"]
-    ten = {**B2B, "buyer_roles": [f"title {i}" for i in range(10)]}
-    assert validate_profile("sales", ten) == []
+    many = {**B2B, "buyer_roles": [f"title {i}" for i in range(60)]}
+    assert validate_profile("sales", many) == []
     spaced = {**B2B, "buyer_roles": ["  a \n  b\t" + "c" * 70]}
     assert validate_profile("sales", spaced) == []
 
@@ -386,10 +384,10 @@ def test_any_rejected_on_experience_level_and_education_level(catalog_has_degree
     assert validate_profile("hr", both) == ["education_level"]
 
 
-def test_length_and_count_limits_on_catalog_slot():
+def test_length_limit_on_catalog_slot_but_no_limit_on_the_number_of_picks():
     assert validate_profile("sales", {**B2B, "industries": ["x" * 81]}) == ["industries"]
-    many = [o.label for o in profile_form.default_catalog().options("industry")[:11]]
-    assert validate_profile("sales", {**B2B, "industries": many}) == ["industries"]
+    many = [o.label for o in profile_form.default_catalog().options("industry")[:25]]
+    assert validate_profile("sales", {**B2B, "industries": many}) == []
 
 
 def test_injection_text_is_stored_verbatim_as_data():

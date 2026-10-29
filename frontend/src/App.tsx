@@ -152,6 +152,11 @@ export default function App() {
   const replyTyped = !lastBot || lastBot.id < firstNewId.current || typed.has(lastBot.id);
 
   useEffect(() => {
+    // the forms of steps 1 and 2 start at the top, under the step indicator
+    if (stage === "step1" || stage === "step2") {
+      window.scrollTo({ top: 0 });
+      return;
+    }
     // the bottom of the page, not of the log: the composer is sticky and would cover the last message
     window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
   }, [messages, stage, icp, options, replyTyped]);
@@ -426,6 +431,9 @@ export default function App() {
       <main className={app}>
         <header className={header}>
           <div className="flex items-center gap-2.5">
+            <span className="inline-flex items-center justify-center size-[42px] rounded-full bg-panel shadow-[0_0_0_1px_var(--line),0_2px_8px_rgba(20,24,31,.08)]">
+              <Icon name="sparkle" size={20} />
+            </span>
             {stage === "step2" && (
               <button onClick={newChat} disabled={busy}>
                 <Icon name="plus" size={18} /> New chat
@@ -439,10 +447,7 @@ export default function App() {
           {stage === "step1" ? (
             <>
               <div className="text-center">
-                <span className="inline-flex items-center justify-center size-16 rounded-full bg-panel shadow-[0_10px_28px_rgba(20,24,31,.1),0_0_0_1px_var(--line)]">
-                  <Icon name="sparkle" size={26} />
-                </span>
-                <h1 className="mt-[26px] mx-0 mb-0 text-[clamp(26px,3.4vw,34px)] leading-[1.15] font-medium tracking-[-.025em]">
+                <h1 className="mt-2 mx-0 mb-0 text-[clamp(26px,3.4vw,34px)] leading-[1.15] font-medium tracking-[-.025em]">
                   <TextEffect preset="fade-in-blur" speedReveal={1.4}>Build your</TextEffect>{" "}
                   <TextEffect preset="fade-in-blur" speedReveal={1.4} delay={0.25} className="text-muted">{profileName(track)}</TextEffect>
                 </h1>
@@ -464,13 +469,7 @@ export default function App() {
                   </div>
                 ))}
               </div>
-              <StepOne busy={busy} error={startError} onTrack={setTrack} onSubmit={(body) => void start(body)} />
-              {busy && (
-                <div className="flex items-center justify-center gap-2 text-[16px] text-muted" role="status">
-                  <BotAvatar type="star" state="working" size={34} aria-hidden="true" />
-                  <TextShimmer>Setting things up...</TextShimmer>
-                </div>
-              )}
+              <StepOne busy={busy} status="Setting things up..." error={startError} onTrack={setTrack} onSubmit={(body) => void start(body)} />
             </>
           ) : (
             sessionId && (
@@ -490,14 +489,9 @@ export default function App() {
                   disabled={busy}
                   missing={missing}
                   error={step2Error}
+                  status="AI is generating your first question..."
                   onSubmit={(a) => void submitProfile(a)}
                 />
-                {busy && (
-                  <div className="flex items-center gap-2 text-[16px] text-muted" role="status">
-                    <BotAvatar type="star" state="working" size={34} aria-hidden="true" />
-                    <TextShimmer>AI is generating your first question...</TextShimmer>
-                  </div>
-                )}
               </>
             )
           )}

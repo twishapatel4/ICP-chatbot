@@ -1,12 +1,13 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import * as api from "../api";
 import type { Card, CardField, ProfileOption } from "../types";
+import { BotAvatar } from "bot-avatars";
+import TextShimmer from "./TextShimmer";
 import PickMenu from "./PickMenu";
 import { fuzzyFilter } from "./fuzzy";
 import { actions, card, chip, chipOn, pillInput, primaryBtn } from "../ui";
 
 export const ANY = "Any";
-const MAX_VALUES = 10;
 const MAX_CHARS = 80;
 const SEARCH_ABOVE = 40; // a facet with more options than this gets a search box, not chips
 const draftKey = (id: string) => `icp-step2-draft-${id}`;
@@ -64,7 +65,7 @@ const answered = (f: CardField, answers: Answers) => (answers[f.slot]?.length ??
 function valid(f: CardField, values: string[], countries: Set<string> | null): boolean {
   if (values.length === 0) return false;
   if (values.includes(ANY)) return f.any_allowed && values.length === 1;
-  if (values.length > MAX_VALUES || values.some((v) => v.length > MAX_CHARS)) return false;
+  if (values.some((v) => v.length > MAX_CHARS)) return false;
   if (f.input === "geo") return !!countries && values.some((v) => countries.has(v.toLowerCase()));
   return true;
 }
@@ -127,9 +128,11 @@ function LoadError({ retry, what = "options" }: { retry: () => void; what?: stri
 
 const WRAP = "flex flex-wrap gap-2";
 
-function Chip({ text, on, onClick, disabled, remove }: { text: string; on?: boolean; onClick: () => void; disabled?: boolean; remove?: boolean }) {
+function Chip({ text, on, onClick, disabled, remove, soft }: { text: string; on?: boolean; onClick: () => void; disabled?: boolean; remove?: boolean; soft?: boolean }) {
+  // `soft` is the light outline style for secondary picks such as cities, apart from the dark chips
+  const look = on ? (soft ? "bg-panel text-ink border-accent" : chipOn) : "";
   return (
-    <button type="button" className={`${chip} py-2 font-medium ${on ? chipOn : ""}`} disabled={disabled} aria-pressed={remove ? undefined : !!on} onClick={onClick}>
+    <button type="button" className={`${on ? "rounded-full py-1 px-3 text-[12px] gap-1" : `${chip} py-2`} font-medium ${look}`} disabled={disabled} aria-pressed={remove ? undefined : !!on} onClick={onClick}>
       {on && !remove ? "✓ " : ""}
       {text}
       {remove ? " ×" : ""}
@@ -147,27 +150,23 @@ function Choice({ text, kind, name, on, onChange, disabled }: { text: string; ki
   );
 }
 
-function AnyChip({ values, onChange, disabled }: { values: string[]; onChange: (v: string[]) => void; disabled: boolean }) {
-  const on = values.includes(ANY);
-  return <Chip text={ANY} on={on} disabled={disabled} onClick={() => onChange(on ? [] : [ANY])} />;
+// "Any" is a small checkbox under the control it belongs to, not one of the options.
+function AnyToggle({ values, onChange, disabled }: { values: string[]; onChange: (v: string[]) => void; disabled: boolean }) {
+  return (
+    <label className="flex items-center gap-1.5 text-[12px] text-muted cursor-pointer">
+      <input className="size-3.5 accent-accent m-0" type="checkbox" checked={values.includes(ANY)} disabled={disabled} onChange={(e) => onChange(e.target.checked ? [ANY] : [])} />
+      Any
+    </label>
+  );
 }
+
 
 // Picking something specific clears Any, and Any clears the specific picks.
 const without = (values: string[]) => values.filter((v) => v !== ANY);
 const toggle = (values: string[], v: string) => {
   if (values.includes(v)) return values.filter((x) => x !== v);
-  const rest = without(values);
-  return rest.length >= MAX_VALUES ? values : [...rest, v];
+  return [...without(values), v];
 };
-const atCap = (values: string[]) => without(values).length >= MAX_VALUES;
-// A polite live region, always mounted so a screen reader announces the count as it changes.
-function CapHint({ count }: { count: number }) {
-  return (
-    <span role="status" aria-live="polite" className="text-[12px] text-muted">
-      {count >= MAX_VALUES ? `Up to ${MAX_VALUES}: limit reached` : count > 0 ? `${count} of ${MAX_VALUES} selected` : ""}
-    </span>
-  );
-}
 
 // An ARIA combobox: type to filter, ArrowUp/ArrowDown to move, Enter to pick, Escape to close.
 // Enter never submits the form from here. Mouse and touch picks work too.
@@ -177,7 +176,6 @@ function SearchPicker({
   suggest,
   placeholder,
   disabled,
-  full,
   onToggle,
 }: {
   options: ProfileOption[];
@@ -185,7 +183,6 @@ function SearchPicker({
   suggest: ProfileOption[]; // shown before anything is typed
   placeholder: string;
   disabled: boolean;
-  full: boolean; // no more values may be added
   onToggle: (label: string) => void;
 }) {
   const [q, setQ] = useState("");
@@ -194,14 +191,13 @@ function SearchPicker({
   const base = useId();
   const results = q.trim() ? fuzzyFilter(options, q, (o) => o.label).slice(0, 12) : suggest.slice(0, 20);
   const shown = open && results.length > 0;
-  const blocked = (o: ProfileOption) => full && !values.includes(o.label);
   const optionId = (i: number) => `${base}-o${i}`;
   useEffect(() => {
     if (shown) document.getElementById(`${base}-o${active}`)?.scrollIntoView({ block: "nearest" });
   }, [shown, active, base]);
 
   function pick(o: ProfileOption | undefined) {
-    if (!o || blocked(o)) return;
+    if (!o) return;
     onToggle(o.label);
     setQ("");
     setOpen(false);
@@ -260,8 +256,7 @@ function SearchPicker({
             id={optionId(i)}
             role="option"
             aria-selected={values.includes(o.label)}
-            aria-disabled={blocked(o) || undefined}
-            className={`rounded-[12px] py-2 px-3 text-[14px] cursor-pointer ${i === active ? "bg-card" : ""} ${blocked(o) ? "opacity-50 cursor-not-allowed" : ""}`}
+            className={`rounded-[12px] py-2 px-3 text-[14px] cursor-pointer ${i === active ? "bg-card" : ""}`}
             onMouseDown={(e) => e.preventDefault()} // keep focus in the input
             onMouseEnter={() => setActive(i)}
             onClick={() => pick(o)}
@@ -281,7 +276,7 @@ function FreeChips({ values, disabled, onChange }: { values: string[]; disabled:
   const add = () => {
     const t = text.trim().slice(0, MAX_CHARS);
     setText("");
-    if (t && values.length < MAX_VALUES && !values.some((v) => v.toLowerCase() === t.toLowerCase())) onChange([...values, t]);
+    if (t && !values.some((v) => v.toLowerCase() === t.toLowerCase())) onChange([...values, t]);
   };
   return (
     <div className="flex flex-col gap-2">
@@ -292,12 +287,11 @@ function FreeChips({ values, disabled, onChange }: { values: string[]; disabled:
           ))}
         </div>
       )}
-      <CapHint count={values.length} />
       <input
         className={`${pillInput} block w-full py-2.5 px-[18px]`}
         type="text"
         maxLength={MAX_CHARS}
-        disabled={disabled || values.length >= MAX_VALUES}
+        disabled={disabled}
         placeholder="Type and press Enter to add"
         aria-label="Add a value"
         value={text}
@@ -330,10 +324,8 @@ function ChoiceField({ field, values, disabled, onChange }: FieldProps) {
   const single = field.input === "single";
   const big = !!field.facet && options.length > SEARCH_ABOVE;
   const top = options.filter((o) => o.level === 1);
-  const full = !single && atCap(values);
   const name = useId();
   const kind = single ? "radio" : "checkbox";
-  const anyOn = values.includes(ANY);
   // a long multi-pick list is a dropdown with the picks listed below, not a wall of boxes
   const menu = !single && !big && !!field.facet;
   const picked = without(values);
@@ -342,7 +334,6 @@ function ChoiceField({ field, values, disabled, onChange }: FieldProps) {
       <legend className="sr-only">{field.label}</legend>
       {error && <LoadError retry={retry} />}
       <div className={WRAP}>
-        {field.any_allowed && <Choice text={ANY} kind={kind} name={name} on={anyOn} disabled={disabled} onChange={() => onChange(single || !anyOn ? [ANY] : [])} />}
         {menu ? null : big
           ? without(values).map((v) => <Chip key={v} text={v} on remove disabled={disabled} onClick={() => onChange(values.filter((x) => x !== v))} />)
           : labels.map((l) => (
@@ -352,20 +343,30 @@ function ChoiceField({ field, values, disabled, onChange }: FieldProps) {
                 kind={kind}
                 name={name}
                 on={values.includes(l)}
-                disabled={disabled || (full && !values.includes(l))}
+                disabled={disabled}
                 onChange={() => onChange(single ? [l] : toggle(values, l))}
               />
             ))}
       </div>
+      {!menu && !big && field.any_allowed && (
+        <div className="flex justify-end">
+          <AnyToggle values={values} onChange={onChange} disabled={disabled} />
+        </div>
+      )}
       {menu && (
         <>
           <PickMenu
             label={field.label}
             placeholder="Choose an option"
-            disabled={disabled || full}
+            disabled={disabled}
             options={labels.filter((l) => !picked.includes(l))}
             onPick={(l) => onChange(toggle(values, l))}
           />
+          {field.any_allowed && (
+            <div className="flex justify-end">
+              <AnyToggle values={values} onChange={onChange} disabled={disabled} />
+            </div>
+          )}
           {picked.length > 0 && (
             <div className={WRAP}>
               {picked.map((v) => (
@@ -375,7 +376,6 @@ function ChoiceField({ field, values, disabled, onChange }: FieldProps) {
           )}
         </>
       )}
-      {!single && <CapHint count={picked.length} />}
       {big && (
         <SearchPicker
           options={options}
@@ -383,15 +383,19 @@ function ChoiceField({ field, values, disabled, onChange }: FieldProps) {
           suggest={top}
           placeholder="Search to add more..."
           disabled={disabled}
-          full={full}
           onToggle={(l) => onChange(single ? [l] : toggle(values, l))}
         />
+      )}
+      {big && field.any_allowed && (
+        <div className="flex justify-end">
+          <AnyToggle values={values} onChange={onChange} disabled={disabled} />
+        </div>
       )}
     </fieldset>
   );
 }
 
-// The geography answer is regions, countries and cities together (10 in all). A region stands for all
+// The geography answer is regions, countries and cities together, with no cap. A region stands for all
 // its countries and stays stored as the region name; a city only counts next to a region or country.
 function GeoField({ values, disabled, countries: { options, error, retry }, field, onChange }: FieldProps) {
   const catalog = useMemo(() => new Map(options.map((o) => [o.label.toLowerCase(), o.label])), [options]);
@@ -403,12 +407,11 @@ function GeoField({ values, disabled, countries: { options, error, retry }, fiel
   const places = values.filter((v) => known(v));
   const cities = values.filter((v) => v !== ANY && !known(v));
   const [city, setCity] = useState("");
-  const full = atCap(values);
 
   // The region the Region button shows and the Country list narrows to: the last one picked, else the
   // first one already in the answer (so a restored draft shows it too).
   const [picked, setPicked] = useState<string | null>(null);
-  // a picked region only counts while it is still in the answer (a chip removed, Any chosen, or the cap hit)
+  // a picked region only counts while it is still in the answer (a chip removed or Any chosen)
   const stillIn = (r: string) => values.some((v) => v.toLowerCase() === r.toLowerCase());
   const region = (picked && stillIn(picked) ? picked : values.map(known).find((v) => v && regionNames.has(v) && quick.includes(v))) ?? "";
   const [showAll, setShowAll] = useState(false);
@@ -420,7 +423,7 @@ function GeoField({ values, disabled, countries: { options, error, retry }, fiel
   const addCity = () => {
     const t = city.trim().slice(0, MAX_CHARS);
     setCity("");
-    if (t && !full && places.length > 0 && !values.some((v) => v.toLowerCase() === t.toLowerCase())) onChange([...values, t]);
+    if (t && places.length > 0 && !values.some((v) => v.toLowerCase() === t.toLowerCase())) onChange([...values, t]);
   };
   const remove = (v: string) => {
     if (v === picked) setPicked(null);
@@ -433,71 +436,93 @@ function GeoField({ values, disabled, countries: { options, error, retry }, fiel
     <fieldset className="flex flex-col gap-2 min-w-0 m-0 p-0 border-0">
       <legend className="sr-only">{field.label}</legend>
       {error && <LoadError retry={retry} />}
-      <div className={WRAP}>{field.any_allowed && <AnyChip values={values} onChange={(v) => { setShowAll(false); setPicked(null); onChange(v); }} disabled={disabled} />}</div>
       <div className="flex flex-wrap gap-2">
         <PickMenu
           label="Region"
           placeholder="Add a region"
           value={region}
-          disabled={disabled || full || quick.length === 0}
+          disabled={disabled || quick.length === 0}
           options={quick}
           onPick={(r) => {
-            if (!values.includes(r) && full) return;
             setPicked(r);
             setShowAll(false);
-            // adds the region (the cap and Any are handled by toggle); countries already chosen stay
+            // adds the region (Any is handled by toggle); countries already chosen stay
             if (!values.includes(r)) onChange(toggle(values, r));
           }}
         />
         <PickMenu
           label="Country"
           placeholder={narrowed ? `Add a country in ${region}` : "Add a country"}
-          disabled={disabled || full || countryOpts.length === 0}
+          disabled={disabled || countryOpts.length === 0}
           options={countryList.map((o) => o.label)}
           detail={narrowed ? undefined : regionOf}
           onPick={(l) => onChange(toggle(values, l))}
         />
       </div>
-      {region && (
-        <button
-          type="button"
-          className="self-start border-0 bg-transparent p-0 text-[12px] text-muted underline"
-          aria-pressed={showAll}
-          onClick={() => setShowAll(!showAll)}
-        >
-          {showAll ? `Only countries in ${region}` : "Show all countries"}
-        </button>
-      )}
-      {shown.length > 0 && (
-        <div className={WRAP}>
-          {shown.map((v) => (
-            <Chip key={v} text={chipText(v)} on remove disabled={disabled} onClick={() => remove(v)} />
-          ))}
+      {(region || field.any_allowed) && (
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          {region ? (
+            <button type="button" className="border-0 bg-transparent p-0 text-[12px] text-muted underline" aria-pressed={showAll} onClick={() => setShowAll(!showAll)}>
+              {showAll ? `Only countries in ${region}` : "Show all countries"}
+            </button>
+          ) : (
+            <span />
+          )}
+          {field.any_allowed && (
+            <AnyToggle
+              values={values}
+              disabled={disabled}
+              onChange={(v) => {
+                setShowAll(false);
+                setPicked(null);
+                onChange(v);
+              }}
+            />
+          )}
         </div>
       )}
-      <input
-        className={`${pillInput} block w-full py-2.5 px-[18px]`}
-        type="text"
-        maxLength={MAX_CHARS}
-        disabled={disabled || full || places.length === 0}
-        placeholder={places.length ? "Add a city (optional), then press Enter" : "Add a region or country first"}
-        aria-label="Add a city"
-        value={city}
-        onChange={(e) => setCity(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === ",") {
-            e.preventDefault();
-            addCity();
-          }
-        }}
-        onBlur={addCity}
-      />
+      {shown.some(known) && (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[12px] text-muted">Regions and countries</span>
+          <div className={WRAP}>
+            {shown.filter(known).map((v) => (
+              <Chip key={v} text={chipText(v)} on remove disabled={disabled} onClick={() => remove(v)} />
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="flex flex-col gap-1.5 mt-1">
+        <span className="text-[12px] text-muted">Cities (optional)</span>
+        {cities.length > 0 && (
+          <div className={WRAP}>
+            {cities.map((v) => (
+              <Chip key={v} text={v} on soft remove disabled={disabled} onClick={() => remove(v)} />
+            ))}
+          </div>
+        )}
+        <input
+          className={`${pillInput} block w-full py-2.5 px-[18px]`}
+          type="text"
+          maxLength={MAX_CHARS}
+          disabled={disabled || places.length === 0}
+          placeholder={places.length ? "Type a city, then press Enter" : "Add a region or country first"}
+          aria-label="Add a city"
+          value={city}
+          onChange={(e) => setCity(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === ",") {
+              e.preventDefault();
+              addCity();
+            }
+          }}
+          onBlur={addCity}
+        />
+      </div>
       {cities.length > 0 && places.length === 0 && (
         <p className="m-0 text-[12px] text-warn" role="alert">
           Cities only count next to a region or country. Add one, or remove the cities.
         </p>
       )}
-      <CapHint count={shown.length} />
     </fieldset>
   );
 }
@@ -531,21 +556,6 @@ function RangeField({ field, values, disabled, onChange }: FieldProps) {
 
   return (
     <div className="flex flex-col gap-2">
-      {field.any_allowed && (
-        <div className={WRAP}>
-          <AnyChip
-            values={values}
-            disabled={disabled}
-            onChange={(v) => {
-              if (v.includes(ANY)) {
-                setFrom("");
-                setTo("");
-              }
-              onChange(v);
-            }}
-          />
-        </div>
-      )}
       <div className="flex flex-wrap items-center gap-2 text-[14px]">
         <label className="flex items-center gap-2">
           From
@@ -593,6 +603,21 @@ function RangeField({ field, values, disabled, onChange }: FieldProps) {
           </select>
         </label>
       </div>
+      {field.any_allowed && (
+        <div className="flex justify-end">
+          <AnyToggle
+            values={values}
+            disabled={disabled}
+            onChange={(v) => {
+              if (v.includes(ANY)) {
+                setFrom("");
+                setTo("");
+              }
+              onChange(v);
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -619,10 +644,11 @@ interface Props {
   disabled: boolean;
   missing: string[]; // slots the server found missing
   error: string; // any other problem with the last submit
+  status?: string; // shown inside the card while the server works
   onSubmit: (answers: Answers) => void;
 }
 
-export default function StepTwo({ sessionId, cards, saved, disabled, missing, error, onSubmit }: Props) {
+export default function StepTwo({ sessionId, cards, saved, disabled, missing, error, status, onSubmit }: Props) {
   const [answers, setAnswers] = useState<Answers>(() => loadDraft(sessionId) ?? saved ?? {});
   const [flagged, setFlagged] = useState<string[]>(missing);
   useEffect(() => setFlagged(missing), [missing]);
@@ -699,6 +725,12 @@ export default function StepTwo({ sessionId, cards, saved, disabled, missing, er
                 <FieldInput field={f} values={answers[f.slot] ?? []} disabled={disabled} countries={country} onChange={(v) => set(f.slot, v)} />
               </div>
             ))}
+            {disabled && status && (
+              <div className="flex items-center justify-center gap-2 text-[14px] text-muted" role="status">
+                <BotAvatar type="star" state="working" size={28} aria-hidden="true" />
+                <TextShimmer>{status}</TextShimmer>
+              </div>
+            )}
           </section>
         </>
       )}

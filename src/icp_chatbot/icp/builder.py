@@ -30,7 +30,6 @@ from icp_chatbot.llm.types import LLM, LLMError, Usage
 from icp_chatbot.versions import ConfigVersionData
 
 EVIDENCE_LIMIT = 200
-MAX_VALUES = 10
 
 
 log = logging.getLogger(__name__)
@@ -169,7 +168,7 @@ async def build_icp(
             if current is None:
                 log.info("synthesis returned a field that was not recorded: %s", draft.slot)
                 continue
-            values = normalize_values(draft.values)[:MAX_VALUES]
+            values = normalize_values(draft.values)
             if not values:
                 continue
             if not _only_reworded(values, current):

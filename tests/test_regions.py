@@ -230,7 +230,7 @@ def test_profile_form_geo_rule_with_regions():
     assert ok(["Europe"]) and ok(["Europe", "Pune"]) and ok(["Middle East", "India"])
     assert not ok(["Pune"]) and not ok(["Pune", "Mumbai"])
     assert ok(["Europe"] + [f"City {i}" for i in range(9)])  # 10 values
-    assert not ok(["Europe"] + [f"City {i}" for i in range(10)])  # 11 values
+    assert ok(["Europe"] + [f"City {i}" for i in range(10)])  # no limit on picks
 
 
 def test_profile_map_never_returns_a_region():

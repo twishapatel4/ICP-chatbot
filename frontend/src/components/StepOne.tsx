@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import * as api from "../api";
 import type { StartRequest, Track } from "../types";
+import { BotAvatar } from "bot-avatars";
+import TextShimmer from "./TextShimmer";
 import PickMenu from "./PickMenu";
 import { actions, card, pillInput, primaryBtn } from "../ui";
 
@@ -28,12 +30,13 @@ const SCREENS: { title: string; fields: Field[] }[] = [
 
 interface Props {
   busy: boolean;
+  status?: string; // shown inside the card while the server works
   error: string;
   onTrack: (track: Track | null) => void; // lets the page wording follow the chosen role
   onSubmit: (body: StartRequest) => void;
 }
 
-export default function StepOne({ busy, error, onTrack, onSubmit }: Props) {
+export default function StepOne({ busy, status, error, onTrack, onSubmit }: Props) {
   const [track, setTrack] = useState<Track | "">("");
   const [company, setCompany] = useState("");
   const [website, setWebsite] = useState("");
@@ -165,6 +168,12 @@ export default function StepOne({ busy, error, onTrack, onSubmit }: Props) {
         <p className="m-0 text-warn text-[14px]" role="alert">
           {error}
         </p>
+      )}
+      {busy && status && (
+        <div className="flex items-center justify-center gap-2 text-[14px] text-muted" role="status">
+          <BotAvatar type="star" state="working" size={28} aria-hidden="true" />
+          <TextShimmer>{status}</TextShimmer>
+        </div>
       )}
       <div className={actions}>
         {screen > 0 && (
