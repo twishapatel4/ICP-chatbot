@@ -13,11 +13,12 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
-from icp_chatbot.domain.slots import SLOTS
+from icp_chatbot.domain.slots import slot_map
 from icp_chatbot.domain.state import SessionState, SlotSource, normalize_values
 from icp_chatbot.icp.document import (
     FieldEntry,
     ICPDocument,
+    build_linkedin_filters,
     compute_completeness,
     group_by_section,
     missing_slots,
@@ -29,7 +30,6 @@ from icp_chatbot.llm.types import LLM, LLMError, Usage
 from icp_chatbot.versions import ConfigVersionData
 
 EVIDENCE_LIMIT = 200
-MAX_VALUES = 10
 
 
 log = logging.getLogger(__name__)
@@ -63,9 +63,10 @@ class BuildResult:
 
 def entries_from_state(state: SessionState, today: date) -> dict[str, FieldEntry]:
     entries = {}
+    standard = slot_map(state.track)
     custom = {f.key for f in state.domain.fields} if state.domain else set()
     for key, value in state.slots.items():
-        if (key not in SLOTS and key not in custom) or not value.values:
+        if (key not in standard and key not in custom) or not value.values:
             continue
         said_by_user = value.source in (SlotSource.STATED, SlotSource.CONFIRMED)
         entries[key] = FieldEntry(
@@ -147,7 +148,7 @@ async def build_icp(
         result = await llm.generate(
             step="final_icp",
             cfg=config.step("final_icp"),
-            system=config.system_prompt("final_icp"),
+            system=config.system_prompt("final_icp", state.track),
             user=_user_message(entries, state),
             schema=ICPSynthesis,
             labels=labels,
@@ -167,7 +168,7 @@ async def build_icp(
             if current is None:
                 log.info("synthesis returned a field that was not recorded: %s", draft.slot)
                 continue
-            values = normalize_values(draft.values)[:MAX_VALUES]
+            values = normalize_values(draft.values)
             if not values:
                 continue
             if not _only_reworded(values, current):
@@ -187,21 +188,26 @@ async def build_icp(
         open_questions.extend(_keep_questions(synthesis.open_questions, exclusions))
 
     shell = ICPDocument(
+        track=state.track,
         sections={},
-        scoring_model=default_scoring_model({}),
-        completeness=compute_completeness({}),
+        scoring_model=default_scoring_model({}, track=state.track),
+        completeness=compute_completeness({}, track=state.track),
         custom_fields=list(state.domain.fields) if state.domain else [],
         not_needed=list(state.domain.not_needed) if state.domain else [],
     )
     needed = shell.needed_defs()
-    open_questions.extend(missing_slots(entries, defs=needed))
+    open_questions.extend(missing_slots(entries, defs=needed, track=state.track))
+    # slots a skip rule hides (B2C seller) stay in the stored state, not in the document
+    hidden = {d.key for d in shell.slot_defs() if not state.is_applicable(d)}
+    entries = {k: e for k, e in entries.items() if k not in hidden}
     slot_values = {key: e.values for key, e in entries.items() if e.values}
     document = shell.model_copy(
         update={
-            "sections": group_by_section(entries, shell.slot_defs()),
-            "scoring_model": default_scoring_model(slot_values, disqualifiers),
-            "summary": render_summary(entries, shell.slot_defs()),
-            "completeness": compute_completeness(entries, needed),
+            "sections": group_by_section(entries, shell.slot_defs(), state.track),
+            "scoring_model": default_scoring_model(slot_values, disqualifiers, track=state.track),
+            "summary": render_summary(entries, shell.slot_defs(), state.track),
+            "completeness": compute_completeness(entries, needed, state.track),
+            "linkedin_filters": build_linkedin_filters(state),
             "open_questions": open_questions,
         }
     )

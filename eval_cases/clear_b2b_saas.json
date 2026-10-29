@@ -20,9 +20,9 @@
   ],
   "expected": {
     "industries": [
-      "banks"
+      "Banking"
     ],
-    "geographies": [
+    "lead_geographies": [
       "Europe"
     ],
     "buyer_roles": [

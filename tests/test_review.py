@@ -29,7 +29,7 @@ def make_doc():
     entries = {
         "industries": FieldEntry(values=["Fintech"], confidence=0.9, source=SlotSource.STATED),
         "company_size": FieldEntry(values=["50-500"], confidence=0.9, source=SlotSource.STATED),
-        "geographies": FieldEntry(values=["Europe"], confidence=0.5, source=SlotSource.INFERRED),
+        "lead_geographies": FieldEntry(values=["Europe"], confidence=0.5, source=SlotSource.INFERRED),
         "buyer_roles": FieldEntry(
             values=["CFO"], confidence=0.9, source=SlotSource.STATED
         ),
@@ -86,11 +86,11 @@ def test_editing_an_unknown_field_is_rejected():
 
 def test_weight_edits_must_total_100_and_record_only_changed_criteria():
     doc, specs = apply_edit(
-        make_doc(), WeightEdit(weights={"industry_fit": 45, "geographic_fit": 15}), TODAY
+        make_doc(), WeightEdit(weights={"industry_fit": 30, "geographic_fit": 15}), TODAY
     )
-    assert {c.key: c.weight for c in doc.scoring_model.criteria}["industry_fit"] == 45
+    assert {c.key: c.weight for c in doc.scoring_model.criteria}["industry_fit"] == 30
     assert [(s.type, s.field, s.old, s.new) for s in specs] == [
-        ("weight_edit", "industry_fit", 35.0, 45.0), ("weight_edit", "geographic_fit", 25.0, 15.0),
+        ("weight_edit", "industry_fit", 25.0, 30.0), ("weight_edit", "geographic_fit", 20.0, 15.0),
     ]  # fmt: skip
     with pytest.raises(ValueError, match="sum to 100"):
         apply_edit(make_doc(), WeightEdit(weights={"industry_fit": 45}), TODAY)
@@ -100,14 +100,14 @@ def test_a_requirement_toggle_updates_the_criterion_and_the_fields_it_reads():
     doc, specs = apply_edit(
         make_doc(), RequirementEdit(criterion="geographic_fit", requirement="required"), TODAY
     )
-    assert doc.entries()["geographies"].requirement == "required"
+    assert doc.entries()["lead_geographies"].requirement == "required"
     assert doc.entries()["industries"].requirement == "preferred"
     assert (specs[0].type, specs[0].old, specs[0].new) == (
         "requirement_toggle",
         "preferred",
         "required",
     )
-    lead = {"industries": ["Fintech"], "geographies": ["Asia"]}
+    lead = {"industries": ["Fintech"], "lead_geographies": ["Asia"]}
     assert not score_lead(doc.scoring_model, lead).qualified
 
 

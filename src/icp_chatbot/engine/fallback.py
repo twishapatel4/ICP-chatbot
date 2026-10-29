@@ -3,11 +3,12 @@ outage, repeated off-topic input, or a user who prefers a form. Signup is never 
 
 from dataclasses import dataclass
 
-from icp_chatbot.domain.slots import SLOT_LIST, SLOTS, Tier
+from icp_chatbot.domain.slots import Tier, Track, registry, slot_map
 from icp_chatbot.domain.state import SessionState, SlotSource, SlotValue, normalize_values
 
 FORM_CONFIDENCE = 0.8
 OPTIONAL_FORM_SLOTS = ("buying_triggers",)
+BRANCH_KEY = "experience_level"  # HR slots that depend on it cannot be judged before the form
 
 
 @dataclass(frozen=True)
@@ -19,16 +20,23 @@ class FormField:
     required: bool
 
 
-def fallback_form() -> list[FormField]:
+def fallback_form(track: Track = "sales") -> list[FormField]:
     """Every tier A slot that blocks completion (required), then a few tier B slots (optional)."""
     fields = [
-        FormField(s.key, s.label, s.description, s.choices, required=True)
-        for s in SLOT_LIST
+        FormField(
+            s.key,
+            s.label,
+            s.description,
+            s.choices,
+            required=not any(k == BRANCH_KEY for k, _ in s.skip_if),
+        )
+        for s in registry(track)
         if s.tier == Tier.A and s.blocks
     ]
+    standard = slot_map(track)
     for key in OPTIONAL_FORM_SLOTS:
-        s = SLOTS[key]
-        fields.append(FormField(s.key, s.label, s.description, s.choices, required=False))
+        if s := standard.get(key):
+            fields.append(FormField(s.key, s.label, s.description, s.choices, required=False))
     return fields
 
 
@@ -37,16 +45,17 @@ def missing_required(answers: dict[str, list[str]], state: SessionState) -> list
     have = {k for k, v in answers.items() if normalize_values(v)} | {
         k for k, v in state.slots.items() if v.values
     }
+    standard = slot_map(state.track)
     return [
         f.key
-        for f in fallback_form()
-        if f.required and f.key not in have and state.is_applicable(SLOTS[f.key])
+        for f in fallback_form(state.track)
+        if f.required and f.key not in have and state.is_applicable(standard[f.key])
     ]
 
 
 def apply_form(state: SessionState, answers: dict[str, list[str]], turn_no: int) -> list[str]:
     """Record form answers as stated values. Unknown fields are an error; empty ones are skipped."""
-    unknown = [k for k in answers if k not in SLOTS]
+    unknown = [k for k in answers if k not in slot_map(state.track)]
     if unknown:
         raise ValueError(f"unknown fields: {sorted(unknown)}")
     applied = []

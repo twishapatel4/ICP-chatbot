@@ -14,7 +14,7 @@
     "El director financiero decide la compra."
   ],
   "expected": {
-    "geographies": [
+    "lead_geographies": [
       "Spain",
       "Mexico"
     ]

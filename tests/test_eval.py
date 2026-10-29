@@ -71,14 +71,14 @@ def test_check_launch_set_reports_every_kind_of_gap():
 
 def test_score_document_measures_precision_recall_and_forbidden_values():
     c = case(
-        expected={"industries": ["banks"], "geographies": ["Europe"]},
+        expected={"industries": ["banks"], "lead_geographies": ["Europe"]},
         forbidden={"product": ["pwned"]},
     )
     perfect = score_document(
-        c, doc(industries=["Banks"], geographies=["Europe"], buyer_roles=["CFO"])
+        c, doc(industries=["Banks"], lead_geographies=["Europe"], buyer_roles=["CFO"])
     )
     assert perfect == (1.0, 1.0, 1.0, 0)  # the extra buyer_roles field is not penalized
-    half = score_document(c, doc(industries=["Banks", "Retail"], geographies=["Asia"]))
+    half = score_document(c, doc(industries=["Banks", "Retail"], lead_geographies=["Asia"]))
     precision, recall, f1, violations = half
     assert (precision, recall) == (1 / 3, 1 / 2) and violations == 0
     assert f1 == pytest.approx(2 * (1 / 3) * (1 / 2) / (1 / 3 + 1 / 2))
@@ -105,11 +105,11 @@ async def test_replay_runs_a_case_end_to_end_and_reports_metrics():
     c = case(
         name="mechanics",
         answers=["We sell payroll to banks", "Banks in Europe", "CFOs"],
-        expected={"industries": ["banks"], "geographies": ["Europe"]},
+        expected={"industries": ["banks"], "lead_geographies": ["Europe"]},
     )
     llm = FakeLLM({
         "opener": [QuestionOutput(question="Hi!")],
-        "interviewer": [ask("Who are your best customers?", up("product", ["Payroll"])), ask("What problems do they have?", up("industries", ["Banks"]), up("geographies", ["Europe"])), ask("Anything else?", up("buyer_roles", ["CFO"]))],
+        "interviewer": [ask("Who are your best customers?", up("product", ["Payroll"])), ask("What problems do they have?", up("industries", ["Banks"]), up("lead_geographies", ["Europe"])), ask("Anything else?", up("buyer_roles", ["CFO"]))],
         "final_icp": [ICPSynthesis()],
     })  # fmt: skip
     result = await replay_case(c, llm, SETTINGS)
@@ -219,3 +219,126 @@ def test_comparing_on_a_lower_is_better_target():
     assert verdict.passed
     with pytest.raises(ValueError):
         compare(base_summary(), base_summary(), target="nonsense")
+
+
+# -- HR cases and the step 2 flow -------------------------------------------------------------------
+
+HR_CASES = ("hr_fresher", "hr_experienced", "hr_both", "hr_vague")
+
+
+def _shipped(name):
+    return next(c for c in load_cases(CASES_DIR) if c.name == name)
+
+
+def test_hr_cases_load_and_use_hr_slots():
+    from icp_chatbot.domain.slots import slot_map
+    from icp_chatbot.engine.profile_form import validate_profile
+
+    cases = {c.name: c for c in load_cases(CASES_DIR)}
+    assert set(HR_CASES) <= set(cases)
+    for name in HR_CASES:
+        c = cases[name]
+        assert c.track == "hr", name
+        assert case_problems(c) == [], name
+        assert c.profile_answers is not None, name
+        assert validate_profile("hr", c.profile_answers) == [], name  # the form would be accepted
+        assert set(c.profile_answers) <= set(slot_map("hr")), name
+        assert c.expected or c.forbidden, name  # a vague case may only forbid inventions
+    levels = {n: cases[n].profile_answers["experience_level"] for n in HR_CASES}
+    assert levels == {
+        "hr_fresher": ["Fresher"],
+        "hr_experienced": ["Experienced"],
+        "hr_both": ["Both"],
+        "hr_vague": ["Both"],
+    }
+    assert "years_experience" not in cases["hr_fresher"].profile_answers
+    assert "years_experience" in cases["hr_both"].profile_answers
+
+
+def test_hr_expectations_list_every_form_value_of_the_slots_they_score():
+    # score_document judges precision over every value in an expected slot, so a form value
+    # left out of `expected` (a city, say) would count as a wrong extra value
+    for name in HR_CASES:
+        c = _shipped(name)
+        for slot, wanted in c.expected.items():
+            given = c.profile_answers.get(slot)
+            if given and given != ["Any"]:
+                assert set(given) <= set(wanted), (name, slot)
+    assert _shipped("hr_vague").expected  # not F1 1.0 by construction
+
+
+def test_required_tags_still_covered():
+    cases = load_cases(CASES_DIR)
+    assert REQUIRED_TAGS <= {t for c in cases for t in c.tags}
+    assert [p for p in check_launch_set(cases) if "cases; the launch set needs" not in p] == []
+    assert {c.track for c in cases} == {"sales", "hr"}
+
+
+def test_b2c_retail_stays_chat_only_and_has_no_form_version():
+    chat = _shipped("b2c_retail")
+    assert chat.profile_answers is None and "b2c" in chat.tags  # like for like with old runs
+    # the Sales form no longer asks the business model, so B2C can only come from the chat
+    assert not (CASES_DIR / "b2c_retail_form.json").exists()
+    assert all(
+        "business_model" not in (c.profile_answers or {}) for c in load_cases(CASES_DIR)
+    )
+
+
+def test_hr_eval_cases_do_not_carry_skills_in_profile_answers():
+    hr_cases = [c for c in load_cases(CASES_DIR) if c.track == "hr"]
+    assert hr_cases
+    for c in hr_cases:
+        for slot in ("required_skills", "candidate_locations"):  # asked in the chat now
+            assert slot not in (c.profile_answers or {}), (c.name, slot)
+        assert case_problems(c) == [], c.name
+        # a location expectation must be stated literally in the scripted chat: the matcher
+        # does not equate "UK" with "United Kingdom"
+        said = " ".join(c.answers).lower()
+        for value in c.expected.get("candidate_locations", []):
+            assert value.lower() in said, (c.name, value)
+
+
+def test_case_problems_flags_a_bad_step_two_form():
+    ok = {
+        "industries": ["Any"],
+        "lead_geographies": ["United Kingdom"],
+        "company_hq_geographies": ["Any"],
+        "buyer_seniority": ["Any"],
+        "buyer_departments": ["Any"],
+    }
+    assert case_problems(case(profile_answers=ok)) == []
+    unknown = case_problems(case(profile_answers={**ok, "nope": ["x"]}))
+    assert any("unknown slot nope" in p for p in unknown)
+    for removed in ("business_model", "company_size"):  # real slots, but not asked by the form
+        flagged = case_problems(case(profile_answers={**ok, removed: ["B2B"]}))
+        assert any(f"unknown slot {removed}" in p for p in flagged)
+    incomplete = case_problems(case(profile_answers={"industries": ["Any"]}))
+    assert any("lead_geographies" in p for p in incomplete)
+    unresolved = case_problems(
+        case(profile_answers={**ok, "lead_geographies": ["Narnia"]})
+    )
+    assert any("lead_geographies" in p for p in unresolved)
+
+
+async def test_replay_runs_an_hr_case_through_its_track_and_the_step_two_form():
+    c = _shipped("hr_fresher")
+    llm = FakeLLM({
+        "opener": [QuestionOutput(question="Hi!")],
+        "interviewer": [ask("Any internships?", up("work_mode", ["Hybrid"])), ask("More?")],
+        "final_icp": [ICPSynthesis()],
+    })  # fmt: skip
+    result = await replay_case(c.model_copy(update={"answers": ["a", "b"]}), llm, SETTINGS)
+    assert result.errors == [] and result.status == "completed"
+    assert result.scoring_valid  # judged against the HR registry, not the Sales one
+    assert result.recall > 0  # the form answers reached the document as stated slots
+
+
+async def test_a_case_without_step_two_answers_still_uses_the_legacy_start():
+    c = case(name="legacy", answers=["a"])
+    assert c.profile_answers is None
+    llm = FakeLLM({
+        "opener": [QuestionOutput(question="Hi!")],
+        "interviewer": [ask("q?")],
+        "final_icp": [ICPSynthesis()],
+    })  # fmt: skip
+    assert (await replay_case(c, llm, SETTINGS)).errors == []

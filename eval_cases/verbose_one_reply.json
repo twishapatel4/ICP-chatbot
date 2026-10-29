@@ -15,9 +15,9 @@
   ],
   "expected": {
     "industries": [
-      "logistics"
+      "Transportation, Logistics, Supply Chain and Storage"
     ],
-    "geographies": [
+    "lead_geographies": [
       "United States"
     ],
     "buyer_roles": [

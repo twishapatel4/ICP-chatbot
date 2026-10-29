@@ -16,7 +16,7 @@
     "No fossil fuel companies."
   ],
   "expected": {
-    "geographies": [
+    "lead_geographies": [
       "Europe"
     ],
     "buyer_roles": [

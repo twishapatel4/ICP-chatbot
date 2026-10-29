@@ -93,11 +93,12 @@ def test_the_form_asks_every_blocking_tier_a_slot_as_required():
     form = fallback_form()
     required = {f.key for f in form if f.required}
     assert required == {
-        "industries", "company_size", "geographies", "buyer_roles",
-        "buyer_departments", "disqualifiers", "product", "business_model", "customer_profile",
+        "industries", "company_size", "lead_geographies", "company_hq_geographies", "buyer_roles",
+        "buyer_departments", "buyer_seniority", "disqualifiers", "product", "business_model",
+        "customer_profile",
     }  # fmt: skip
     size = next(f for f in form if f.key == "company_size")
-    assert "1-10" in size.choices
+    assert "1-10" in size.choices and "10,001+" in size.choices
     assert any(not f.required for f in form)
 
 
@@ -106,12 +107,17 @@ def test_missing_required_ignores_inapplicable_and_already_known_fields():
     state.slots["industries"] = SlotValue(values=["x"], confidence=0.9, source=SlotSource.STATED)
     missing = missing_required({"company_size": ["11-50"]}, state)
     assert (
-        "industries" not in missing and "company_size" not in missing and "geographies" in missing
+        "industries" not in missing
+        and "company_size" not in missing
+        and "lead_geographies" in missing
+        and "company_hq_geographies" in missing
     )
     state.slots["business_model"] = SlotValue(
         values=["B2C"], confidence=0.9, source=SlotSource.STATED
     )
-    assert "buyer_roles" not in missing_required({}, state)
+    b2c_missing = missing_required({}, state)
+    assert "buyer_roles" not in b2c_missing and "company_hq_geographies" not in b2c_missing
+    assert "lead_geographies" in b2c_missing
 
 
 def test_apply_form_records_stated_values_and_rejects_unknown_fields():

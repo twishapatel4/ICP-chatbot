@@ -16,7 +16,7 @@
     "Facility managers."
   ],
   "expected": {
-    "geographies": [
+    "lead_geographies": [
       "Germany"
     ],
     "buyer_roles": [

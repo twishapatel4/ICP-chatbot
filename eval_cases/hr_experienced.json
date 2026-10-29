@@ -1,0 +1,69 @@
+{
+  "name": "hr_experienced",
+  "track": "hr",
+  "tags": [
+    "hr",
+    "experienced"
+  ],
+  "signup": {
+    "company_name": "Northwind Logistics",
+    "role": "Talent Acquisition Lead",
+    "email": "talent@northwind.example"
+  },
+  "profile_answers": {
+    "target_functions": [
+      "Information Technology"
+    ],
+    "target_roles": [
+      "Backend Engineer",
+      "Platform Engineer"
+    ],
+    "experience_level": [
+      "Experienced"
+    ],
+    "years_experience": [
+      "5-10"
+    ],
+    "current_industries": [
+      "Software Development",
+      "IT Services and IT Consulting"
+    ],
+    "current_company_size": [
+      "51-200",
+      "201-500"
+    ]
+  },
+  "answers": [
+    "We need two senior backend engineers to own our routing platform.",
+    "Someone who has run production systems at scale and can mentor juniors.",
+    "Remote within the United Kingdom, full-time. A one month notice period is fine, three is too long.",
+    "Terraform and AWS experience would be a bonus. No agency recruiters' referrals, please."
+  ],
+  "expected": {
+    "experience_level": [
+      "Experienced"
+    ],
+    "years_experience": [
+      "5-10"
+    ],
+    "candidate_locations": [
+      "United Kingdom"
+    ],
+    "work_mode": [
+      "Remote"
+    ],
+    "employment_type": [
+      "Full-time"
+    ]
+  },
+  "forbidden": {
+    "graduation_year": [
+      "2025",
+      "2026"
+    ],
+    "employment_type": [
+      "Internship"
+    ]
+  },
+  "notes": "Experienced only: graduation year is not asked and must not appear."
+}

@@ -28,7 +28,7 @@ def make_state():
         {
             "industries": slot(["fintech", "banks"], evidence="we sell to banks"),
             "company_size": slot(["50-500"]),
-            "geographies": slot(["Europe"], 0.5, SlotSource.INFERRED),
+            "lead_geographies": slot(["Europe"], 0.5, SlotSource.INFERRED),
             "buyer_roles": slot(["CFO"], 0.6, SlotSource.CONFIRMED),
             "disqualifiers": slot(["no government, nothing under 50 people"]),
         }
@@ -40,7 +40,7 @@ def test_last_verified_is_set_only_for_values_the_user_stated_or_confirmed():
     entries = entries_from_state(make_state(), TODAY)
     assert entries["industries"].last_verified == "2026-10-15"
     assert entries["buyer_roles"].last_verified == "2026-10-15"
-    assert entries["geographies"].last_verified is None  # inferred
+    assert entries["lead_geographies"].last_verified is None  # inferred
 
 
 async def test_synthesis_cleans_values_but_keeps_source_and_confidence():
@@ -110,7 +110,7 @@ async def test_summary_and_completeness_follow_the_final_fields():
     )
     doc = result.document
     assert "Target industries: fintech, banks" in doc.summary
-    assert "geographies: Europe (inferred)" in doc.summary
+    assert "based in: Europe (inferred)" in doc.summary
     assert 0.0 < doc.completeness.tier_a < 1.0
     industry = next(c for c in doc.scoring_model.criteria if c.key == "industry_fit")
     assert industry.applicable and industry.rules["industries"].primary == ["fintech", "banks"]
@@ -192,3 +192,25 @@ async def test_open_questions_that_repeat_a_disqualifier_or_each_other_are_dropp
     result = await build_icp(FakeLLM({"final_icp": [synthesis]}), CONFIG, state, today=TODAY)
     model_notes = [n for n in result.document.open_questions if not n.startswith(("Not yet", "Please confirm"))]
     assert model_notes == ["Which port do they ship from?"]
+
+
+async def test_builder_emits_hr_scoring_model_for_hr_state():
+    state = SessionState(track="hr")
+    state.slots.update(
+        {
+            "target_functions": slot(["Engineering"]),
+            "required_skills": slot(["Python"]),
+            "years_experience": slot(["3-8"]),
+        }
+    )
+    result = await build_icp(FakeLLM({"final_icp": [LLMError("x", "y")]}), CONFIG, state, today=TODAY)
+    model = result.document.scoring_model
+    assert [c.key for c in model.criteria] == [
+        "role_fit", "function_fit", "seniority_fit", "experience_fit", "skills_fit",
+        "certifications_fit", "education_fit", "school_fit", "location_fit", "background_fit",
+        "employer_fit",
+    ]  # fmt: skip
+    assert {c.key for c in model.criteria if c.applicable} == {
+        "function_fit", "experience_fit", "skills_fit"
+    }
+    assert validate_model(model, track="hr") == []

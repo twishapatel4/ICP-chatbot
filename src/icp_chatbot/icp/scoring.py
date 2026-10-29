@@ -9,22 +9,68 @@ matching service should reproduce.
 """
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from icp_chatbot.domain.slots import SLOTS
+from icp_chatbot.domain.slots import Track, slot_map
+from icp_chatbot.domain.state import ANY
+from icp_chatbot.linkedin.catalog import SLOT_FACETS, default_catalog
 
-RANGE_SLOTS = frozenset({"company_size"})
+RANGE_SLOTS = frozenset(
+    {
+        "company_size", "years_experience", "current_company_size", "graduation_year",
+        "years_in_operation",
+    }
+)  # fmt: skip
+# A graduation year one off is half a match, further off is none.
+RANGE_TOLERANCE: dict[str, float] = {"graduation_year": 0.001}
+DEFAULT_TOLERANCE = 0.2
+
+Criteria = tuple[tuple[str, str, float, tuple[str, ...]], ...]
 
 # (key, label, default weight, slots read). Illustrative defaults; users edit them.
-CRITERIA_DEFS: tuple[tuple[str, str, float, tuple[str, ...]], ...] = (
-    ("industry_fit", "Industry fit", 35.0, ("industries", "customer_segments")),
-    ("company_size", "Company size", 25.0, ("company_size",)),
-    ("buying_signals", "Buying signals", 15.0, ("buying_triggers",)),
-    ("geographic_fit", "Geographic fit", 25.0, ("geographies",)),
+# Criteria on a derived slot (guessed from a job title) weigh 5 at most.
+SALES_CRITERIA: Criteria = (
+    ("industry_fit", "Industry fit", 25.0, ("industries", "customer_segments")),
+    ("company_size", "Company size", 15.0, ("company_size",)),
+    ("company_type_fit", "Company type fit", 5.0, ("company_type",)),
+    ("company_age_fit", "Company age fit", 5.0, ("years_in_operation",)),
+    ("buying_signals", "Buying signals", 10.0, ("buying_triggers",)),
+    ("geographic_fit", "Geographic fit", 20.0, ("lead_geographies", "company_hq_geographies")),
+    ("buyer_fit", "Buyer fit", 10.0, ("buyer_roles",)),
+    ("seniority_fit", "Seniority fit", 5.0, ("buyer_seniority",)),
+    ("department_fit", "Department fit", 5.0, ("buyer_departments",)),
 )
+HR_CRITERIA: Criteria = (
+    ("role_fit", "Role fit", 20.0, ("target_roles",)),
+    ("function_fit", "Function fit", 5.0, ("target_functions",)),
+    ("seniority_fit", "Seniority fit", 5.0, ("target_seniority",)),
+    ("experience_fit", "Experience fit", 15.0, ("years_experience",)),
+    ("skills_fit", "Skills fit", 15.0, ("required_skills", "nice_to_have_skills")),
+    ("certifications_fit", "Certifications fit", 5.0, ("certifications",)),
+    (
+        "education_fit", "Education fit", 10.0,
+        ("education_level", "field_of_study", "graduation_year"),
+    ),
+    ("school_fit", "School fit", 5.0, ("target_schools",)),
+    ("location_fit", "Location fit", 10.0, ("candidate_locations",)),
+    ("background_fit", "Background fit", 5.0, ("current_industries", "current_company_size")),
+    ("employer_fit", "Employer fit", 5.0, ("source_companies",)),
+)  # fmt: skip
+# Criteria whose second read slot is not a rule of its own but the half-credit list of the first:
+# {criterion key: {primary slot: secondary slot}}. The rule is keyed by the primary slot (the
+# secondary slot stays in `reads`, so editing it refreshes the rule); with no primary values
+# there is no rule, so a nice-to-have-only profile builds no rule and the criterion drops out.
+# Keyed by criterion key, so a stored skills_fit that reads only required_skills also gets the
+# half-credit list when its rules are rebuilt.
+SECONDARY_READS: dict[str, dict[str, str]] = {
+    "skills_fit": {"required_skills": "nice_to_have_skills"},
+}
+CRITERIA_BY_TRACK: dict[Track, Criteria] = {"sales": SALES_CRITERIA, "hr": HR_CRITERIA}
+CRITERIA_DEFS = SALES_CRITERIA  # kept for callers that predate tracks
 WEIGHT_TOTAL = 100.0
 EPSILON = 1e-6
 
@@ -110,10 +156,89 @@ def loose_equal(a: str, b: str) -> bool:
     return len(a) >= 3 and len(b) >= 3 and (a in b or b in a)
 
 
-def list_match(lead_values: list[str], rule: MatchRule) -> float:
-    if any(loose_equal(v, p) for v in lead_values for p in rule.primary):
+_LEGAL_SUFFIXES = frozenset(
+    "inc incorporated ltd limited llc plc pvt private gmbh corp corporation co company "
+    "sa ag bv srl".split()
+)
+
+
+def _company_tokens(name: str) -> list[str]:
+    folded = "".join(
+        c for c in unicodedata.normalize("NFKD", name.casefold()) if not unicodedata.combining(c)
+    )  # "Société Générale" is "Societe Generale"
+    tokens = re.sub(r"\W+", " ", folded.replace("&", " and ")).split()  # "AT&T" is "AT and T"
+    while tokens and tokens[-1] in _LEGAL_SUFFIXES:
+        tokens.pop()  # "Acme Corp." and "Acme Corporation" are the same company
+    return tokens
+
+
+def company_match(candidate: str, avoided: str) -> bool:
+    """Whole-name match of a company name against a listed one. Names are compared without case,
+    punctuation and trailing legal suffixes (Inc, Ltd, Pvt, GmbH, ...). They match when equal, or
+    when the listed name has two or more words and appears as a whole-word run inside the
+    candidate ("Tata Consultancy" matches "Tata Consultancy Services Ltd"). A one-word listed
+    name matches only exactly: "Meta" does not match "Metal Works" or "Meta Platforms"."""
+    want, have = _company_tokens(avoided), _company_tokens(candidate)
+    if not want or not have:
+        return False
+    if want == have:
+        return True
+    n = len(want)
+    return n >= 2 and any(have[i : i + n] == want for i in range(len(have) - n + 1))
+
+
+# Fields holding company names, matched by whole name; every other field uses loose_equal.
+COMPANY_NAME_FIELDS = frozenset({"source_companies", "avoid_companies"})
+
+
+# Geography fields: a value is a country (name, alias or ISO-2 code), a region, or free text
+# such as a city. Matched by whole name, never by substring ("Oman" is not in "Romania").
+COUNTRY_FIELDS = frozenset(
+    {"lead_geographies", "company_hq_geographies", "candidate_locations", "current_company_hq"}
+)
+
+
+def country_match(candidate: object, wanted: object) -> bool:
+    """Whole-name match of a lead's geography against a rule value. Both sides are resolved
+    through the country catalog ("US", "United States" and "united states" are one option). They
+    match when they resolve to the same option, or when `wanted` is a region and `candidate` is
+    one of its countries. Values the catalog does not know (cities) match only when equal
+    after case and whitespace normalisation. A location line such as "Berlin, Germany" matches
+    as a whole value or by its last comma-separated part (the country position), so
+    "Georgia, USA" is the United States, not the country Georgia. Non-text values never match."""
+    if not isinstance(candidate, str) or not isinstance(wanted, str):
+        return False
+    if not candidate.strip() or not wanted.strip():
+        return False
+    if _country_match_one(candidate, wanted):
+        return True
+    if "," in candidate:
+        last = candidate.rsplit(",", 1)[1].strip()
+        return bool(last) and _country_match_one(last, wanted)
+    return False
+
+
+def _country_match_one(candidate: str, wanted: str) -> bool:
+    catalog = default_catalog()
+    have, want = catalog.resolve("country", candidate), catalog.resolve("country", wanted)
+    if have is None and want is None:
+        return _norm(candidate) == _norm(wanted)
+    if have is None or want is None:
+        return False
+    return have.id == want.id or (want.level == 1 and have.level == 2 and have.parent == want.label)
+
+
+def _matcher(slot: str):
+    if slot in COMPANY_NAME_FIELDS:
+        return company_match
+    return country_match if slot in COUNTRY_FIELDS else loose_equal
+
+
+def list_match(lead_values: list[str], rule: MatchRule, slot: str = "") -> float:
+    same = _matcher(slot)
+    if any(same(v, p) for v in lead_values for p in rule.primary):
         return 1.0
-    if any(loose_equal(v, p) for v in lead_values for p in rule.secondary):
+    if any(same(v, p) for v in lead_values for p in rule.secondary):
         return 0.5
     return 0.0
 
@@ -129,10 +254,13 @@ def range_match(value: float, rule: MatchRule) -> float:
     return 0.5 if distance <= rule.tolerance * reference else 0.0
 
 
-def _slot_score(rule: MatchRule, lead_values: list[str]) -> float | None:
+def _slot_score(rule: MatchRule, lead_values: list[str], slot: str = "") -> float | None:
     """Score for one slot, or None when the lead's data cannot be read."""
     if rule.kind == "list":
-        return list_match(lead_values, rule)
+        return list_match(lead_values, rule, slot)
+    # text values kept next to the range ("Self-employed") match the lead's text as a list would
+    if rule.primary and list_match(lead_values, rule, slot):
+        return 1.0
     for text in lead_values:
         bounds = parse_range(text)
         value = _midpoint(bounds) if bounds else None
@@ -144,34 +272,69 @@ def _slot_score(rule: MatchRule, lead_values: list[str]) -> float | None:
 # -- building and editing the model --------------------------------------------------------------
 
 
-def build_rule(slot_key: str, values: list[str]) -> MatchRule | None:
+def build_rule(
+    slot_key: str, values: list[str], secondary: list[str] | None = None
+) -> MatchRule | None:
+    """A rule for one slot; `secondary` (list rules only) earns half credit."""
     values = [v for v in values if v.strip()]
-    if not values:
+    if not values or any(v.strip().lower() == ANY.lower() for v in values):
         return None
     if slot_key in RANGE_SLOTS:
         ranges = [r for r in (parse_range(v) for v in values) if r]
         if ranges:
             lo = None if any(r[0] is None for r in ranges) else min(r[0] for r in ranges)
             hi = None if any(r[1] is None for r in ranges) else max(r[1] for r in ranges)
-            return MatchRule(kind="range", min=lo, max=hi)
-    return MatchRule(kind="list", primary=values)
+            words = [v for v in values if not parse_range(v)]  # kept, not silently dropped
+            return MatchRule(
+                kind="range",
+                primary=words,
+                min=lo,
+                max=hi,
+                tolerance=RANGE_TOLERANCE.get(slot_key, DEFAULT_TOLERANCE),
+            )
+    extra = [v for v in (secondary or []) if v.strip() and v.strip().lower() != ANY.lower()]
+    return MatchRule(kind="list", primary=_with_region_countries(slot_key, values), secondary=extra)
 
 
-def _rules_for(reads: tuple[str, ...] | list[str], slot_values: dict[str, list[str]]):
+def _with_region_countries(slot_key: str, values: list[str]) -> list[str]:
+    """A region among a country slot's values ("Europe") also matches every country in it."""
+    if SLOT_FACETS.get(slot_key) != "country":
+        return values
+    catalog = default_catalog()
+    out = list(values)
+    for v in values:
+        for country in catalog.region_countries(v) or []:
+            if country.label not in out:
+                out.append(country.label)
+    return out
+
+
+def _rules_for(
+    reads: tuple[str, ...] | list[str],
+    slot_values: dict[str, list[str]],
+    secondary: dict[str, str] | None = None,
+):
+    secondary = secondary or {}
+    fed = set(secondary.values())  # slots that only feed another slot's half-credit list
     rules = {}
     for slot in reads:
-        rule = build_rule(slot, slot_values.get(slot, []))
+        if slot in fed:
+            continue
+        extra = slot_values.get(secondary[slot], []) if slot in secondary else None
+        rule = build_rule(slot, slot_values.get(slot, []), extra)
         if rule:
             rules[slot] = rule
     return rules
 
 
 def default_scoring_model(
-    slot_values: dict[str, list[str]], disqualifiers: list[Disqualifier] | None = None
+    slot_values: dict[str, list[str]],
+    disqualifiers: list[Disqualifier] | None = None,
+    track: Track = "sales",
 ) -> ScoringModel:
     criteria = []
-    for key, label, weight, reads in CRITERIA_DEFS:
-        rules = _rules_for(reads, slot_values)
+    for key, label, weight, reads in CRITERIA_BY_TRACK[track]:
+        rules = _rules_for(reads, slot_values, SECONDARY_READS.get(key))
         criteria.append(
             Criterion(
                 key=key,
@@ -190,7 +353,7 @@ def refresh_model(model: ScoringModel, slot_values: dict[str, list[str]]) -> Sco
     flags and disqualifiers as the user set them."""
     criteria = []
     for c in model.criteria:
-        rules = _rules_for(c.reads, slot_values)
+        rules = _rules_for(c.reads, slot_values, SECONDARY_READS.get(c.key))
         criteria.append(c.model_copy(update={"rules": rules, "applicable": bool(rules)}))
     return model.model_copy(update={"criteria": criteria})
 
@@ -225,7 +388,9 @@ def set_requirement(model: ScoringModel, key: str, requirement: str) -> ScoringM
 
 DISQUALIFIER_FIELDS = frozenset(
     {
-        "industries", "geographies", "company_size", "company_type",
+        "industries", "lead_geographies", "company_hq_geographies", "company_size",
+        "company_type", "candidate_locations", "current_industries", "current_company_size",
+        "avoid_companies",
     }
 )  # fmt: skip
 
@@ -242,8 +407,9 @@ def make_disqualifier(field_name: str, operator: str, values: list[str]) -> Disq
     return Disqualifier(field=field_name, operator=operator, values=values)
 
 
-def validate_model(model: ScoringModel) -> list[str]:
+def validate_model(model: ScoringModel, track: Track = "sales") -> list[str]:
     """Problems that make the model unusable; an empty list means it is valid."""
+    known_slots = slot_map(track)
     errors: list[str] = []
     keys = [c.key for c in model.criteria]
     if len(keys) != len(set(keys)):
@@ -253,7 +419,7 @@ def validate_model(model: ScoringModel) -> list[str]:
         errors.append(f"weights sum to {total:g}, not {WEIGHT_TOTAL:g}")
     for c in model.criteria:
         for slot in c.reads:
-            if slot not in SLOTS:
+            if slot not in known_slots:
                 errors.append(f"{c.key} reads unknown slot {slot}")
         for slot, rule in c.rules.items():
             if slot not in c.reads:
@@ -266,7 +432,7 @@ def validate_model(model: ScoringModel) -> list[str]:
                 elif rule.min is not None and rule.max is not None and rule.min > rule.max:
                     errors.append(f"{c.key}/{slot}: minimum is above maximum")
     for d in model.disqualifiers:
-        if d.field not in SLOTS:
+        if d.field not in known_slots:
             errors.append(f"disqualifier names unknown field {d.field}")
         if not d.values:
             errors.append(f"disqualifier on {d.field} has no values")
@@ -291,7 +457,8 @@ def _disqualifier_hit(d: Disqualifier, lead: dict[str, list[str]]) -> bool:
     if not values:
         return False  # unknown data never disqualifies
     if d.operator in ("in", "not_in", "eq"):
-        found = any(loose_equal(v, x) for v in values for x in d.values)
+        same = _matcher(d.field)
+        found = any(same(v, x) for v in values for x in d.values)
         return found if d.operator in ("in", "eq") else not found
     bounds = next((b for b in (parse_range(v) for v in values) if b), None)
     value = _midpoint(bounds) if bounds else None
@@ -312,7 +479,7 @@ def score_lead(model: ScoringModel, lead: dict[str, list[str]]) -> ScoreResult:
         parts = [
             s
             for slot, rule in c.rules.items()
-            if lead.get(slot) and (s := _slot_score(rule, lead[slot])) is not None
+            if lead.get(slot) and (s := _slot_score(rule, lead[slot], slot)) is not None
         ]
         if parts:
             scored.append((c, sum(parts) / len(parts)))

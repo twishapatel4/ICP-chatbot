@@ -1,0 +1,55 @@
+{
+  "name": "hr_fresher",
+  "track": "hr",
+  "tags": [
+    "hr",
+    "fresher",
+    "short_answers"
+  ],
+  "signup": {
+    "company_name": "Brightloop Software",
+    "role": "HR Manager",
+    "email": "hr@brightloop.example"
+  },
+  "profile_answers": {
+    "target_functions": [
+      "Engineering"
+    ],
+    "target_roles": [
+      "Junior Software Engineer",
+      "Graduate Trainee"
+    ],
+    "experience_level": [
+      "Fresher"
+    ]
+  },
+  "answers": [
+    "We take a batch of graduates every year and train them for six months.",
+    "Final-year or just-graduated students. Internships are a plus.",
+    "Hybrid, full-time. We pay in the range of 4 to 6 lakh per year.",
+    "No one with active backlogs."
+  ],
+  "expected": {
+    "experience_level": [
+      "Fresher"
+    ],
+    "target_functions": [
+      "Engineering"
+    ],
+    "work_mode": [
+      "Hybrid"
+    ],
+    "employment_type": [
+      "Full-time"
+    ]
+  },
+  "forbidden": {
+    "years_experience": [
+      "5+"
+    ],
+    "current_industries": [
+      "Banking"
+    ]
+  },
+  "notes": "Fresher only: the experience card is not shown, so no experience range or background may be invented."
+}
