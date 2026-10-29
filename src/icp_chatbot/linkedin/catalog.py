@@ -150,6 +150,13 @@ class OptionCatalog:
         rest = [o for o in opts if needle in _norm(o.label) and o not in starts]
         return (starts + rest)[:limit]
 
+    def region_countries(self, text: str) -> list[Option] | None:
+        """The countries of a region ("Europe"), or None when `text` is not a region."""
+        found = self.resolve("country", text)
+        if found is None or found.level != 1:
+            return None
+        return [o for o in self._options["country"] if o.parent == found.label]
+
     def resolve(self, facet: str, text: str) -> Option | None:
         """Labels and match aliases match case-insensitively; ids match exactly ("IN", not "in"),
         so short free text such as "in" or "no" is not read as a code."""

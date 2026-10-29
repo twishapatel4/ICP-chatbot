@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from icp_chatbot.domain.slots import Track, slot_map
 from icp_chatbot.domain.state import ANY
+from icp_chatbot.linkedin.catalog import SLOT_FACETS, default_catalog
 
 RANGE_SLOTS = frozenset(
     {
@@ -244,7 +245,20 @@ def build_rule(
                 tolerance=RANGE_TOLERANCE.get(slot_key, DEFAULT_TOLERANCE),
             )
     extra = [v for v in (secondary or []) if v.strip() and v.strip().lower() != ANY.lower()]
-    return MatchRule(kind="list", primary=values, secondary=extra)
+    return MatchRule(kind="list", primary=_with_region_countries(slot_key, values), secondary=extra)
+
+
+def _with_region_countries(slot_key: str, values: list[str]) -> list[str]:
+    """A region among a country slot's values ("Europe") also matches every country in it."""
+    if SLOT_FACETS.get(slot_key) != "country":
+        return values
+    catalog = default_catalog()
+    out = list(values)
+    for v in values:
+        for country in catalog.region_countries(v) or []:
+            if country.label not in out:
+                out.append(country.label)
+    return out
 
 
 def _rules_for(

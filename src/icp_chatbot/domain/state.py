@@ -111,9 +111,12 @@ def resolve_slot_values(
                 unmapped.append(value)
             continue
         labels.append(opt.label)
-        if (facet, opt.id) not in seen_refs:
-            seen_refs.add((facet, opt.id))
-            refs.append(OptionRef(facet=facet, id=opt.id, level=opt.level, parent=opt.parent))
+        # a region stands for all its countries: the value stays "Europe", the refs are the countries
+        covered = catalog.region_countries(opt.label) if facet == "country" else None
+        for ref_opt in covered if covered is not None else [opt]:
+            if (facet, ref_opt.id) not in seen_refs:
+                seen_refs.add((facet, ref_opt.id))
+                refs.append(OptionRef(facet=facet, id=ref_opt.id, level=ref_opt.level, parent=ref_opt.parent))
     return normalize_values(labels), refs, normalize_values(unmapped)
 
 
