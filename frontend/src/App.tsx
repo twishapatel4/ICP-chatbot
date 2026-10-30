@@ -144,7 +144,8 @@ export default function App() {
   const firstNewId = useRef(nextId.current); // messages restored after a reload show at once, not typed out
 
   const push = useCallback((role: Message["role"], text: string, live = false) => {
-    setMessages((m) => [...m, { id: nextId.current++, role, text, ...(live && { live }) }]);
+    // one error at a time: a new one replaces the old and animates in again
+    setMessages((m) => [...(role === "error" ? m.filter((x) => x.role !== "error") : m), { id: nextId.current++, role, text, ...(live && { live }) }]);
   }, []);
 
   // The profile panel beside the chat. On a phone-sized screen it covers the chat, so it starts
@@ -312,6 +313,7 @@ export default function App() {
     const next = turn.progress;
     if (next) setProgress((p) => ({ percent: Math.max(p.percent, next.percent), known: Math.max(p.known, next.known), total: next.total }));
     if (turn.status === "fallback" || turn.fallback_form) return showFallback(turn.stop_reason);
+    setMessages((m) => (m.some((x) => x.role === "error") ? m.filter((x) => x.role !== "error") : m));
     if (turn.notice) push("error", turn.notice);
     if (turn.question) {
       push("bot", turn.question.text, true);
@@ -389,6 +391,30 @@ export default function App() {
     return guarded(async () => handleTurn(await call(sessionId, text)));
   };
 
+  // The pencil on the last answer edits it in place. Saving drops that answer and the bot's
+  // reply to it (also from the stored chat on the server), then sends the new text.
+  const [editing, setEditing] = useState<{ index: number; draft: string } | null>(null);
+  const canEdit = stage === "interview" && !revising && !busy;
+  const saveEdit = () =>
+    guarded(async () => {
+      if (!editing || !sessionId) return;
+      const { index } = editing;
+      const draft = editing.draft.trim();
+      const target = messages[index];
+      if (!draft || target?.role !== "me") return;
+      if (draft !== target.text) {
+        const skip = messages.slice(index + 1).filter((x) => x.role === "me" && x.text === target.text).length;
+        await api.undoAnswer(sessionId, target.text, skip);
+        setMessages((m) => [...m.slice(0, index), { id: nextId.current++, role: "me", text: draft }]);
+        setOptions([]);
+        setPicked([]);
+        setEditing(null);
+        handleTurn(await api.sendAnswer(sessionId, draft));
+      } else {
+        setEditing(null);
+      }
+    });
+
   const choose = (o: string, byPointer = false) => {
     if (!multi) return send(o);
     setPicked((p) => (p.includes(o) ? p.filter((x) => x !== o) : [...p, o]));
@@ -432,7 +458,7 @@ export default function App() {
     const hasUnclear = (icp?.document.open_questions.length ?? 0) > 0;
     push("bot", hasUnclear
       ? "Would you like to clear up the unclear questions, or is there something in the profile you want to fix?"
-      : approved ? "Happy to keep going. What would you like to change or add?" : "Sorry about that. What should be changed or added?");
+      : approved ? "Happy to keep going. What would you like to change or add?" : "What would you like to change or add?");
     if (hasUnclear) {
       setOptions(["Answer the unclear questions", "Fix something in the profile"]);
       setMulti(false);
@@ -633,7 +659,35 @@ export default function App() {
 
       <div className={`${column} flex-1 flex flex-col gap-3 pt-2 pb-[18px] ${gutter}`} aria-live="polite">
         {messages.map((m, i) => (
-            <InView key={m.id} className={MSG_CLASS[m.role]}>
+            <div key={m.id} className={m.role === "me" ? "flex items-center justify-end gap-2 group" : "contents"}>
+            {m.role === "me" && canEdit && i === messages.map((x) => x.role).lastIndexOf("me") && (
+              <button type="button" title="Edit this answer" aria-label="Edit this answer" onClick={() => setEditing({ index: i, draft: m.text })}
+                className="shrink-0 size-8 grid place-items-center rounded-full border-0 bg-transparent text-muted cursor-pointer hover:text-ink">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                </svg>
+              </button>
+            )}
+            {editing?.index === i ? (
+              <div className="flex flex-col items-end gap-2 w-full max-w-[85%]">
+                <textarea
+                  autoFocus
+                  value={editing.draft}
+                  onChange={(e) => setEditing({ index: i, draft: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveEdit(); }
+                    if (e.key === "Escape") setEditing(null);
+                  }}
+                  rows={2}
+                  className="w-full rounded-[18px] border border-line bg-panel py-3 px-[18px] text-[16px] resize-y"
+                />
+                <div className="flex gap-2">
+                  <button type="button" disabled={busy} onClick={() => setEditing(null)}>Cancel</button>
+                  <button type="button" className={primaryBtn} disabled={busy || !editing.draft.trim()} onClick={saveEdit}>Save and resend</button>
+                </div>
+              </div>
+            ) : (
+            <InView className={MSG_CLASS[m.role]}>
               {m.role === "note" && stage === "building" && i === messages.length - 1 ? (
                 <TextShimmer>{m.text}</TextShimmer>
               ) : m.role === "bot" && m.live && m.id >= firstNewId.current && !typed.has(m.id) ? (
@@ -642,6 +696,8 @@ export default function App() {
                 m.text
               )}
             </InView>
+            )}
+            </div>
         ))}
 
         {options.length > 0 && replyTyped && (

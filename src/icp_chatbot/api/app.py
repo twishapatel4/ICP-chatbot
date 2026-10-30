@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 
 from icp_chatbot.api.schemas import (
     AnswerRequest,
+    UndoRequest,
     CardOut,
     FormFieldOut,
     FormRequest,
@@ -237,6 +238,16 @@ def create_app(
         ct: Container = Depends(c),
     ):
         return TurnResponse.of(await ct.engine.revise(tenant_id, session_id, body.text))
+
+    @app.post("/sessions/{session_id}/undo", response_model=TurnResponse)
+    async def undo(
+        session_id: str,
+        body: UndoRequest | None = None,
+        tenant_id: str = Depends(tenant),
+        ct: Container = Depends(c),
+    ):
+        text, skip = (body.text, body.skip) if body else (None, 0)
+        return TurnResponse.of(await ct.engine.undo(tenant_id, session_id, text, skip))
 
     @app.post("/sessions/{session_id}/finish", response_model=TurnResponse)
     async def finish(session_id: str, tenant_id: str = Depends(tenant), ct: Container = Depends(c)):

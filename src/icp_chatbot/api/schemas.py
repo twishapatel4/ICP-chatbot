@@ -130,6 +130,18 @@ class SessionCreated(BaseModel):
     cards: list[CardOut]
 
 
+class UndoRequest(BaseModel):
+    """Go back to the answer with this text; skip counts later answers with the same text."""
+
+    text: str
+    skip: int = Field(default=0, ge=0, le=100)
+
+    @field_validator("text")
+    @classmethod
+    def _clean(cls, value: str) -> str:
+        return no_nul(value)
+
+
 class AnswerRequest(BaseModel):
     text: str  # length is checked by the engine against MAX_ANSWER_CHARS
 

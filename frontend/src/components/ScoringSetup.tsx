@@ -30,6 +30,7 @@ export function looksFor(c: Criterion): string {
 }
 
 const key = (q: PriorityQuestion) => `${q.a}|${q.b}`;
+const WARN_SHARE = 50; // mirrors icp/scoring.py
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
 // What they answered and whether they got past the questions; the parent keeps it so leaving the
@@ -110,6 +111,8 @@ export default function ScoringSetup({
   const w = (k: string) => parseFloat(weights[k]) || 0;
   const total = criteria.reduce((sum, c) => sum + w(c.key), 0);
   const sums = Math.abs(total - 100) < 1e-6;
+  // one criterion carrying most of the score makes the others nearly irrelevant
+  const heavy = criteria.filter((c) => w(c.key) > WARN_SHARE);
   const dirty =
     threshold !== model.threshold ||
     criteria.some(
@@ -338,6 +341,12 @@ export default function ScoringSetup({
             </li>
           ))}
         </ul>
+        {heavy.length > 0 && (
+          <p className="m-0 text-[13px] text-warn" role="status">
+            {heavy.map((c) => c.label).join(", ")} carries most of the score, so the other criteria barely
+            change it. Consider lowering it.
+          </p>
+        )}
         <div className="flex flex-wrap items-center justify-end gap-3 text-[13px]">
           {!sums && (
             <span className="text-warn">Weights must add up to 100</span>

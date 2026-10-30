@@ -110,3 +110,58 @@ def test_a_lead_meets_the_threshold_only_at_or_above_it():
     lead = {"industries": ["Fintech"], "company_size": ["50"], "buyer_roles": ["CFO"]}
     assert score_lead(m, lead).meets_threshold
     assert not score_lead(set_threshold(m, 100), {**lead, "industries": ["Retail"]}).meets_threshold
+
+
+@pytest.mark.parametrize("values", [THIN, RICH, {**THIN, "lead_geographies": ["EU"]}])
+@pytest.mark.parametrize("value", [-2, 0, 2])
+def test_no_factor_takes_more_than_45_with_three_or_more(values, value):
+    m = default_scoring_model(values)
+    w = weights_from_priorities(m, answers(m, value))
+    assert sum(w.values()) == 100 and max(w.values()) <= 45
+
+
+def test_one_sided_answers_cannot_push_one_factor_past_the_cap():
+    m = default_scoring_model(THIN)  # industry already weighs 50 by default
+    qs = priority_questions(m)
+    w = weights_from_priorities(m, [PriorityAnswer(a=q.a, b=q.b, value=2) for q in qs])
+    assert max(w.values()) == 45 and min(w[k] for k in applicable(m)) > 0
+
+
+def test_a_factor_asked_twice_is_not_pushed_twice_as_far():
+    m = default_scoring_model(RICH)
+    qs = priority_questions(m)
+    keys = [k for q in qs for k in (q.a, q.b)]
+    twice = next(k for k in keys if keys.count(k) > 1)  # the bridge pair repeats a factor
+    favour = [
+        PriorityAnswer(a=q.a, b=q.b, value=2 if twice == q.a else -2 if twice == q.b else 0)
+        for q in qs
+    ]
+    pushed = weights_from_priorities(m, favour)[twice]
+    neutral = weights_from_priorities(m, answers(m, 0))[twice]
+    assert pushed <= min(45, neutral * 2.8)  # held to two steps (e^1 is about 2.7x), then the cap (45)
+
+
+def test_two_factors_may_split_unevenly_but_not_past_70():
+    m = default_scoring_model({"industries": ["Fintech"], "buyer_roles": ["CFO"]})
+    w = weights_from_priorities(m, answers(m, 2))
+    assert sum(w.values()) == 100 and max(w.values()) <= 70
+
+
+def test_the_cap_keeps_the_order_the_answers_asked_for():
+    m = default_scoring_model(THIN)  # industry, company size, buyer fit
+    qs = priority_questions(m)
+    ask = {(q.a, q.b): q for q in qs}
+    # industry over size and over buyer, size over buyer: every answer favours the heavier side
+    rank = {"industry_fit": 3, "company_size": 2, "buyer_fit": 1}
+    favour = [PriorityAnswer(a=q.a, b=q.b, value=2 if rank[q.a] > rank[q.b] else -2) for q in ask.values()]
+    w = weights_from_priorities(m, favour)
+    assert w["industry_fit"] > w["company_size"] > w["buyer_fit"] > 0
+    assert w["industry_fit"] <= 45
+
+
+def test_a_preferred_factor_is_never_tied_with_the_one_it_beat():
+    m = default_scoring_model(THIN)
+    qs = priority_questions(m)
+    w = weights_from_priorities(m, [PriorityAnswer(a=q.a, b=q.b, value=2) for q in qs])
+    first = qs[0]
+    assert w[first.a] > w[first.b]

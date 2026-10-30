@@ -50,6 +50,8 @@ export const getScoringQuestions = (id: string) =>
   call<PriorityQuestion[]>("GET", `/sessions/${id}/scoring-questions`);
 export const sendVerdict = (id: string, correct: boolean, comment = "") =>
   call<null>("POST", `/sessions/${id}/verdict`, { correct, comment });
+export const undoAnswer = (id: string, text: string, skip: number) =>
+  call<Turn>("POST", `/sessions/${id}/undo`, { text, skip });
 export const reviseIcp = (id: string, text: string) =>
   call<Turn>("POST", `/sessions/${id}/revise`, { text });
 

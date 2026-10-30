@@ -414,6 +414,9 @@ def set_weights(model: ScoringModel, weights: dict[str, float]) -> ScoringModel:
 
 PRIORITY_STEP = 0.5  # each step of preference multiplies a weight by e^0.5, about 1.65x
 MAX_PREFERENCE = 2  # answers run from -2 (B much more) to +2 (A much more)
+MAX_SHARE = 45.0  # no factor takes more than this share of 100 once three or more apply
+MAX_SHARE_TWO = 70.0  # with only two factors an even split is not forced
+WARN_SHARE = 50.0  # the weights table warns above this (the user may still set it by hand)
 MIN_QUESTIONS_FOR_BRIDGE = 5  # below this many pairs, one extra pair links two neighbouring pairs
 
 
@@ -474,12 +477,33 @@ def priority_questions(model: ScoringModel, track: Track = "sales") -> list[Prio
     ]  # fmt: skip
 
 
+def _cap_shares(shares: dict[str, float], cap: float) -> dict[str, float]:
+    """Keep the largest share at `cap` or below without flattening the order: every share is
+    raised to the same power p <= 1 (found by bisection) and renormalised, so a factor that matters
+    more still weighs more than one that matters less. p = 0 would be an even split."""
+
+    def squeeze(p: float) -> dict[str, float]:
+        powered = {k: v**p for k, v in shares.items()}
+        total = sum(powered.values())
+        return {k: v * WEIGHT_TOTAL / total for k, v in powered.items()}
+
+    if len(shares) < 2 or max(shares.values()) <= cap + EPSILON:
+        return dict(shares)
+    lo, hi = 0.0, 1.0  # lo always fits the cap (an even split), hi does not
+    for _ in range(60):
+        mid = (lo + hi) / 2
+        lo, hi = (mid, hi) if max(squeeze(mid).values()) <= cap else (lo, mid)
+    return squeeze(lo)
+
+
 def weights_from_priorities(
     model: ScoringModel, answers: list[PriorityAnswer], track: Track = "sales"
 ) -> dict[str, float]:
     """Weights summing to 100 over the criteria that apply (the rest get 0, they cannot be scored).
-    Each starts from its default weight and is scaled by e^(step * preference) from the answers,
-    then rounded to whole numbers."""
+    Each starts from its default weight and is scaled by e^(step * preference) from the answers
+    (a factor's total preference is held to the scale, so being asked about twice does not double
+    it). No factor may exceed MAX_SHARE; the weights are squeezed together just enough, so a factor
+    that matters more still weighs more. Whole numbers."""
     asked_pairs = {(q.a, q.b) for q in priority_questions(model, track)}
     ranked = _ranked(model, track)
     score = {c.key: 0.0 for c in ranked}
@@ -491,9 +515,14 @@ def weights_from_priorities(
     weights = {c.key: 0.0 for c in model.criteria}
     if not ranked:
         return {c.key: c.weight for c in model.criteria}
-    raw = {c.key: _prior(c.key, track) * math.exp(PRIORITY_STEP * score[c.key]) for c in ranked}
+    raw = {
+        c.key: _prior(c.key, track)
+        * math.exp(PRIORITY_STEP * max(-MAX_PREFERENCE, min(MAX_PREFERENCE, score[c.key])))
+        for c in ranked
+    }
     total = sum(raw.values())
     exact = {k: v * WEIGHT_TOTAL / total for k, v in raw.items()}
+    exact = _cap_shares(exact, MAX_SHARE if len(exact) >= 3 else MAX_SHARE_TWO)
     whole = {k: math.floor(v + EPSILON) for k, v in exact.items()}
     leftover = round(WEIGHT_TOTAL - sum(whole.values()))
     for k in sorted(exact, key=lambda k: -(exact[k] - whole[k]))[:leftover]:
