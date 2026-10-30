@@ -13,7 +13,7 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
-from icp_chatbot.domain.slots import registry, slot_map
+from icp_chatbot.domain.slots import Tier, registry, slot_map
 from icp_chatbot.domain.state import SessionState, SlotSource, normalize_values
 from icp_chatbot.icp.document import (
     FieldEntry,
@@ -224,7 +224,14 @@ async def build_icp(
         not_needed=[*(state.domain.not_needed if state.domain else []), *state.excluded],
     )
     needed = shell.needed_defs()
-    open_questions.extend(missing_slots(entries, defs=needed, track=state.track))
+    # the core fields still unknown come first, so "answer the unclear questions" starts there
+    core_gaps = missing_slots(
+        entries, defs=[d for d in needed if d.tier == Tier.A], track=state.track
+    )
+    other_gaps = [
+        q for q in missing_slots(entries, defs=needed, track=state.track) if q not in core_gaps
+    ]
+    open_questions = [*core_gaps, *open_questions, *other_gaps]
     # slots a skip rule hides (B2C seller) stay in the stored state, not in the document
     hidden = {d.key for d in shell.slot_defs() if not state.is_applicable(d)}
     entries = {k: e for k, e in entries.items() if k not in hidden}

@@ -232,3 +232,13 @@ async def test_still_unclear_skips_fields_answered_any_and_model_questions_about
     text = " ".join(result.document.open_questions).lower()
     assert "budget cycle" in text
     assert "industries" not in text and "geograph" not in text and "people you sell to" not in text
+
+
+def test_core_gaps_are_listed_before_other_open_questions():
+    from icp_chatbot.domain.slots import Tier, registry
+    from icp_chatbot.icp.document import missing_slots
+
+    defs = registry("sales")
+    core = missing_slots({}, defs=[d for d in defs if d.tier == Tier.A], track="sales")
+    everything = missing_slots({}, defs=defs, track="sales")
+    assert core and everything[: len(core)] == core[: len(everything)]
