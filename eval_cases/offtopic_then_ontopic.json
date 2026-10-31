@@ -16,13 +16,10 @@
   ],
   "expected": {
     "industries": [
-      "logistics"
+      "Transportation, Logistics, Supply Chain and Storage"
     ],
-    "geographies": [
+    "lead_geographies": [
       "Europe"
-    ],
-    "pain_points": [
-      "fuel theft"
     ],
     "buyer_roles": [
       "operations"

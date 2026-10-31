@@ -1,0 +1,60 @@
+{
+  "name": "hr_vague",
+  "track": "hr",
+  "tags": [
+    "hr",
+    "vague",
+    "short_answers"
+  ],
+  "signup": {
+    "company_name": "Kestrel Works",
+    "role": "Office Manager"
+  },
+  "profile_answers": {
+    "target_functions": [
+      "Any"
+    ],
+    "target_roles": [
+      "Administrative assistant"
+    ],
+    "experience_level": [
+      "Both"
+    ],
+    "years_experience": [
+      "Any"
+    ],
+    "current_industries": [
+      "Any"
+    ],
+    "current_company_size": [
+      "Any"
+    ]
+  },
+  "answers": [
+    "not sure yet",
+    "just a good person really",
+    "whatever fits the budget",
+    "we will see"
+  ],
+  "expected": {
+    "target_roles": [
+      "Administrative assistant"
+    ]
+  },
+  "forbidden": {
+    "required_skills": [
+      "Java",
+      "Kubernetes"
+    ],
+    "education_level": [
+      "PhD"
+    ],
+    "target_seniority": [
+      "Director"
+    ],
+    "salary_range": [
+      "100000"
+    ]
+  },
+  "notes": "Everything is Any or vague; the bot must not invent specifics, and Any must not become a rule. Expected holds only the form answers; the forbidden values carry the test."
+}

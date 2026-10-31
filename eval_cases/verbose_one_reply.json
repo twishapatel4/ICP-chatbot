@@ -15,13 +15,10 @@
   ],
   "expected": {
     "industries": [
-      "logistics"
+      "Transportation, Logistics, Supply Chain and Storage"
     ],
-    "geographies": [
+    "lead_geographies": [
       "United States"
-    ],
-    "pain_points": [
-      "fuel costs"
     ],
     "buyer_roles": [
       "fleet manager"

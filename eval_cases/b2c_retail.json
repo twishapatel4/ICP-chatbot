@@ -16,8 +16,8 @@
     "No wholesale buyers, please."
   ],
   "expected": {
-    "geographies": [
-      "UK"
+    "lead_geographies": [
+      "United Kingdom"
     ],
     "disqualifiers": [
       "wholesale"

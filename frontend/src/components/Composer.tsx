@@ -4,6 +4,8 @@ import { canRecord, MAX_RECORD_SECONDS, startRecording, type Recording } from ".
 import { column, gutter, promptActions, promptBox, promptInput, roundBtn, sendBtn } from "../ui";
 
 const MAX_CHARS = 2000;
+// Voice input hidden for now; flip to true to bring the mic button back.
+const SHOW_MIC = false;
 
 const MIC_IDLE = "bg-transparent border-transparent text-muted hover:enabled:bg-bot hover:enabled:text-ink";
 const MIC_ON =
@@ -143,7 +145,7 @@ export default function Composer({ disabled, sessionId, hasPicks = false, onSend
           }}
         />
         <div className={promptActions}>
-          {canRecord() && sessionId && (
+          {SHOW_MIC && canRecord() && sessionId && (
             <button
               type="button"
               className={`${roundBtn} ${phase === "recording" ? MIC_ON : MIC_IDLE}`}

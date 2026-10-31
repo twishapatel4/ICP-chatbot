@@ -16,11 +16,8 @@
     "No fossil fuel companies."
   ],
   "expected": {
-    "geographies": [
+    "lead_geographies": [
       "Europe"
-    ],
-    "pain_points": [
-      "reporting rules"
     ],
     "buyer_roles": [
       "CFO"

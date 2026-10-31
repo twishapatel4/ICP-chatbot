@@ -2,18 +2,21 @@
 
 import re
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from icp_chatbot.domain.slots import (
-    SLOT_LIST,
-    SLOTS,
     CustomField,
     SlotDef,
+    Track,
+    registry,
+    slot_map,
     with_custom,
 )
+from icp_chatbot.linkedin.catalog import SLOT_FACETS, default_catalog
 
+ANY = "Any"  # the answer "no preference": the slot builds no scoring rule
 SEED_CONFIDENCE_CAP = 0.5  # inferred values never exceed this until the user confirms them
 CONFIRMED_CONFIDENCE = 0.9  # confidence once the user confirms a value
 
@@ -73,8 +76,54 @@ def normalize_values(values: list[str]) -> list[str]:
     return out
 
 
+class OptionRef(BaseModel):
+    """A pointer to one LinkedIn catalog option."""
+
+    facet: str
+    id: str
+    level: int = 1
+    parent: str | None = None
+
+
+def resolve_slot_values(
+    slot_key: str, values: list[str], catalog=None
+) -> tuple[list[str], list[OptionRef], list[str]]:
+    """Map values onto the LinkedIn catalog: (canonical labels, refs, unmapped values).
+
+    Slots without a facet, and facets without a catalog, resolve nothing. "Any" is kept as is.
+    Country slots also take free-text cities, which are kept without a ref and not flagged."""
+    facet = SLOT_FACETS.get(slot_key)
+    catalog = catalog or default_catalog()
+    if facet is None or not catalog.has(facet):
+        return list(values), [], []
+    labels: list[str] = []
+    refs: list[OptionRef] = []
+    unmapped: list[str] = []
+    seen_refs: set[tuple[str, str]] = set()
+    for value in values:
+        if value == ANY:
+            labels.append(value)
+            continue
+        opt = catalog.resolve(facet, value)
+        if opt is None:
+            labels.append(value)
+            if facet != "country":  # cities are free-text chips by design
+                unmapped.append(value)
+            continue
+        labels.append(opt.label)
+        # a region stands for all its countries: the value stays "Europe", the refs are the countries
+        covered = catalog.region_countries(opt.label) if facet == "country" else None
+        for ref_opt in covered if covered is not None else [opt]:
+            if (facet, ref_opt.id) not in seen_refs:
+                seen_refs.add((facet, ref_opt.id))
+                refs.append(OptionRef(facet=facet, id=ref_opt.id, level=ref_opt.level, parent=ref_opt.parent))
+    return normalize_values(labels), refs, normalize_values(unmapped)
+
+
 class SlotValue(BaseModel):
     values: list[str]
+    refs: list[OptionRef] = Field(default_factory=list)
+    unmapped: list[str] = Field(default_factory=list)
     confidence: float = Field(ge=0.0, le=1.0)
     source: SlotSource
     source_turn: int | None = None
@@ -118,7 +167,53 @@ class DomainContext(BaseModel):
         return lines
 
 
+# Slots renamed since sessions and ICP versions were first saved: old key -> new key. Geography
+# was split into where the people are (lead_geographies) and where their companies are
+# headquartered; a saved `geographies` answer said the first, so the HQ slot stays unknown.
+LEGACY_SLOT_KEYS = {"geographies": "lead_geographies"}
+_KEYED_BY_SLOT = ("slots", "seed", "asked_slots", "probes", "probe_conf", "stalls", "declines",
+                  "flips")  # fmt: skip
+# agent_missing holds field labels today, but raw slot keys were stored before 3d6abd9
+_SLOT_LISTS = ("skipped", "clarified", "contradictions", "agent_missing")
+_SLOT_NAMES = ("pending_slot", "thread_slot")
+
+
+def renamed_slot(key: Any) -> Any:
+    """The current key for a slot saved under an old one; anything else unchanged."""
+    return LEGACY_SLOT_KEYS.get(key, key) if isinstance(key, str) else key
+
+
+def rename_slot_keys(mapping: dict) -> dict:
+    """Old slot keys renamed; where both the old and the new key are present, the new one wins."""
+    if not any(key in LEGACY_SLOT_KEYS for key in mapping):
+        return mapping
+    out = {}
+    for key, value in mapping.items():
+        new = renamed_slot(key)
+        if new != key and new in mapping:
+            continue
+        out[new] = value
+    return out
+
+
+def rename_slot_items(items: list) -> list:
+    """Old slot keys in a list renamed, without repeating a key the list already holds."""
+    if not any(renamed_slot(item) != item for item in items):
+        return items
+    out: list = []
+    for item in items:
+        if (new := renamed_slot(item)) not in out:
+            out.append(new)
+    return out
+
+
 class SessionState(BaseModel):
+    track: Track = "sales"  # sessions saved before tracks existed are Sales sessions
+    step: Literal["profile", "chat"] = "chat"  # older sessions were already in the chat
+    # step 1 as given, so step 3 can start in a later request or another process
+    signup: dict[str, str | None] = Field(default_factory=dict)
+    # step 2 as last submitted, so a form sent back as incomplete comes back filled in
+    profile_answers: dict[str, list[str]] = Field(default_factory=dict)
     mode: Literal["quick", "detail"] = "quick"
     domain: DomainContext | None = None
     slots: dict[str, SlotValue] = Field(default_factory=dict)
@@ -130,6 +225,7 @@ class SessionState(BaseModel):
     probe_conf: dict[str, float] = Field(default_factory=dict)  # slot -> confidence when probed
     stalls: dict[str, int] = Field(default_factory=dict)  # slot -> probes in a row that got nowhere
     skipped: list[str] = Field(default_factory=list)  # slots the user firmly declined to answer
+    excluded: list[str] = Field(default_factory=list)  # slots the user switched off in the form
     followups: dict[str, int] = Field(default_factory=dict)  # question kind -> follow-ups asked
     contradictions: list[str] = Field(default_factory=list)
     best_customer_asked: bool = False
@@ -150,7 +246,10 @@ class SessionState(BaseModel):
     segment: dict[str, str] = Field(default_factory=dict)
     failures: int = 0  # consecutive failed model steps
     offtopic_count: int = 0
+    nonsense_streak: int = 0  # replies in a row that were keyboard mash, answered without the model
     user_questions: int = 0  # questions the user put to the bot, answered along the way
+    # "Still unclear" questions of the profile not asked yet, while the user works through them
+    unclear_queue: list[str] = Field(default_factory=list)
     declines: dict[str, int] = Field(
         default_factory=dict
     )  # slot or kind -> times a bare "no" was re-asked
@@ -162,6 +261,27 @@ class SessionState(BaseModel):
     finished: bool = False
     stop_reason: str | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def _rename_legacy_slots(cls, data: Any) -> Any:
+        """Saved sessions may name slots by their old keys (see LEGACY_SLOT_KEYS)."""
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        for name in _KEYED_BY_SLOT:
+            if isinstance(data.get(name), dict):
+                data[name] = rename_slot_keys(data[name])
+        for name in _SLOT_LISTS:
+            if isinstance(data.get(name), list):
+                data[name] = rename_slot_items(data[name])
+        for name in _SLOT_NAMES:
+            if name in data:
+                data[name] = renamed_slot(data[name])
+        domain = data.get("domain")
+        if isinstance(domain, dict) and isinstance(domain.get("not_needed"), list):
+            data["domain"] = {**domain, "not_needed": rename_slot_items(domain["not_needed"])}
+        return data
+
     def confidence(self, key: str) -> float:
         value = self.slots.get(key)
         return value.confidence if value else 0.0
@@ -171,11 +291,14 @@ class SessionState(BaseModel):
         return list(value.values) if value else []
 
     def slot_defs(self) -> list[SlotDef]:
-        return with_custom(self.domain.fields) if self.domain else list(SLOT_LIST)
+        if self.domain:
+            return with_custom(self.domain.fields, self.track)
+        return list(registry(self.track))
 
     def slot_def(self, key: str) -> SlotDef | None:
-        if key in SLOTS:
-            return SLOTS[key]
+        standard = slot_map(self.track)
+        if key in standard:
+            return standard[key]
         return next((s for s in self.slot_defs() if s.key == key), None)
 
     def is_applicable(self, slot: SlotDef) -> bool:
@@ -183,15 +306,12 @@ class SessionState(BaseModel):
         value already known (e.g. B2C)."""
         if self.domain and slot.key in self.domain.not_needed:
             return False
+        if slot.key in self.excluded:
+            return False
         for other_key, other_value in slot.skip_if:
             if any(v.lower() == other_value.lower() for v in self.values(other_key)):
                 return False
         return True
-
-    def topics_asked(self) -> set[str]:
-        return {
-            SLOTS[k].topic for k in self.asked_slots if k in SLOTS and SLOTS[k].topic is not None
-        }
 
     def push_turn(self, question: str, answer: str) -> None:
         self.last_turns = (self.last_turns + [TurnPair(question=question, answer=answer)])[-2:]

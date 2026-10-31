@@ -13,23 +13,28 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
-from icp_chatbot.domain.slots import SLOTS
+from icp_chatbot.domain.slots import Tier, registry, slot_map
 from icp_chatbot.domain.state import SessionState, SlotSource, normalize_values
 from icp_chatbot.icp.document import (
     FieldEntry,
     ICPDocument,
+    build_linkedin_filters,
     compute_completeness,
     group_by_section,
     missing_slots,
     render_summary,
     sync_field_requirements,
 )
-from icp_chatbot.icp.scoring import DISQUALIFIER_FIELDS, default_scoring_model, make_disqualifier
+from icp_chatbot.icp.scoring import (
+    DISQUALIFIER_FIELDS,
+    default_scoring_model,
+    make_disqualifier,
+    rescaled,
+)
 from icp_chatbot.llm.types import LLM, LLMError, Usage
 from icp_chatbot.versions import ConfigVersionData
 
 EVIDENCE_LIMIT = 200
-MAX_VALUES = 10
 
 
 log = logging.getLogger(__name__)
@@ -63,9 +68,10 @@ class BuildResult:
 
 def entries_from_state(state: SessionState, today: date) -> dict[str, FieldEntry]:
     entries = {}
+    standard = slot_map(state.track)
     custom = {f.key for f in state.domain.fields} if state.domain else set()
     for key, value in state.slots.items():
-        if (key not in SLOTS and key not in custom) or not value.values:
+        if (key not in standard and key not in custom) or not value.values:
             continue
         said_by_user = value.source in (SlotSource.STATED, SlotSource.CONFIRMED)
         entries[key] = FieldEntry(
@@ -119,12 +125,34 @@ def _repeats_exclusion(question: str, exclusions: list[str]) -> bool:
     return False
 
 
-def _keep_questions(questions: list[str], exclusions: list[str]) -> list[str]:
+def _answered_stems(entries: dict[str, FieldEntry], defs) -> list[set[str]]:
+    """For each field that has an answer (an "Any" counts), the stems of the words in its key
+    ("lead_geographies" is {lead, geog}): a question with all of them asks about that field."""
+    out = []
+    for slot in defs:
+        entry = entries.get(slot.key)
+        if entry and entry.values:
+            stems = {w[:4] for w in _WORD.findall(slot.key.replace("_", " "))}
+            if stems:
+                out.append(stems)
+    return out
+
+
+def _asks_known_field(question: str, answered: list[set[str]]) -> bool:
+    asked = {w[:4] for w in _WORD.findall(question.lower())}
+    return any(stems <= asked for stems in answered)
+
+
+def _keep_questions(
+    questions: list[str], exclusions: list[str], answered: list[set[str]] | None = None
+) -> list[str]:
     seen: set[str] = set()
     out = []
     for question in questions:
         text = question.strip()
         key = " ".join(_WORD.findall(text.lower()))
+        if answered and _asks_known_field(text, answered):
+            continue  # it asks about something the user already answered
         if text and key not in seen and not _repeats_exclusion(text, exclusions):
             seen.add(key)
             out.append(text)
@@ -147,7 +175,7 @@ async def build_icp(
         result = await llm.generate(
             step="final_icp",
             cfg=config.step("final_icp"),
-            system=config.system_prompt("final_icp"),
+            system=config.system_prompt("final_icp", state.track),
             user=_user_message(entries, state),
             schema=ICPSynthesis,
             labels=labels,
@@ -167,7 +195,7 @@ async def build_icp(
             if current is None:
                 log.info("synthesis returned a field that was not recorded: %s", draft.slot)
                 continue
-            values = normalize_values(draft.values)[:MAX_VALUES]
+            values = normalize_values(draft.values)
             if not values:
                 continue
             if not _only_reworded(values, current):
@@ -184,24 +212,39 @@ async def build_icp(
                     f"Could not turn this exclusion into a rule: {draft.field} {draft.operator} {draft.values}"
                 )
         exclusions = entries["disqualifiers"].values if "disqualifiers" in entries else []
-        open_questions.extend(_keep_questions(synthesis.open_questions, exclusions))
+        answered = _answered_stems(entries, registry(state.track))
+        open_questions.extend(_keep_questions(synthesis.open_questions, exclusions, answered))
 
     shell = ICPDocument(
+        track=state.track,
         sections={},
-        scoring_model=default_scoring_model({}),
-        completeness=compute_completeness({}),
+        scoring_model=default_scoring_model({}, track=state.track),
+        completeness=compute_completeness({}, track=state.track),
         custom_fields=list(state.domain.fields) if state.domain else [],
-        not_needed=list(state.domain.not_needed) if state.domain else [],
+        not_needed=[*(state.domain.not_needed if state.domain else []), *state.excluded],
     )
     needed = shell.needed_defs()
-    open_questions.extend(missing_slots(entries, defs=needed))
+    # the core fields still unknown come first, so "answer the unclear questions" starts there
+    core_gaps = missing_slots(
+        entries, defs=[d for d in needed if d.tier == Tier.A], track=state.track
+    )
+    other_gaps = [
+        q for q in missing_slots(entries, defs=needed, track=state.track) if q not in core_gaps
+    ]
+    open_questions = [*core_gaps, *open_questions, *other_gaps]
+    # slots a skip rule hides (B2C seller) stay in the stored state, not in the document
+    hidden = {d.key for d in shell.slot_defs() if not state.is_applicable(d)}
+    entries = {k: e for k, e in entries.items() if k not in hidden}
     slot_values = {key: e.values for key, e in entries.items() if e.values}
+    model = default_scoring_model(slot_values, disqualifiers, track=state.track)
+    model = model.model_copy(update={"criteria": rescaled(model.criteria)})  # sums to 100
     document = shell.model_copy(
         update={
-            "sections": group_by_section(entries, shell.slot_defs()),
-            "scoring_model": default_scoring_model(slot_values, disqualifiers),
-            "summary": render_summary(entries, shell.slot_defs()),
-            "completeness": compute_completeness(entries, needed),
+            "sections": group_by_section(entries, shell.slot_defs(), state.track),
+            "scoring_model": model,
+            "summary": render_summary(entries, shell.slot_defs(), state.track),
+            "completeness": compute_completeness(entries, needed, state.track),
+            "linkedin_filters": build_linkedin_filters(state),
             "open_questions": open_questions,
         }
     )

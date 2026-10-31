@@ -16,11 +16,8 @@
     "Content directors."
   ],
   "expected": {
-    "geographies": [
-      "US"
-    ],
-    "pain_points": [
-      "content production"
+    "lead_geographies": [
+      "United States"
     ]
   },
   "notes": "A website with no usable text gives no seed; the opener falls back."

@@ -1,11 +1,12 @@
 """Step 1 of every turn: turn the user's answer into slot updates (spec section 5.2)."""
 
 import re
+from collections.abc import Collection
 from dataclasses import dataclass, field
 
 from pydantic import BaseModel, Field
 
-from icp_chatbot.domain.slots import SLOTS, CustomField
+from icp_chatbot.domain.slots import CustomField, slot_map
 from icp_chatbot.domain.state import (
     CONFIRMED_CONFIDENCE,
     NONE_IS_AN_ANSWER,
@@ -16,19 +17,15 @@ from icp_chatbot.domain.state import (
     is_non_answer,
     normalize_values,
     real_values,
+    resolve_slot_values,
 )
-
-# Slots a model tends to fill from an offhand remark (a complaint about a bad customer reads like
-# a pain point). Unless the question was about the slot, such a value is not trusted as known.
-INFERENCE_PRONE_SLOTS = frozenset({"pain_points", "desired_outcomes"})
-OFF_TARGET_CAP = 0.6
 
 EVIDENCE_LIMIT = 200
 SUMMARY_LIMIT = 600
 INDUSTRY_LIMIT = 80
 FOCUS_LIMIT = 8
 FIELD_LIMIT = 7
-PROTECTED_SLOTS = frozenset({"product", "business_model", "pain_points", "desired_outcomes"})
+PROTECTED_SLOTS = frozenset({"product", "business_model"})
 FOCUS_ITEM_LIMIT = 80
 BRIEF_LIMIT = 700
 STAYS_ON_CHANGE = frozenset({"online_presence"})  # facts about the user, not the old market
@@ -71,18 +68,17 @@ class ApplyOutcome:
     changed: dict[str, tuple[list[str], list[str]]] = field(default_factory=dict)
 
 
-def apply_extraction(
-    state: SessionState, result: ExtractionResult, turn_no: int, target: str | None = None
-) -> ApplyOutcome:
+def apply_extraction(state: SessionState, result: ExtractionResult, turn_no: int) -> ApplyOutcome:
     """Merge the model's updates into the state, enforcing the rules the model cannot be trusted
     with: only known slots, a stated value replaces an inferred one, and an inferred value the
     user agrees with becomes confirmed."""
     outcome = ApplyOutcome()
+    standard = slot_map(state.track)
     own = {f.key for f in _custom(state)}
     if result.domain:  # fields defined in this very answer can already be filled by it
-        own |= {f.key for f in _clean_fields(result.domain.fields)}
+        own |= {f.key for f in _clean_fields(result.domain.fields, standard)}
     for update in result.updates:
-        if update.slot not in SLOTS and update.slot not in own:
+        if update.slot not in standard and update.slot not in own:
             outcome.ignored.append(update.slot)
             continue
         values = real_values(update.slot, normalize_values(update.values))
@@ -92,10 +88,6 @@ def apply_extraction(
             continue
         existing = state.slots.get(update.slot)
         evidence = update.evidence[:EVIDENCE_LIMIT]
-        if update.slot in INFERENCE_PRONE_SLOTS and update.slot != target:
-            update = update.model_copy(
-                update={"confidence": min(update.confidence, OFF_TARGET_CAP)}
-            )
 
         if existing and existing.source == SlotSource.INFERRED:
             same = {v.lower() for v in existing.values} == {v.lower() for v in values}
@@ -120,8 +112,11 @@ def apply_extraction(
             and {v.lower() for v in existing.values} != {v.lower() for v in values}
         ):
             outcome.changed[update.slot] = (list(existing.values), list(values))
+        values, refs, unmapped = resolve_slot_values(update.slot, values)
         state.slots[update.slot] = SlotValue(
             values=values,
+            refs=refs,
+            unmapped=unmapped,
             confidence=update.confidence,
             source=SlotSource.STATED,
             source_turn=turn_no,
@@ -134,7 +129,7 @@ def apply_extraction(
     for slot in result.flags.contradiction_slots:
         if slot in outcome.applied:
             continue  # this very answer gave the new value: the contradiction is settled
-        if (slot in SLOTS or slot in own) and slot not in state.contradictions:
+        if (slot in standard or slot in own) and slot not in state.contradictions:
             state.contradictions.append(slot)
     _apply_domain(state, result.domain, outcome.applied)
     if result.summary.strip():
@@ -160,8 +155,9 @@ def _apply_domain(state: SessionState, update: DomainUpdate | None, kept_slots: 
         for key in [k for k in state.slots if k not in kept_slots and k not in STAYS_ON_CHANGE]:
             del state.slots[key]
             state.contradictions = [c for c in state.contradictions if c != key]
-    fields = _clean_fields(update.fields)
-    not_needed = [k for k in update.not_needed if k in SLOTS and k not in PROTECTED_SLOTS]
+    standard = slot_map(state.track)
+    fields = _clean_fields(update.fields, standard)
+    not_needed = [k for k in update.not_needed if k in standard and k not in PROTECTED_SLOTS]
     if current and current.industry.casefold() == industry.casefold():
         known = {f.key for f in current.fields}
         added = [f for f in fields if f.key not in known]  # fields already asked about stay put
@@ -186,14 +182,14 @@ def _custom(state: SessionState) -> list[CustomField]:
     return state.domain.fields if state.domain else []
 
 
-def _clean_fields(fields: list[CustomField]) -> list[CustomField]:
+def _clean_fields(fields: list[CustomField], standard: Collection[str]) -> list[CustomField]:
     """The industry's own fields from the model: readable snake_case keys that never clash with
-    a standard slot, each with a label and a plain question."""
+    a standard slot of the track, each with a label and a plain question."""
     out: list[CustomField] = []
     for f in fields:
         key = re.sub(r"[^a-z0-9]+", "_", f.key.lower()).strip("_")[:40]
         label, ask = " ".join(f.label.split())[:60], " ".join(f.ask.split())[:200]
-        if not key or key in SLOTS or not label or not ask or any(o.key == key for o in out):
+        if not key or key in standard or not label or not ask or any(o.key == key for o in out):
             continue
         out.append(f.model_copy(update={"key": key, "label": label, "ask": ask}))
     return out[:FIELD_LIMIT]

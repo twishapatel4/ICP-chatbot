@@ -6,7 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from icp_chatbot.domain.slots import SLOTS
+from icp_chatbot.domain.slots import Track, slot_map
+from icp_chatbot.engine.profile_form import profile_cards, validate_profile
 
 MIN_LAUNCH_CASES = 30
 
@@ -24,9 +25,11 @@ REQUIRED_TAGS = frozenset(
 class EvalCase(BaseModel):
     name: str
     origin: Literal["handwritten", "simulated", "real"] = "handwritten"
+    track: Track = "sales"  # whose profile the conversation builds: its slots come from this track
     tags: list[str]
     signup: dict[str, str]
     website_text: str | None = None  # what the company's website says, for enrichment
+    profile_answers: dict[str, list[str]] | None = None  # step 2 form; None skips step 2
     answers: list[str]
     detail_answers: list[str] = Field(
         default_factory=list
@@ -47,9 +50,21 @@ def case_problems(case: EvalCase) -> list[str]:
     problems = []
     if not case.answers:
         problems.append("no answers")
+    known = slot_map(case.track)
     for slot in [*case.expected, *case.forbidden]:
-        if slot not in SLOTS:
+        if slot not in known:
             problems.append(f"unknown slot {slot}")
+    if case.profile_answers is not None:
+        asked = {s for card in profile_cards(case.track) for s in card.slots}
+        problems.extend(  # a slot the form does not ask (Sales business_model) is no answer
+            f"unknown slot {slot} in profile_answers"
+            for slot in case.profile_answers
+            if slot not in known or slot not in asked
+        )
+        problems.extend(
+            f"step 2 form is missing or invalid: {slot}"
+            for slot in validate_profile(case.track, case.profile_answers)
+        )
     return problems
 
 

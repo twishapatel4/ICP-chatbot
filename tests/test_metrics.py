@@ -59,20 +59,23 @@ async def test_the_dashboard_summarizes_sessions_latency_and_feedback(repo_and_f
 
     draft = doc(
         industries=["Fintech"],
-        pain_points=["slow"],
-        geographies=["Europe"],
+        buyer_roles=["CFO"],
+        lead_geographies=["Europe"],
         company_size=["50-500"],
     )
     await repo.add_icp_version(
         "t1", approved, document=draft.model_dump(mode="json"), summary="", author="bot"
     )
     final = doc(
-        industries=["Fintech"], pain_points=["slow"], geographies=["Asia"], company_size=["50-500"]
+        industries=["Fintech"],
+        buyer_roles=["CFO"],
+        lead_geographies=["Asia"],
+        company_size=["50-500"],
     )
     await repo.add_icp_version(
         "t1", approved, document=final.model_dump(mode="json"), summary="", author="company"
     )
-    await repo.add_feedback("t1", approved, type="field_edit", field="geographies")
+    await repo.add_feedback("t1", approved, type="field_edit", field="lead_geographies")
     await repo.add_feedback("t1", approved, type="weight_edit", field="industry_fit")
     await repo.add_feedback("t1", approved, type="requirement_toggle", field="geographic_fit")
     await repo.add_feedback("t1", approved, type="approve")
@@ -84,7 +87,7 @@ async def test_the_dashboard_summarizes_sessions_latency_and_feedback(repo_and_f
     assert d.mean_cost_usd == pytest.approx(0.076)
     assert (d.p50_latency_ms, d.p95_latency_ms) == (200, 400)
     assert d.approved_sessions == 1 and d.mean_edit_rate == pytest.approx(1 / 4)
-    assert d.dropoff_by_slot == {"buyer_roles": 1} and d.field_edits == {"geographies": 1}
+    assert d.dropoff_by_slot == {"buyer_roles": 1} and d.field_edits == {"lead_geographies": 1}
     assert d.weight_edits == {"industry_fit": 1} and d.requirement_toggles == {"geographic_fit": 1}
 
 

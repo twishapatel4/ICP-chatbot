@@ -11,25 +11,24 @@ import Typewriter from "./components/Typewriter";
 import ScrollProgress from "./components/ScrollProgress";
 import TextShimmer from "./components/TextShimmer";
 import TextEffect from "./components/TextEffect";
+import StepIndicator from "./components/StepIndicator";
+import ScoringSetup, { type ScoringProgress } from "./components/ScoringSetup";
+import ScoringSummary from "./components/ScoringSummary";
+import StepOne from "./components/StepOne";
+import StepTwo, { clearDraft } from "./components/StepTwo";
 import ThemeToggle from "./components/ThemeToggle";
-import type { FormField, IcpResponse, Progress, StartRequest, Turn } from "./types";
-import { app, chip, chipOn, chips, column, gutter, header, iconBtn, pillInput, promptActions, promptBox, promptInput, roundBtn, sendBtn } from "./ui";
+import type { Card, FormField, IcpResponse, Progress, StartRequest, Track, Turn } from "./types";
+import { buildNote, profileName } from "./wording";
+import { app, primaryBtn, chips, column, gutter, header, iconBtn } from "./ui";
 
-type Stage = "home" | "interview" | "fallback" | "building" | "done";
+type Stage = "step1" | "step2" | "interview" | "fallback" | "building" | "scoring" | "result" | "done";
+const STAGES: Stage[] = ["step1", "step2", "interview", "fallback", "building", "scoring", "result", "done"];
 interface Message {
   id: number;
   role: "bot" | "me" | "note" | "error";
   text: string;
+  live?: boolean; // just written by the AI: typed out once. Fixed texts and restored history show at once
 }
-
-type IntroKey = "company_name" | "website" | "industry" | "role";
-const INTRO_EXTRAS: [IntroKey, string][] = [
-  ["website", "Website (optional)"],
-  ["industry", "Industry (optional)"],
-  ["role", "Your role (optional)"],
-];
-
-const BUILD_NOTE = "Building your ICP. This can take a minute...";
 
 const MSG = "max-w-[min(82%,1100px)] rounded-[22px] whitespace-pre-wrap [overflow-wrap:anywhere] ";
 const MSG_CLASS: Record<Message["role"], string> = {
@@ -39,15 +38,36 @@ const MSG_CLASS: Record<Message["role"], string> = {
   error: `${MSG}p-0 self-center text-warn text-[13px]`,
 };
 
-const NO_PROGRESS: Progress = { percent: 0, known: 0, total: 0 };
-
 const STEPS: { icon: IconName; title: string; text: string; tag: string }[] = [
-  { icon: "company", title: "Tell us about you", text: "Share your company name and website so I can start from what is already public.", tag: "Step 1" },
-  { icon: "chat", title: "Answer a few questions", text: "A short chat about who you sell to, what they struggle with and how they buy.", tag: "Step 2" },
-  { icon: "profile", title: "Review your ICP", text: "Get a profile and a scoring model you can edit, review and approve.", tag: "Step 3" },
+  { icon: "company", title: "Tell us about you", text: "Pick your role and share your company, website and industry so I can start from what is already public.", tag: "Step 1" },
+  { icon: "profile", title: "Set the core profile", text: "Choose from a few options such as industry, size, seniority and location.", tag: "Step 2" },
+  { icon: "chat", title: "Chat and review", text: "A short chat fills in the rest. Then review and approve your profile and scoring model.", tag: "Step 3" },
 ];
 
+const NO_PROGRESS: Progress = { percent: 0, known: 0, total: 0 };
+
 const STORAGE_KEY = "icp-chat-v1";
+
+// The chat snapshot lives in sessionStorage and goes with the tab. A session still waiting at step 2 is
+// also pointed to from localStorage, so closing the tab and coming back lands on step 2 again.
+const PENDING_KEY = "icp-step2-session";
+const readPending = (): string | null => {
+  try {
+    return localStorage.getItem(PENDING_KEY);
+  } catch {
+    return null;
+  }
+};
+const writePending = (id: string | null) => {
+  try {
+    if (id) localStorage.setItem(PENDING_KEY, id);
+    else localStorage.removeItem(PENDING_KEY);
+  } catch {
+    // storage unavailable: step 2 just will not survive closing the tab
+  }
+};
+
+const NO_SCORING: ScoringProgress = { done: false, picked: {} };
 
 interface Snapshot {
   stage: Stage;
@@ -56,12 +76,15 @@ interface Snapshot {
   multi: boolean;
   picked: string[];
   sessionId: string | null;
+  track?: Track | null;
+  cards?: Card[];
   form: FormField[];
   missing: string[];
   icp: IcpResponse | null;
   approved: boolean;
   revising: boolean;
   progress?: Progress;
+  scoring?: ScoringProgress;
 }
 
 // The page can be reloaded under us (dev-server HMR reconnect, discarded background tab),
@@ -72,7 +95,7 @@ function loadSnapshot(): Snapshot | null {
     if (!raw) return null;
     const snap = JSON.parse(raw) as Snapshot;
     // a "building" note left in a chat that is no longer building is stale (saved before it was cleaned up)
-    if (snap.stage !== "building") snap.messages = snap.messages.filter((m) => !(m.role === "note" && m.text === BUILD_NOTE));
+    if (snap.stage !== "building") snap.messages = snap.messages.filter((m) => !(m.role === "note" && [buildNote("sales"), buildNote("hr"), buildNote(null)].includes(m.text)));
     return snap;
   } catch {
     return null;
@@ -95,7 +118,11 @@ function explain(e: unknown): string {
 
 export default function App() {
   const [saved] = useState(loadSnapshot);
-  const [stage, setStage] = useState<Stage>(["signup", "starting"].includes(saved?.stage as string) ? "home" : (saved?.stage ?? "home"));
+  // a stage saved by an older build ("home", "signup", ...) is not one of these: start over at step 1
+  const [stage, setStage] = useState<Stage>(STAGES.includes(saved?.stage as Stage) ? (saved?.stage as Stage) : "step1");
+  const [track, setTrack] = useState<Track | null>(saved?.track ?? null);
+  const [cards, setCards] = useState<Card[]>(saved?.cards ?? []);
+  const [savedAnswers, setSavedAnswers] = useState<Record<string, string[]> | null>(null);
   const [messages, setMessages] = useState<Message[]>(saved?.messages ?? []);
   const [options, setOptions] = useState<string[]>(saved?.options ?? []);
   const [multi, setMulti] = useState(saved?.multi ?? true);
@@ -108,13 +135,17 @@ export default function App() {
   const [approved, setApproved] = useState(saved?.approved ?? false);
   const [revising, setRevising] = useState(saved?.revising ?? false);
   const [progress, setProgress] = useState<Progress>(saved?.progress ?? NO_PROGRESS);
+  const [scoring, setScoring] = useState<ScoringProgress>(saved?.scoring ?? NO_SCORING);
   const [startError, setStartError] = useState("");
-  const [intro, setIntro] = useState<Record<IntroKey, string>>({ company_name: "", website: "", industry: "", role: "" });
+  const [step2Error, setStep2Error] = useState(""); // a failed step 2 submit that is not about a missing answer
+  const [cardsError, setCardsError] = useState(false); // the step 2 cards could not be fetched on resume
+  const working = useRef(false); // set at once, so a fast double click cannot start a second request
   const nextId = useRef(Math.max(0, ...(saved?.messages ?? []).map((m) => m.id)) + 1);
   const firstNewId = useRef(nextId.current); // messages restored after a reload show at once, not typed out
 
-  const push = useCallback((role: Message["role"], text: string) => {
-    setMessages((m) => [...m, { id: nextId.current++, role, text }]);
+  const push = useCallback((role: Message["role"], text: string, live = false) => {
+    // one error at a time: a new one replaces the old and animates in again
+    setMessages((m) => [...(role === "error" ? m.filter((x) => x.role !== "error") : m), { id: nextId.current++, role, text, ...(live && { live }) }]);
   }, []);
 
   // The profile panel beside the chat. On a phone-sized screen it covers the chat, so it starts
@@ -126,21 +157,26 @@ export default function App() {
   const [typed, setTyped] = useState<Set<number>>(new Set());
   const markTyped = useCallback((id: number) => setTyped((t) => (t.has(id) ? t : new Set(t).add(id))), []);
   const lastBot = [...messages].reverse().find((m) => m.role === "bot");
-  const replyTyped = !lastBot || lastBot.id < firstNewId.current || typed.has(lastBot.id);
+  const replyTyped = !lastBot || !lastBot.live || lastBot.id < firstNewId.current || typed.has(lastBot.id);
 
   useEffect(() => {
+    // the forms of steps 1 and 2 start at the top, under the step indicator
+    if (stage === "step1" || stage === "step2") {
+      window.scrollTo({ top: 0 });
+      return;
+    }
     // the bottom of the page, not of the log: the composer is sticky and would cover the last message
     window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
   }, [messages, stage, icp, options, replyTyped]);
 
   useEffect(() => {
-    const snap: Snapshot = { stage, messages, options, multi, picked, sessionId, form, missing, icp, approved, revising, progress };
+    const snap: Snapshot = { stage, messages, options, multi, picked, sessionId, track, cards, form, missing, icp, approved, revising, progress, scoring };
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
     } catch {
       // storage unavailable: the chat just will not survive a reload
     }
-  }, [stage, messages, options, multi, picked, sessionId, form, missing, icp, approved, revising, progress]);
+  }, [stage, messages, options, multi, picked, sessionId, track, cards, form, missing, icp, approved, revising, progress, scoring]);
 
   // A reload mid-build loses the in-flight request; ask for the ICP again.
   const resumed = useRef(false);
@@ -151,7 +187,65 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The server knows whether step 2 was submitted: a session still in step 2 resumes there, with
+  // the answers it kept, whatever stage the browser remembered. A session it no longer knows starts over.
+  const checked = useRef(false);
+  useEffect(() => {
+    const id = saved?.sessionId ? (["step2", "interview", "fallback"].includes(saved.stage) ? saved.sessionId : null) : readPending();
+    if (checked.current || !id) return;
+    checked.current = true;
+    api
+      .getSession(id)
+      .then((view) => {
+        setTrack(view.track);
+        if (view.step === "profile") {
+          // never wipe the draft or the pointer here: the session is still waiting at step 2
+          setSessionId(view.session_id);
+          setSavedAnswers(view.answers);
+          setMessages([]);
+          setOptions([]);
+          setStage("step2");
+          if (view.cards) setCards(view.cards);
+          else if (cards.length === 0) void loadCards(view.track);
+        } else {
+          // step 2 was already submitted (maybe in another tab): the cards are stale
+          writePending(null);
+          clearDraft(id);
+          if (saved?.stage === "step2" || !saved?.sessionId) {
+            // resume the interview where the server has it; a closed or finished session starts over
+            if (view.status === "active" && view.question) {
+              setSessionId(view.session_id);
+              setCards([]);
+              setSavedAnswers(null);
+              setMessages([]);
+              void handleTurn({ ...view, status: "active", icp_ready: view.has_icp, fallback_form: false, notice: null });
+            } else newChat();
+          }
+        }
+      })
+      .catch((e) => {
+        if (e instanceof api.ApiError && e.status === 404) {
+          writePending(null);
+          clearDraft(id);
+          newChat();
+        }
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function loadCards(t: Track) {
+    setCardsError(false);
+    return api.getProfileForm(t).then(setCards).catch(() => setCardsError(true));
+  }
+
   function newChat() {
+    if (sessionId) clearDraft(sessionId);
+    writePending(null);
+    setStep2Error("");
+    setCardsError(false);
+    setTrack(null);
+    setCards([]);
+    setSavedAnswers(null);
     setMessages([]);
     setOptions([]);
     setPicked([]);
@@ -162,16 +256,16 @@ export default function App() {
     setShowProfile(wide());
     setApproved(false);
     setRevising(false);
+    setScoring(NO_SCORING);
     setProgress(NO_PROGRESS);
     setBusy(false);
-    setIntro({ company_name: "", website: "", industry: "", role: "" });
-    setStage("home");
+    setStage("step1");
   }
 
   async function makeIcp(id: string) {
     setStage("building");
     // the "building" note is removed once the profile is ready
-    push("note", BUILD_NOTE);
+    push("note", buildNote(track));
     try {
       setIcp(await api.buildIcp(id));
       setShowProfile(wide());
@@ -181,7 +275,7 @@ export default function App() {
       if (missing) {
         push(
           "bot",
-          `You have not provided enough information to build an ICP yet. Still missing: ${missing.join(", ")}. Tell me more about these and I will build it.`,
+          `You have not provided enough information to build the ${profileName(track)} yet. Still missing: ${missing.join(", ")}. Tell me more about these and I will build it.`,
         );
         setRevising(true);
         setStage("interview");
@@ -191,7 +285,7 @@ export default function App() {
       setStage("done");
     } finally {
       // the build is over, either way: the "this can take a minute" note no longer applies
-      setMessages((m) => m.filter((x) => !(x.role === "note" && x.text === BUILD_NOTE)));
+      setMessages((m) => m.filter((x) => !(x.role === "note" && x.text === buildNote(track))));
     }
   }
 
@@ -201,10 +295,12 @@ export default function App() {
       reason === "model_unavailable" ? "error" : "bot",
       reason === "model_unavailable"
         ? "My AI service is not responding right now, so I cannot continue the chat. This is not your fault. You can fill in this short form instead, or try again later."
+        : reason === "unreadable"
+        ? "I have not been able to understand the last few messages, so I cannot continue the conversation this way. No problem, you can start a new chat whenever you like, or fill in this short form instead."
         : "I could not continue the conversation, so here is a short form instead.",
     );
     try {
-      setForm(await api.getFallbackForm());
+      setForm(await api.getFallbackForm(track ?? "sales"));
       setStage("fallback");
     } catch (e) {
       push("error", explain(e));
@@ -217,9 +313,10 @@ export default function App() {
     const next = turn.progress;
     if (next) setProgress((p) => ({ percent: Math.max(p.percent, next.percent), known: Math.max(p.known, next.known), total: next.total }));
     if (turn.status === "fallback" || turn.fallback_form) return showFallback(turn.stop_reason);
+    setMessages((m) => (m.some((x) => x.role === "error") ? m.filter((x) => x.role !== "error") : m));
     if (turn.notice) push("error", turn.notice);
     if (turn.question) {
-      push("bot", turn.question.text);
+      push("bot", turn.question.text, true);
       setOptions(turn.status === "active" ? turn.question.options : []);
       setMulti(turn.question.multi);
       setPicked([]);
@@ -231,32 +328,61 @@ export default function App() {
   }
 
   async function guarded(run: () => Promise<void>) {
+    if (working.current) return;
+    working.current = true;
     setBusy(true);
     try {
       await run();
     } catch (e) {
       push("error", explain(e));
     } finally {
+      working.current = false;
       setBusy(false);
     }
   }
 
+  // Step 1 creates the session; the website read starts on the server while they fill in step 2.
   const start = (body: StartRequest) =>
     guarded(async () => {
-      // the welcome screen stays up, showing it is working, until the first question arrives: the
-      // chat then opens with that question, not with an echo of what was typed
       setStartError("");
       try {
-        await handleTurn(await api.startSession(body));
+        const created = await api.startSession(body);
+        setSessionId(created.session_id);
+        writePending(created.session_id);
+        setTrack(created.track);
+        setCards(created.cards);
+        setSavedAnswers(null);
+        setMissing([]);
+        setStage("step2");
       } catch (e) {
         setStartError(explain(e));
+      }
+    });
+
+  const submitProfile = (answers: Record<string, string[]>) =>
+    guarded(async () => {
+      if (!sessionId) return;
+      setMissing([]);
+      setStep2Error("");
+      try {
+        const turn = await api.submitProfile(sessionId, answers);
+        clearDraft(sessionId);
+        writePending(null);
+        await handleTurn(turn);
+      } catch (e) {
+        const slots = e instanceof api.ApiError && (e.detail as { missing_required?: string[] })?.missing_required;
+        if (slots) {
+          setMissing(slots);
+          return;
+        }
+        setStep2Error(explain(e));
       }
     });
 
   // Picked chips and typed text go out as one answer.
   const send = (typed: string) => {
     const text = [...picked, typed].filter(Boolean).join(", ");
-    if (!sessionId || !text) return;
+    if (!sessionId || !text || working.current) return;
     setOptions([]);
     setPicked([]);
     push("me", text);
@@ -264,6 +390,30 @@ export default function App() {
     setRevising(false);
     return guarded(async () => handleTurn(await call(sessionId, text)));
   };
+
+  // The pencil on the last answer edits it in place. Saving drops that answer and the bot's
+  // reply to it (also from the stored chat on the server), then sends the new text.
+  const [editing, setEditing] = useState<{ index: number; draft: string } | null>(null);
+  const canEdit = stage === "interview" && !revising && !busy;
+  const saveEdit = () =>
+    guarded(async () => {
+      if (!editing || !sessionId) return;
+      const { index } = editing;
+      const draft = editing.draft.trim();
+      const target = messages[index];
+      if (!draft || target?.role !== "me") return;
+      if (draft !== target.text) {
+        const skip = messages.slice(index + 1).filter((x) => x.role === "me" && x.text === target.text).length;
+        await api.undoAnswer(sessionId, target.text, skip);
+        setMessages((m) => [...m.slice(0, index), { id: nextId.current++, role: "me", text: draft }]);
+        setOptions([]);
+        setPicked([]);
+        setEditing(null);
+        handleTurn(await api.sendAnswer(sessionId, draft));
+      } else {
+        setEditing(null);
+      }
+    });
 
   const choose = (o: string, byPointer = false) => {
     if (!multi) return send(o);
@@ -299,100 +449,154 @@ export default function App() {
       setIcp(await api.approveIcp(sessionId));
       await api.sendVerdict(sessionId, true);
       setApproved(true);
+      setStage("scoring");
     });
 
   // The current profile stays on the page (collapsed) while they explain what to change.
   function improve() {
     // from an approved profile this is "continue the conversation": the rebuilt profile needs approving again
-    push("bot", approved ? "Happy to keep going. What would you like to change or add?" : "Sorry about that. What should be changed or added?");
+    const hasUnclear = (icp?.document.open_questions.length ?? 0) > 0;
+    push("bot", hasUnclear
+      ? "Would you like to clear up the unclear questions, or is there something in the profile you want to fix?"
+      : approved ? "Happy to keep going. What would you like to change or add?" : "What would you like to change or add?");
+    if (hasUnclear) {
+      setOptions(["Answer the unclear questions", "Fix something in the profile"]);
+      setMulti(false);
+      setPicked([]);
+    }
     setApproved(false);
     setRevising(true);
     setStage("interview");
   }
 
-  if (stage === "home") {
+  if (stage === "scoring" && icp && sessionId) {
     return (
       <main className={app}>
         <header className={header}>
-          <div className="flex items-center gap-2.5" />
+          <span className="inline-flex items-center justify-center size-[42px] rounded-full bg-panel shadow-[0_0_0_1px_var(--line),0_2px_8px_rgba(20,24,31,.08)]">
+            <Icon name="sparkle" size={20} />
+          </span>
           <ThemeToggle />
         </header>
-        <div className="flex-1 flex flex-col items-center justify-center text-center gap-0 px-[clamp(16px,4vw,48px)] pt-0 pb-10">
-          <span className="inline-flex items-center justify-center size-16 rounded-full bg-panel shadow-[0_10px_28px_rgba(20,24,31,.1),0_0_0_1px_var(--line)]">
-            <Icon name="sparkle" size={26} />
-          </span>
-          <h1 className="mt-[26px] mx-0 mb-0 text-[clamp(26px,3.4vw,34px)] leading-[1.15] font-medium tracking-[-.025em]">
-            <TextEffect preset="fade-in-blur" speedReveal={1.4}>Build your</TextEffect>{" "}
-            <TextEffect preset="fade-in-blur" speedReveal={1.4} delay={0.25} className="text-muted">Ideal Customer Profile</TextEffect>
-          </h1>
-          <p className="text-muted text-[14px] max-w-[520px] mt-[10px] mx-0 mb-0">A short conversation about your business. At the end you get an ICP and a scoring model you can review and approve.</p>
-          <div className="grid grid-cols-3 gap-[18px] mt-11 w-full max-w-[1000px] text-left max-[820px]:grid-cols-1">
-            {STEPS.map((step) => (
-              <div className="flex flex-col bg-card border border-line rounded-[28px] p-[18px] shadow-soft" key={step.title}>
-                <span className="inline-flex size-11 items-center justify-center rounded-[14px] bg-panel shadow-[0_0_0_1px_var(--line),0_1px_2px_rgba(20,24,31,.05)]">
-                  <Icon name={step.icon} size={22} />
-                </span>
-                <h3 className="mt-[22px] mx-0 mb-[10px] text-[17px] font-semibold tracking-[-.015em] leading-[1.2]">{step.title}</h3>
-                <p className="mt-0 mx-0 mb-[18px] text-[13px] leading-[1.55] text-muted max-w-none flex-1">{step.text}</p>
-                <span className="block text-center py-[11px] px-3 rounded-full bg-panel border border-line text-[13px] font-semibold">{step.tag}</span>
-              </div>
-            ))}
+        <div className={`${column} flex-1 flex flex-col gap-5 pt-2 pb-10 ${gutter}`}>
+          <StepIndicator current={4} />
+          <div className="text-center">
+            <h1 className="mt-2 mx-0 mb-0 text-[clamp(26px,3.4vw,34px)] leading-[1.15] font-medium tracking-[-.025em]">Your scoring table</h1>
           </div>
-          <form
-            className="w-full max-w-[1000px] mt-14"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const body: Record<string, string> = {};
-              for (const [k, v] of Object.entries(intro)) if (v.trim()) body[k] = v.trim();
-              if (!body.company_name || busy) return;
-              void start(body as unknown as StartRequest);
-            }}
-          >
-            <div className={promptBox}>
-              <input
-                className={promptInput}
-                type="text"
-                maxLength={200}
-                disabled={busy}
-                autoFocus
-                placeholder="Your company name"
-                aria-label="Company name"
-                value={intro.company_name}
-                onChange={(e) => setIntro({ ...intro, company_name: e.target.value })}
-              />
-              <div className={promptActions}>
-                <button className={`${roundBtn} ${sendBtn}`} type="submit" aria-label="Start" title="Start" disabled={busy || !intro.company_name.trim()}>
-                  <Icon name="arrowUp" size={18} />
-                </button>
-              </div>
+          <div className="w-full max-w-[760px] mx-auto">
+            <ScoringSetup progress={scoring} onProgress={setScoring} sessionId={sessionId} icp={icp} busy={busy} onIcp={setIcp} onBack={() => setStage("result")} onDone={() => setStage("result")} />
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // The finished result: the profile and the scoring model, with nothing left to answer.
+  if (stage === "result" && icp && sessionId) {
+    return (
+      <main className={app}>
+        <header className={header}>
+          <span className="inline-flex items-center justify-center size-[42px] rounded-full bg-panel shadow-[0_0_0_1px_var(--line),0_2px_8px_rgba(20,24,31,.08)]">
+            <Icon name="sparkle" size={20} />
+          </span>
+          <ThemeToggle />
+        </header>
+        <div className={`${column} flex-1 flex flex-col gap-5 pt-2 pb-10 ${gutter}`}>
+          <StepIndicator current={4} done />
+          <h1 className="mt-2 mx-0 mb-0 text-center text-[clamp(26px,3.4vw,34px)] leading-[1.15] font-medium tracking-[-.025em]">
+            Your {profileName(track)} is ready
+          </h1>
+          <div className="w-full max-w-[760px] mx-auto flex flex-col gap-4">
+            <IcpView icp={icp} onScoring={() => setStage("scoring")} approved={approved} busy={busy} readOnly onApprove={approve} onImprove={improve} />
+            <ScoringSummary icp={icp} />
+            <div className="flex flex-wrap justify-center gap-2.5">
+              <button disabled={busy} onClick={() => setStage("scoring")}>
+                Edit scoring
+              </button>
+              <button disabled={busy} onClick={improve}>
+                Refine the profile
+              </button>
+              <button className={primaryBtn} disabled={busy} onClick={newChat}>
+                <Icon name="plus" size={18} /> New chat
+              </button>
             </div>
-            {startError && (
-              <p className="mt-3 mx-0 mb-0 text-warn text-[14px] text-center" role="alert">
-                {startError}
-              </p>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  const stepNo = stage === "step1" ? 1 : stage === "step2" ? 2 : 3;
+
+  if (stage === "step1" || stage === "step2") {
+    return (
+      <main className={app}>
+        <header className={header}>
+          <div className="flex items-center gap-2.5">
+            <span className="inline-flex items-center justify-center size-[42px] rounded-full bg-panel shadow-[0_0_0_1px_var(--line),0_2px_8px_rgba(20,24,31,.08)]">
+              <Icon name="sparkle" size={20} />
+            </span>
+            {stage === "step2" && (
+              <button onClick={newChat} disabled={busy}>
+                <Icon name="plus" size={18} /> New chat
+              </button>
             )}
-            <div className="grid grid-cols-3 gap-3 mt-3 max-[720px]:grid-cols-1">
-              {INTRO_EXTRAS.map(([k, label]) => (
-                <input
-                  className={`${pillInput} py-3 px-5 shadow-soft placeholder:text-muted`}
-                  key={k}
-                  type="text"
+          </div>
+          <ThemeToggle />
+        </header>
+        <div className={`${column} flex-1 flex flex-col gap-5 pt-2 pb-10 ${gutter}`}>
+          <StepIndicator current={stepNo} />
+          {stage === "step1" ? (
+            <>
+              <div className="text-center">
+                <h1 className="mt-2 mx-0 mb-0 text-[clamp(26px,3.4vw,34px)] leading-[1.15] font-medium tracking-[-.025em]">
+                  <TextEffect preset="fade-in-blur" speedReveal={1.4}>Build your</TextEffect>{" "}
+                  <TextEffect preset="fade-in-blur" speedReveal={1.4} delay={0.25} className="text-muted">{profileName(track)}</TextEffect>
+                </h1>
+                <p className="text-muted text-[14px] max-w-[520px] mt-[10px] mx-auto mb-0">
+                  {track === "hr"
+                    ? "Tell us about your company, pick a few options, then a short chat. At the end you get a candidate profile and a scoring model you can review and approve."
+                    : "Tell us about your company, pick a few options, then a short chat. At the end you get a profile and a scoring model you can review and approve."}
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-[18px] w-full text-left max-[820px]:grid-cols-1">
+                {STEPS.map((step) => (
+                  <div className="flex flex-col bg-card border border-line rounded-[28px] p-[18px] shadow-soft" key={step.title}>
+                    <span className="inline-flex size-11 items-center justify-center rounded-[14px] bg-panel shadow-[0_0_0_1px_var(--line),0_1px_2px_rgba(20,24,31,.05)]">
+                      <Icon name={step.icon} size={22} />
+                    </span>
+                    <h3 className="mt-[22px] mx-0 mb-[10px] text-[17px] font-semibold tracking-[-.015em] leading-[1.2]">{step.title}</h3>
+                    <p className="mt-0 mx-0 mb-[18px] text-[13px] leading-[1.55] text-muted max-w-none flex-1">{step.text}</p>
+                    <span className="block text-center py-[11px] px-3 rounded-full bg-panel border border-line text-[13px] font-semibold">{step.tag}</span>
+                  </div>
+                ))}
+              </div>
+              <StepOne busy={busy} status="Setting things up..." error={startError} onTrack={setTrack} onSubmit={(body) => void start(body)} />
+            </>
+          ) : (
+            sessionId && (
+              <>
+                <h1 className="sr-only">Profile builder</h1>
+                {cardsError && cards.length === 0 && (
+                  <div className="flex items-center justify-center gap-3 text-warn text-[13px]" role="alert">
+                    The questions could not be loaded.
+                    <button onClick={() => track && void loadCards(track)}>Retry</button>
+                  </div>
+                )}
+                <StepTwo
+                  key={`${sessionId}-${savedAnswers ? "saved" : "none"}`}
+                  sessionId={sessionId}
+                  cards={cards}
+                  saved={savedAnswers}
                   disabled={busy}
-                  maxLength={200}
-                  placeholder={label}
-                  aria-label={label}
-                  value={intro[k]}
-                  onChange={(e) => setIntro({ ...intro, [k]: e.target.value })}
+                  missing={missing}
+                  error={step2Error}
+                  status="AI is generating your first question..."
+                  onSubmit={(a) => void submitProfile(a)}
                 />
-              ))}
-            </div>
-            {busy && (
-              <div className="flex items-center justify-center gap-2 mt-4 text-[16px] text-muted" role="status">
-                <BotAvatar type="star" state="working" size={34} aria-hidden="true" />
-                <TextShimmer>AI is generating your first question...</TextShimmer>
-              </div>
-            )}
-          </form>
+              </>
+            )
+          )}
         </div>
       </main>
     );
@@ -403,7 +607,7 @@ export default function App() {
   const panelOpen = !!icp && showProfile;
   const profilePanel = icp && panelOpen && (
     <aside
-      aria-label="Ideal Customer Profile"
+      aria-label={profileName(track)}
       className={`border-l border-line w-[min(46%,640px)] min-w-[340px] shrink-0 max-md:fixed max-md:inset-0 max-md:z-30 max-md:w-auto max-md:min-w-0 max-md:border-l-0 max-md:bg-frame ${stage === "done" ? "" : "max-md:hidden"}`}
     >
       <div className="sticky top-[74px] max-h-[calc(100vh-74px)] overflow-y-auto p-4 flex flex-col">
@@ -413,6 +617,7 @@ export default function App() {
         {stage !== "done" && <p className="mt-0 mx-0 mb-2 text-[12px] text-muted">The current profile, being updated from your answer.</p>}
         <IcpView
           icp={icp}
+          onScoring={() => setStage("scoring")}
           approved={approved}
           busy={busy || stage !== "done"}
           readOnly={stage !== "done"}
@@ -428,7 +633,7 @@ export default function App() {
       <ScrollProgress />
       <header className={header}>
         <div className="flex items-center gap-2.5">
-          <h1 className="sr-only">ICP Chatbot</h1>
+          <h1 className="sr-only">Profile builder</h1>
           <button onClick={newChat} disabled={busy}>
             <Icon name="plus" size={18} /> New chat
           </button>
@@ -445,41 +650,93 @@ export default function App() {
 
       <div className="flex flex-1 items-stretch">
       <div className="flex-1 min-w-0 flex flex-col">
+      <div className={`${column} ${gutter}`}>
+        <StepIndicator current={3} done={stage === "done"} />
+      </div>
       {sessionId && (stage === "interview" || stage === "building" || stage === "done") && (
         <ProgressBar progress={progress} building={stage === "building"} done={stage === "done"} />
       )}
 
       <div className={`${column} flex-1 flex flex-col gap-3 pt-2 pb-[18px] ${gutter}`} aria-live="polite">
         {messages.map((m, i) => (
-            <InView key={m.id} className={MSG_CLASS[m.role]}>
+            <div key={m.id} className={m.role === "me" ? "flex items-center justify-end gap-2 group" : "contents"}>
+            {m.role === "me" && canEdit && i === messages.map((x) => x.role).lastIndexOf("me") && (
+              <button type="button" title="Edit this answer" aria-label="Edit this answer" onClick={() => setEditing({ index: i, draft: m.text })}
+                className="shrink-0 size-8 grid place-items-center rounded-full border-0 bg-transparent text-muted cursor-pointer hover:text-ink">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                </svg>
+              </button>
+            )}
+            {editing?.index === i ? (
+              <div className="flex flex-col items-end gap-2 w-full max-w-[85%]">
+                <textarea
+                  autoFocus
+                  value={editing.draft}
+                  onChange={(e) => setEditing({ index: i, draft: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveEdit(); }
+                    if (e.key === "Escape") setEditing(null);
+                  }}
+                  rows={2}
+                  className="w-full rounded-[18px] border border-line bg-panel py-3 px-[18px] text-[16px] resize-y"
+                />
+                <div className="flex gap-2">
+                  <button type="button" disabled={busy} onClick={() => setEditing(null)}>Cancel</button>
+                  <button type="button" className={primaryBtn} disabled={busy || !editing.draft.trim()} onClick={saveEdit}>Save and resend</button>
+                </div>
+              </div>
+            ) : (
+            <InView className={MSG_CLASS[m.role]}>
               {m.role === "note" && stage === "building" && i === messages.length - 1 ? (
                 <TextShimmer>{m.text}</TextShimmer>
-              ) : m.role === "bot" && m.id >= firstNewId.current ? (
+              ) : m.role === "bot" && m.live && m.id >= firstNewId.current && !typed.has(m.id) ? (
                 <Typewriter text={m.text} onDone={() => markTyped(m.id)} />
               ) : (
                 m.text
               )}
             </InView>
+            )}
+            </div>
         ))}
 
         {options.length > 0 && replyTyped && (
           <div className="flex flex-col items-end gap-2">
-            <div className={chips} role="group" aria-label={multi ? "Select all that apply" : "Pick one"}>
+            <div className={chips} role={multi ? "group" : "radiogroup"} aria-label={multi ? "Select all that apply" : "Pick one"}>
               {options.map((o) => (
                 <button
                   key={o}
-                  className={`${chip} ${picked.includes(o) ? chipOn : ""}`}
-                  aria-pressed={multi ? picked.includes(o) : undefined}
+                  type="button"
+                  role={multi ? "checkbox" : "radio"}
+                  aria-checked={picked.includes(o)}
+                  className={`flex items-center gap-2.5 rounded-[18px] py-2.5 px-4 text-[14px] text-left font-normal ${picked.includes(o) ? "border-accent" : ""}`}
                   disabled={busy}
                   onClick={(e) => choose(o, e.detail > 0)}
                 >
-                  {multi && picked.includes(o) ? "\u2713 " : ""}
+                  {/* the box or dot shows which kind of pick this is; the button itself takes the click */}
+                  <input
+                    className="size-4 accent-accent m-0 pointer-events-none"
+                    type={multi ? "checkbox" : "radio"}
+                    checked={picked.includes(o)}
+                    readOnly
+                    tabIndex={-1}
+                    aria-hidden="true"
+                  />
                   {o}
                 </button>
               ))}
             </div>
             {multi && <span className="text-right text-[12px] text-muted">Select all that apply, then press Send. You can also type your own below.</span>}
           </div>
+        )}
+
+        {stage === "interview" && revising && icp && !busy && (
+          <InView className="flex flex-col items-end gap-1.5">
+            <button className={primaryBtn} onClick={approve}>
+              {"\u2713"} Looks good, continue
+            </button>
+            <span className="text-right text-[12px] text-muted">Happy with the profile? Move on to scoring. Or type a change below.</span>
+          </InView>
         )}
 
         {busy && stage !== "building" && <div className={`${MSG}p-0 self-start flex items-center gap-2 text-[16px] text-muted`}>

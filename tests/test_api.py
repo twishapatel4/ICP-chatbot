@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 
@@ -32,45 +34,74 @@ def q(text):
     return QuestionOutput(question=text)
 
 
+# A valid step 2 for a B2B seller that pins nothing down: every card answered "Any", so the
+# chat still gathers the specifics the way it did before step 2 existed.
+SALES_B2B_PROFILE = {
+    "industries": ["Any"],
+    "lead_geographies": ["Any"],
+    "company_hq_geographies": ["Any"],
+    "buyer_roles": ["Sales director"],
+}
+
+
 class World:
-    def __init__(self, app, client, llm):
-        self.app, self.client, self.llm = app, client, llm
+    def __init__(self, app, client, llm, db=None):
+        self.app, self.client, self.llm, self.db = app, client, llm, db
         self.repo = app.state.container.repo
 
     async def call(self, method, url, tenant="tenant-1", **kw):
         headers = {"X-Tenant-Id": tenant} if tenant else {}
+        headers.update(kw.pop("headers", {}))
         return await self.client.request(method, url, headers=headers, **kw)
 
-    async def start(self, **body):
-        self.llm.queue("opener", q("What do you sell, and to whom?"))
+    async def create(self, **body):
+        """Step 1 only: the session exists and waits for the step 2 form."""
         response = await self.call(
             "POST", "/sessions", json={"company_name": "Acme", "role": "CTO", **body}
         )
         assert response.status_code == 201, response.text
         return response.json()
 
+    async def start(self, profile=None, **body):
+        """Steps 1 and 2: returns the first chat turn, as POST /sessions did before step 2."""
+        created = await self.create(**body)
+        self.llm.queue("opener", q("What do you sell, and to whom?"))
+        response = await self.call(
+            "POST",
+            f"/sessions/{created['session_id']}/profile",
+            json={"answers": SALES_B2B_PROFILE if profile is None else profile},
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
 
 @pytest.fixture
 async def world():
-    async def build(**settings):
-        db = make_engine("sqlite+aiosqlite:///:memory:")
-        await init_models(db)
+    async def build(db=None, fetcher=None, **settings):
+        fresh = db is None
+        if fresh:
+            db = make_engine("sqlite+aiosqlite:///:memory:")
+            await init_models(db)
         llm = FakeLLM({}, Usage(100, 10, 0, 0))
         app = create_app(
             Settings(_env_file=None, **settings),
             llm=llm,
-            fetcher=NoFetcher(),
+            fetcher=fetcher or NoFetcher(),
             db_engine=db,
         )
         client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
-        built.append((client, db))
-        return World(app, client, llm)
+        w = World(app, client, llm, db)
+        built.append((w, fresh))
+        return w
 
     built = []
     yield build
-    for client, db in built:
-        await client.aclose()
-        await db.dispose()
+    for w, _ in built:  # website reads still running in the background finish first
+        await w.app.state.container.engine.drain()
+    for w, fresh in built:
+        await w.client.aclose()
+        if fresh:
+            await w.db.dispose()
 
 
 async def run_to_completion(w):
@@ -90,8 +121,8 @@ async def run_to_completion(w):
         "interviewer",
         ask("Who signs off on buying this?",
              up("industries", ["Fintech"]), up("company_size", ["50-500"]),
-             up("geographies", ["Europe"]), up("pain_points", ["manual payroll"]),
-             up("buyer_roles", ["CFO"]), target_slot="buyer_roles", enough=True),
+             up("lead_geographies", ["Europe"]), up("buying_triggers", ["manual payroll"]),
+             up("buyer_roles", ["CFO"]), target_slot="buying_triggers", enough=True),
     )  # fmt: skip
     nxt = await w.call(
         "POST", f"/sessions/{sid}/answers", json={"text": "Banks in Europe with 50 to 500 staff"}
@@ -129,8 +160,9 @@ async def test_the_full_flow_from_signup_to_an_approved_icp(world):
     body = built.json()
     assert (body["version"], body["author"]) == (1, "bot")
     assert "Fintech" in body["document"]["summary"]
-    weights = [c["weight"] for c in body["document"]["scoring_model"]["criteria"]]
-    assert weights == [20, 15, 20, 15, 10, 10, 10]
+    base = {c["key"]: c["weight"] for c in body["document"]["scoring_model"]["criteria"]}
+    weights = list(base.values())
+    assert sum(weights) == 100  # the default weights are scaled over the criteria that apply
 
     edited = await w.call(
         "PATCH",
@@ -141,7 +173,9 @@ async def test_the_full_flow_from_signup_to_an_approved_icp(world):
     reweighted = await w.call(
         "PATCH",
         f"/sessions/{sid}/icp",
-        json={"kind": "weights", "weights": {"industry_fit": 30, "geographic_fit": 0}},
+        json={"kind": "weights", "weights": {
+            "industry_fit": base["industry_fit"] + 2, "geographic_fit": base["geographic_fit"] - 2,
+        }},
     )
     assert reweighted.status_code == 200
     toggled = await w.call(
@@ -261,7 +295,7 @@ async def test_the_fallback_form_completes_a_session_without_the_model(world):
         "POST", f"/sessions/{sid}/fallback", json={"answers": {"industries": ["Fintech"]}}
     )
     assert (
-        partial.status_code == 422 and "pain_points" in partial.json()["detail"]["missing_required"]
+        partial.status_code == 422 and "buyer_seniority" in partial.json()["detail"]["missing_required"]
     )
     answers = {key: [f"value for {key}"] for key in required}
     done = await w.call("POST", f"/sessions/{sid}/fallback", json={"answers": answers})
@@ -277,7 +311,8 @@ async def test_detail_mode_rebuild_keeps_the_companys_earlier_edits(world):
     w = await world()
     sid = await run_to_completion(w)
     w.llm.queue("final_icp", ICPSynthesis())
-    await w.call("POST", f"/sessions/{sid}/icp")
+    first = (await w.call("POST", f"/sessions/{sid}/icp")).json()
+    base = {c["key"]: c["weight"] for c in first["document"]["scoring_model"]["criteria"]}
     await w.call(
         "PATCH",
         f"/sessions/{sid}/icp",
@@ -286,23 +321,26 @@ async def test_detail_mode_rebuild_keeps_the_companys_earlier_edits(world):
     await w.call(
         "PATCH",
         f"/sessions/{sid}/icp",
-        json={"kind": "weights", "weights": {"industry_fit": 30, "geographic_fit": 0}},
+        json={"kind": "weights", "weights": {
+            "industry_fit": base["industry_fit"] + 2, "geographic_fit": base["geographic_fit"] - 2,
+        }},
     )
 
-    w.llm.queue("interviewer", ask("Any compliance needs?"))
+    w.llm.queue("interviewer", ask("Any buying triggers?"))
     detail = await w.call("POST", f"/sessions/{sid}/detail")
     assert detail.status_code == 200 and detail.json()["mode"] == "detail"
-    w.llm.queue("interviewer", ask("Switching costs?", up("compliance", ["GDPR"]), enough=True))
+    w.llm.queue("interviewer", ask("Anything else?", up("buying_triggers", ["GDPR"]), enough=True))
     await w.call("POST", f"/sessions/{sid}/answers", json={"text": "GDPR applies"})
     await w.call("POST", f"/sessions/{sid}/finish")
 
     w.llm.queue("final_icp", ICPSynthesis())
     rebuilt = (await w.call("POST", f"/sessions/{sid}/icp")).json()
     entries = {k: e for s in rebuilt["document"]["sections"].values() for k, e in s.items()}
-    assert entries["compliance"]["values"] == ["GDPR"]  # the new detail answer is there
+    assert entries["buying_triggers"]["values"] == ["GDPR"]  # the new detail answer is there
     assert entries["industries"]["values"] == ["Insurance"]  # the earlier edit survived
     weights = {c["key"]: c["weight"] for c in rebuilt["document"]["scoring_model"]["criteria"]}
-    assert weights["industry_fit"] == 30 and weights["geographic_fit"] == 0
+    assert weights["industry_fit"] == base["industry_fit"] + 2
+    assert weights["geographic_fit"] == base["geographic_fit"] - 2
 
 
 async def test_a_returning_user_gets_the_pending_question_back(world):
@@ -402,7 +440,7 @@ async def test_stopping_early_still_builds_a_partial_profile_that_names_what_is_
     assert built.status_code == 200
     doc = built.json()["document"]
     assert doc["partial"] is True
-    assert any(q.startswith("Not yet known:") for q in doc["open_questions"])
+    assert any(q.endswith("?") for q in doc["open_questions"])
 
 
 # -- voice answers: audio in, text out ------------------------------------------------------------
@@ -483,3 +521,73 @@ async def test_turns_and_the_session_view_carry_progress_that_rises_with_answers
     assert after["percent"] > first["percent"] and after["known"] > first["known"]
     view = (await w.call("GET", f"/sessions/{sid}")).json()["progress"]
     assert view == after
+
+
+async def test_asking_for_the_unclear_questions_walks_the_list_until_the_user_asks_something(world):
+    w = await world()
+    sid = await run_to_completion(w)
+    w.llm.queue("final_icp", ICPSynthesis(open_questions=["Which port do they ship from?"]))
+    built = (await w.call("POST", f"/sessions/{sid}/icp")).json()
+    listed = built["document"]["open_questions"]
+    assert len(listed) >= 2 and all(q.endswith("?") for q in listed)
+
+    first = (await w.call("POST", f"/sessions/{sid}/revise", json={"text": "ask me the unclear questions"})).json()
+    assert first["question"]["text"] == listed[0]  # no model call: the profile's own list
+    w.llm.queue("interviewer", ask("noted", up("buying_triggers", ["audits"])))
+    second = (await w.call("POST", f"/sessions/{sid}/answers", json={"text": "audits"})).json()
+    assert second["question"]["text"] == listed[1] and second["status"] == "active"
+
+    # a question of their own ends the walk: the interviewer answers it, nothing is forced
+    w.llm.queue("interviewer", ask("Each lead is scored on the priorities you set. Does that answer it?"))
+    broke = (await w.call("POST", f"/sessions/{sid}/answers", json={"text": "how is the score worked out?"})).json()
+    assert broke["question"]["text"] != listed[2 % len(listed)] or len(listed) == 2
+    assert broke["question"]["text"].startswith("Each lead is scored")
+
+
+# -- input hardening (QA 2026-10-29) ---------------------------------------------------------------
+
+
+async def test_blank_company_name_is_rejected_and_nul_bytes_are_dropped(world):
+    w = await world()
+    blank = await w.call("POST", "/sessions", json={"company_name": "   "})
+    assert blank.status_code == 422
+    created = await w.create(company_name="Ac\x00me ")
+    stored = (await w.repo.get_session("tenant-1", created["session_id"])).state
+    assert "\x00" not in json.dumps(stored.model_dump(mode="json"))
+
+
+async def test_nul_byte_in_an_answer_is_dropped_not_a_500(world):
+    w = await world()
+    started = await w.start()
+    w.llm.queue("interviewer", ask("Could you say more?"))
+    reply = await w.call(
+        "POST", f"/sessions/{started['session_id']}/answers", json={"text": "pay\x00roll"}
+    )
+    assert reply.status_code == 200, reply.text
+    only_nul = await w.call(
+        "POST", f"/sessions/{started['session_id']}/answers", json={"text": "\x00"}
+    )
+    assert only_nul.status_code == 422
+
+
+async def test_non_finite_weights_and_oversize_field_edits_are_422(world):
+    w = await world()
+    sid = await run_to_completion(w)
+    w.llm.queue("final_icp", ICPSynthesis())
+    await w.call("POST", f"/sessions/{sid}/icp")
+    nan = await w.call(
+        "PATCH",
+        f"/sessions/{sid}/icp",
+        content=b'{"kind":"weights","weights":{"industry_fit":NaN}}',
+        headers={"content-type": "application/json"},
+    )
+    many = await w.call(
+        "PATCH", f"/sessions/{sid}/icp",
+        json={"kind": "field", "slot": "industries", "values": ["x"] * 101},
+    )  # fmt: skip
+    long = await w.call(
+        "PATCH", f"/sessions/{sid}/icp",
+        json={"kind": "field", "slot": "industries", "values": ["x" * 201]},
+    )  # fmt: skip
+    assert (nan.status_code, many.status_code, long.status_code) == (422, 422, 422)
+    assert (await w.call("GET", f"/sessions/{sid}/icp")).json()["version"] == 1

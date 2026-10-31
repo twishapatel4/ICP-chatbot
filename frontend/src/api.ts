@@ -1,4 +1,4 @@
-import type { FormField, IcpEdit, IcpResponse, StartRequest, Turn } from "./types";
+import type { Card, FormField, IcpEdit, IcpResponse, PriorityQuestion, ProfileOption, SessionView, StartRequest, Step1Response, Track, Turn } from "./types";
 
 const TENANT = import.meta.env.VITE_TENANT_ID ?? "demo";
 
@@ -30,18 +30,28 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   return data as T;
 }
 
-export const startSession = (body: StartRequest) => call<Turn>("POST", "/sessions", body);
+export const startSession = (body: StartRequest) => call<Step1Response>("POST", "/sessions", body);
+export const getSession = (id: string) => call<SessionView>("GET", `/sessions/${id}`);
+export const getProfileForm = (track: Track) => call<Card[]>("GET", `/profile-form?track=${track}`);
+export const getOptions = (facet: string, q = "", limit = 1000) =>
+  call<ProfileOption[]>("GET", `/options/${facet}?q=${encodeURIComponent(q)}&limit=${limit}`);
+export const submitProfile = (id: string, answers: Record<string, string[]>) =>
+  call<Turn>("POST", `/sessions/${id}/profile`, { answers });
 export const sendAnswer = (id: string, text: string) =>
   call<Turn>("POST", `/sessions/${id}/answers`, { text });
-export const getFallbackForm = () => call<FormField[]>("GET", "/fallback-form");
+export const getFallbackForm = (track: Track) => call<FormField[]>("GET", `/fallback-form?track=${track}`);
 export const submitFallback = (id: string, answers: Record<string, string[]>) =>
   call<Turn>("POST", `/sessions/${id}/fallback`, { answers });
 export const buildIcp = (id: string) => call<IcpResponse>("POST", `/sessions/${id}/icp`);
 export const approveIcp = (id: string) => call<IcpResponse>("POST", `/sessions/${id}/approve`);
 export const editIcp = (id: string, edit: IcpEdit) =>
   call<IcpResponse>("PATCH", `/sessions/${id}/icp`, edit);
+export const getScoringQuestions = (id: string) =>
+  call<PriorityQuestion[]>("GET", `/sessions/${id}/scoring-questions`);
 export const sendVerdict = (id: string, correct: boolean, comment = "") =>
   call<null>("POST", `/sessions/${id}/verdict`, { correct, comment });
+export const undoAnswer = (id: string, text: string, skip: number) =>
+  call<Turn>("POST", `/sessions/${id}/undo`, { text, skip });
 export const reviseIcp = (id: string, text: string) =>
   call<Turn>("POST", `/sessions/${id}/revise`, { text });
 

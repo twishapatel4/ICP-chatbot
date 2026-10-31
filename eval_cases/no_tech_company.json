@@ -16,11 +16,8 @@
     "We avoid industrial sites."
   ],
   "expected": {
-    "geographies": [
+    "lead_geographies": [
       "Texas"
-    ],
-    "pain_points": [
-      "leaks"
     ],
     "disqualifiers": [
       "industrial"

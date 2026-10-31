@@ -20,13 +20,10 @@
   ],
   "expected": {
     "industries": [
-      "banks"
+      "Banking"
     ],
-    "geographies": [
+    "lead_geographies": [
       "Europe"
-    ],
-    "pain_points": [
-      "manual payroll"
     ],
     "buyer_roles": [
       "CFO",

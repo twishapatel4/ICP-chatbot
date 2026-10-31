@@ -1,0 +1,142 @@
+[
+ {
+  "id": "acct",
+  "label": "Accounting / Auditing"
+ },
+ {
+  "id": "adm",
+  "label": "Administrative"
+ },
+ {
+  "id": "advr",
+  "label": "Advertising"
+ },
+ {
+  "id": "anls",
+  "label": "Analyst"
+ },
+ {
+  "id": "art",
+  "label": "Art / Creative"
+ },
+ {
+  "id": "bd",
+  "label": "Business Development"
+ },
+ {
+  "id": "cnsl",
+  "label": "Consulting"
+ },
+ {
+  "id": "cust",
+  "label": "Customer Service"
+ },
+ {
+  "id": "dist",
+  "label": "Distribution"
+ },
+ {
+  "id": "dsgn",
+  "label": "Design"
+ },
+ {
+  "id": "edu",
+  "label": "Education"
+ },
+ {
+  "id": "eng",
+  "label": "Engineering"
+ },
+ {
+  "id": "fin",
+  "label": "Finance"
+ },
+ {
+  "id": "genb",
+  "label": "General Business"
+ },
+ {
+  "id": "hcpr",
+  "label": "HealthCare Provider"
+ },
+ {
+  "id": "hr",
+  "label": "Human Resources"
+ },
+ {
+  "id": "it",
+  "label": "Information Technology"
+ },
+ {
+  "id": "lgl",
+  "label": "Legal"
+ },
+ {
+  "id": "mgmt",
+  "label": "Management"
+ },
+ {
+  "id": "mnfc",
+  "label": "Manufacturing"
+ },
+ {
+  "id": "mrkt",
+  "label": "Marketing"
+ },
+ {
+  "id": "othr",
+  "label": "Other"
+ },
+ {
+  "id": "pr",
+  "label": "Public Relations"
+ },
+ {
+  "id": "prch",
+  "label": "Purchasing"
+ },
+ {
+  "id": "prdm",
+  "label": "Product Management"
+ },
+ {
+  "id": "prjm",
+  "label": "Project Management"
+ },
+ {
+  "id": "prod",
+  "label": "Production"
+ },
+ {
+  "id": "qa",
+  "label": "QualityAssurance"
+ },
+ {
+  "id": "rsch",
+  "label": "Research"
+ },
+ {
+  "id": "sale",
+  "label": "Sales"
+ },
+ {
+  "id": "sci",
+  "label": "Science"
+ },
+ {
+  "id": "stra",
+  "label": "Strategy / Planning"
+ },
+ {
+  "id": "supl",
+  "label": "Supply Chain"
+ },
+ {
+  "id": "trng",
+  "label": "Training"
+ },
+ {
+  "id": "wrt",
+  "label": "Writing / Editing"
+ }
+]

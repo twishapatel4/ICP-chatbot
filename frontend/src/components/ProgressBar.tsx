@@ -19,7 +19,7 @@ const WORKING =
   " after:content-[''] after:absolute after:inset-0 after:bg-[linear-gradient(110deg,transparent_30%,rgba(255,255,255,.6)_50%,transparent_70%)] after:bg-[length:200%_100%] after:animate-[shimmer_1.8s_linear_infinite] motion-reduce:after:hidden";
 
 export default function ProgressBar({ progress, building, done }: Props) {
-  // the fill shows how much of the ICP is gathered; building or finishing never moves it
+  // the fill shows how much of the profile is gathered; building or finishing never moves it
   const percent = progress.percent;
   // the fill springs to its value, like the scroll-progress bar from motion-primitives
   const spring = useSpring(percent, { stiffness: 200, damping: 50, restDelta: 0.01 });
@@ -40,14 +40,14 @@ export default function ProgressBar({ progress, building, done }: Props) {
     <div
       className={`${column} ${gutter} sticky top-[74px] z-5 pt-2.5 pb-4 bg-[linear-gradient(to_bottom,var(--frame)_78%,transparent)]`}
       role="progressbar"
-      aria-label="ICP progress"
+      aria-label="Profile progress"
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={percent}
       aria-valuetext={`${percent}%${detail ? `, ${detail}` : ""}`}
     >
       <div className="flex items-center justify-between gap-3 mb-[9px] text-[12px] font-semibold text-ink">
-        <span>ICP progress{detail && <span className="font-normal text-muted"> · {detail}</span>}</span>
+        <span>Profile progress{detail && <span className="font-normal text-muted"> · {detail}</span>}</span>
         <span className="py-0.5 px-[11px] rounded-full bg-(image:--bot-grad) border border-line text-[12px] tabular-nums shadow-soft">
           <AnimatedNumber value={percent} />%
         </span>

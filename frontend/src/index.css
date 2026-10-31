@@ -8,6 +8,7 @@
 @theme inline {
   --color-frame: var(--frame);
   --color-panel: var(--panel);
+  --color-pop: var(--pop);
   --color-card: var(--card);
   --color-ink: var(--text);
   --color-muted: var(--muted);
@@ -23,7 +24,7 @@
 @layer base {
   /* glassy look: a flat white frosted panel on a soft grey page, hairline borders, ink accents */
   :root {
-    --page: #fff; --frame: #fff; --panel: #fff;
+    --page: #fff; --frame: #fff; --panel: #fff; --pop: #fff; /* --pop: opaque, for dropdowns that float over other content */
     --fade: rgba(255, 255, 255, .96); --card: #f8f8f8;
     --bot-grad: linear-gradient(135deg, #ffffff 0%, #eef0fb 100%);
     --user-grad: linear-gradient(135deg, #3a3e4a 0%, #14161b 100%);
@@ -37,7 +38,7 @@
   }
   /* dark: when picked with the toggle, or when the system is dark and nothing was picked */
   :root[data-theme="dark"] {
-    --page: #050608; --frame: #0e0f14; --panel: rgba(255, 255, 255, .07);
+    --page: #050608; --frame: #0e0f14; --panel: rgba(255, 255, 255, .07); --pop: #1a1c23;
     --fade: rgba(14, 15, 20, .96); --card: rgba(255, 255, 255, .04);
     --bot-grad: linear-gradient(135deg, rgba(255, 255, 255, .1) 0%, rgba(255, 255, 255, .03) 100%);
     --user-grad: linear-gradient(135deg, #f4f5fa 0%, #cfd2e0 100%);
@@ -49,7 +50,7 @@
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --page: #050608; --frame: #0e0f14; --panel: rgba(255, 255, 255, .07);
+      --page: #050608; --frame: #0e0f14; --panel: rgba(255, 255, 255, .07); --pop: #1a1c23;
       --fade: rgba(14, 15, 20, .96); --card: rgba(255, 255, 255, .04);
       --bot-grad: linear-gradient(135deg, rgba(255, 255, 255, .1) 0%, rgba(255, 255, 255, .03) 100%);
       --user-grad: linear-gradient(135deg, #f4f5fa 0%, #cfd2e0 100%);

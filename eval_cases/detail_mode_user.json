@@ -23,9 +23,9 @@
     "They usually switch from legacy antivirus tools, which is slow and costly."
   ],
   "expected": {
-    "compliance": [
-      "HIPAA"
+    "buyer_roles": [
+      "CISO"
     ]
   },
-  "notes": "The user opts into detail mode; tier D slots should be filled."
+  "notes": "The user opts into detail mode; the extra detail answers must not break the replay."
 }

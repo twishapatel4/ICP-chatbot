@@ -5,7 +5,7 @@ holds the caps and the floor under that decision."""
 
 from dataclasses import dataclass
 
-from icp_chatbot.domain.slots import SlotDef, Tier
+from icp_chatbot.domain.slots import SlotDef, Tier, Track, slot_map
 from icp_chatbot.domain.state import SessionState, SlotSource
 
 COMPLETION_CONFIDENCE = 0.7  # a slot at or above this counts as known
@@ -31,10 +31,22 @@ def missing_core_slots(state: SessionState) -> list[SlotDef]:
 
 
 FLOOR_CONFIDENCE = 0.5
-CUSTOMER_KEYS = ("customer_profile", "industries", "company_size", "geographies", "pain_points",
-                 "buyer_roles", "buyer_departments", "desired_outcomes")  # fmt: skip
+_SALES_CUSTOMER_KEYS = ("customer_profile", "industries", "company_size", "lead_geographies",
+                        "buyer_roles", "buyer_departments")  # fmt: skip
+_HR_CUSTOMER_KEYS = ("target_roles", "target_functions", "required_skills", "candidate_locations",
+                     "education_level", "years_experience")  # fmt: skip
 PRODUCT_SEEN_AFTER = 2  # replies after which a website description of the product counts
 FLOOR_CUSTOMER_FACTS = 3  # what they sell plus this many facts about who buys it
+
+
+def customer_keys(track: Track) -> tuple[str, ...]:
+    """The fields that describe who the profile targets, which the floor counts."""
+    return _HR_CUSTOMER_KEYS if track == "hr" else _SALES_CUSTOMER_KEYS
+
+
+def _anchor_key(track: Track) -> str:
+    """The one field the floor always needs: what is sold, or the role being hired."""
+    return "target_roles" if track == "hr" else "product"
 
 
 def _told(state: SessionState, key: str) -> bool:
@@ -52,9 +64,19 @@ def _told(state: SessionState, key: str) -> bool:
 def icp_floor_met(state: SessionState) -> bool:
     """A sanity floor under the interviewer's own call: the user told us what they sell and at
     least three things about who buys it (B2B or B2C alone, or a guess from their website, does
-    not count)."""
-    known = [k for k in CUSTOMER_KEYS if _told(state, k)]
-    return _told(state, "product") and len(known) >= FLOOR_CUSTOMER_FACTS
+    not count). Three, or all of them when fewer apply to this profile (B2C)."""
+    anchor = _anchor_key(state.track)
+    standard = slot_map(state.track)
+    # only fields that apply count: a B2C seller has two (who buys, where), so the bar is
+    # whatever is reachable, up to FLOOR_CUSTOMER_FACTS. A field the user declined to answer is
+    # not reachable either, so it lowers the bar rather than blocking it for good.
+    applicable = [
+        k for k in customer_keys(state.track)
+        if k != anchor and state.is_applicable(standard[k]) and k not in state.skipped
+    ]  # fmt: skip
+    known = [k for k in applicable if _told(state, k)]
+    needed = min(FLOOR_CUSTOMER_FACTS, len(applicable))
+    return _told(state, anchor) and len(known) >= needed
 
 
 def enough_for_icp(state: SessionState) -> bool:
@@ -63,7 +85,10 @@ def enough_for_icp(state: SessionState) -> bool:
     core = [s for s in state.slot_defs() if s.blocks and state.is_applicable(s)]
     if not core:
         return True
-    return 1 - len(missing_core_slots(state)) / len(core) >= MIN_KNOWN_SHARE
+    # the floor holds here too: the step 2 cards alone clear the share, but say nothing about
+    # what is sold (or, for HR, little beyond the role)
+    share = 1 - len(missing_core_slots(state)) / len(core)
+    return share >= MIN_KNOWN_SHARE and icp_floor_met(state)
 
 
 TIER_A_WEIGHT = 0.7  # the must-ask fields drive the bar; the optional ones fill the rest
