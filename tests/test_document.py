@@ -51,9 +51,12 @@ def test_summary_is_built_only_from_the_fields_and_marks_inferences():
         "buyer_seniority": entry(["Director"]),
     }
     summary = render_summary(entries)
-    assert "Target industries: Fintech" in summary
-    assert "based in: Europe (inferred); headquartered in: United States." in summary
-    assert "Buyers: CFO, COO; Director; Finance." in summary
+    assert "The target industries are Fintech." in summary
+    assert "based in Europe (inferred)." in summary
+    assert "headquartered in United States." in summary
+    assert "influenced by CFO, COO." in summary
+    assert "at this level: Director." in summary
+    assert "involved in buying are Finance." in summary
     assert "pain points" not in summary.lower()  # nothing is invented for missing fields
     assert render_summary({}) == ""
 
@@ -276,8 +279,9 @@ async def test_sales_document_unchanged_apart_from_filters_block():
     assert doc.track == "sales"
     assert list(doc.sections) == ["seller_context", "target_firmographics", "buying_structure"]
     assert doc.summary == (
-        "About the company: What they do: Payroll software.\n"
-        "Ideal customer: Target industries: Fintech.\nBuyers: CFO."
+        "The company sells Payroll software.\n\n"
+        "The target industries are Fintech.\n\n"
+        "Buying decisions are made or influenced by CFO."
     )
 
 
@@ -542,3 +546,54 @@ def test_editing_a_scoring_only_slot_adds_no_filter():
     assert with_slot_filter([], "target_seniority", ["Senior"], "hr") == []
     (entry,) = with_slot_filter([], "candidate_locations", ["India"], "hr")
     assert entry.filter_name == "Locations"
+
+
+def test_business_model_is_spelled_out_in_the_summary():
+    both = render_summary({"business_model": entry(["Both"])})
+    assert "both other businesses (B2B) and individual consumers (B2C)" in both
+    assert both.startswith("It sells to ")
+    b2b = render_summary({"business_model": entry(["B2B"])})
+    assert "other businesses (B2B), not to individual consumers" in b2b
+    pair = render_summary({"business_model": entry(["B2B", "B2C"])})
+    assert "both other businesses (B2B)" in pair
+    inferred = render_summary({"business_model": entry(["B2C"], source=SlotSource.INFERRED)})
+    assert "individual consumers (B2C), not to other businesses (inferred)" in inferred
+
+
+def test_summary_is_paragraphs_not_key_value_pairs():
+    summary = render_summary(
+        {"product": entry(["Payroll"]), "industries": entry(["Fintech"]), "buyer_roles": entry(["CFO"])}
+    )
+    assert summary.count("\n\n") == 2
+    assert ": " not in summary
+
+
+def test_product_naming_a_kind_of_company_is_not_said_to_be_sold():
+    s = render_summary({"product": entry(["software development company"])})
+    assert s == "The company is a software development company."
+    assert "sells software development company" not in s
+    assert render_summary({"product": entry(["Payroll software"])}) == "The company sells Payroll software."
+    assert "is an IT consultancy" in render_summary({"product": entry(["IT consultancy"])})
+
+
+def test_any_answers_read_as_open_sentences_not_as_the_word_any():
+    open_all = {
+        k: entry(["Any"])
+        for k in ("industries", "company_size", "lead_geographies", "company_hq_geographies")
+    }
+    s = render_summary(open_all)
+    assert "Any." not in s and "are Any" not in s and "in Any" not in s
+    for phrase in ("every industry", "companies of any size", "people based anywhere"):
+        assert phrase in s
+    assert s == render_summary(open_all)  # the wording is stable for the same answers
+    mixed = render_summary({"industries": entry(["Fintech"]), "company_size": entry(["Any"])})
+    assert "The target industries are Fintech." in mixed
+    assert "companies of any size" in mixed and "Any" not in mixed
+
+
+def test_open_buyers_and_no_exclusions_read_naturally():
+    s = render_summary(
+        {"buyer_seniority": entry(["Any"]), "buyer_departments": entry(["Any"]), "disqualifiers": entry(["none"])}
+    )
+    assert "level: Any" not in s and "buying are Any" not in s
+    assert "Companies to avoid" not in s and ": none" not in s

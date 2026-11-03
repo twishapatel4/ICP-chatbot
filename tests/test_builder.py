@@ -109,8 +109,8 @@ async def test_summary_and_completeness_follow_the_final_fields():
         FakeLLM({"final_icp": [ICPSynthesis()]}), CONFIG, make_state(), today=TODAY
     )
     doc = result.document
-    assert "Target industries: fintech, banks" in doc.summary
-    assert "based in: Europe (inferred)" in doc.summary
+    assert "The target industries are fintech, banks." in doc.summary
+    assert "based in Europe (inferred)" in doc.summary
     assert 0.0 < doc.completeness.tier_a < 1.0
     industry = next(c for c in doc.scoring_model.criteria if c.key == "industry_fit")
     assert industry.applicable and industry.rules["industries"].primary == ["fintech", "banks"]

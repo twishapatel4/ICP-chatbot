@@ -274,3 +274,15 @@ def test_hr_session_accepts_hr_slot_updates_and_resolves_them():
     )
     assert outcome.applied == ["current_industries"] and outcome.ignored == ["product"]
     assert state.slots["current_industries"].refs[0].facet == "industry"
+
+
+def test_a_chat_reply_never_adds_to_a_field_the_form_settled():
+
+    state = SessionState()
+    state.slots["industries"] = SlotValue(
+        values=["Fintech"], confidence=0.9, source=SlotSource.STATED, evidence="step 2 form"
+    )
+    result = ExtractionResult(updates=[SlotUpdate(slot="industries", values=["Fintech", "Retail"],
+                                                  confidence=0.9, evidence="and retail")])
+    outcome = apply_extraction(state, result, 3)
+    assert state.slots["industries"].values == ["Fintech"] and outcome.applied == []

@@ -246,7 +246,11 @@ def test_apply_profile_writes_stated_0_9_with_refs():
     assert v.source_turn == 0 and v.evidence == "step 2 form"
     assert v.refs and v.refs[0].facet == "industry"
     assert apply_profile(state, B2B) == written  # idempotent
-    assert set(state.slots) == set(B2B) | {"business_model"}
+    # "Sales director" already says the level and department, so those are filled, not asked
+    assert set(state.slots) == set(B2B) | {"business_model", "buyer_seniority", "buyer_departments"}
+    assert state.slots["buyer_seniority"].values == ["Director"]
+    assert state.slots["buyer_seniority"].source == SlotSource.DERIVED
+    assert state.slots["buyer_departments"].values == ["Sales"]
 
 
 def test_apply_profile_rejects_invalid():
@@ -454,3 +458,22 @@ def test_a_switched_off_geography_is_excluded_not_unknown():
 def test_the_head_office_geography_cannot_be_switched_off():
     answers = {**B2B, "lead_geographies": [], "company_hq_geographies": []}
     assert validate_profile("sales", answers) == ["company_hq_geographies"]
+
+
+def test_titles_without_a_clear_level_leave_seniority_unknown_and_resubmit_refreshes():
+    state = SessionState(track="sales", step="profile")
+    apply_profile(state, {**B2B, "buyer_roles": ["Product Manager"]})
+    assert state.slots["buyer_seniority"].values == ["Manager"]
+    assert state.slots["buyer_departments"].values == ["Product Management"]
+    apply_profile(state, {**B2B, "buyer_roles": ["Growth Hacker"]})
+    assert "buyer_seniority" not in state.slots  # nothing in the title: still to be asked
+    assert state.slots["buyer_departments"].values == ["Marketing"]
+
+
+def test_a_chat_answer_never_overwrites_a_derived_or_chat_given_level():
+    state = SessionState(track="sales", step="profile")
+    state.slots["buyer_seniority"] = SlotValue(
+        values=["VP"], confidence=0.9, source=SlotSource.STATED, evidence="said in chat"
+    )
+    apply_profile(state, B2B)
+    assert state.slots["buyer_seniority"].values == ["VP"]

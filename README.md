@@ -119,4 +119,4 @@ credentials, and never call a real model.
 
 ## Frontend
 
-React chat screen in `frontend/` (see `frontend/README.md`): `cd frontend && npm install && npm run dev`, with the API running on port 8000.
+React chat screen in `frontend/` (see `frontend/README.md`): `cd frontend && npm install && npm run dev`, with the API running on port 8001 (change it with `VITE_API_URL` in `frontend/.env`).

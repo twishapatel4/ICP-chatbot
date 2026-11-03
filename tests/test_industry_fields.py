@@ -74,7 +74,7 @@ async def test_the_icp_shows_the_industry_fields_and_ignores_what_is_not_needed(
     )
     document = result.document
     assert document.sections["industry_specifics"]["rent_band"].values == ["30-40k"]
-    assert "rent band: 30-40k" in document.summary
+    assert "the target is 30-40k" in document.summary
     assert not any("company size" in q.lower() for q in document.open_questions)
 
 

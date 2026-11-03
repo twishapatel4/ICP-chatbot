@@ -5,6 +5,16 @@ import { profileName } from "../wording";
 const H4 = "mt-4 mx-0 mb-1.5 text-[12px] uppercase tracking-[.05em] text-muted";
 const label = (s: string) => s.replace(/_/g, " ");
 
+// "Both" alone means nothing to most readers: say who the company sells to.
+const businessModelText = (values: string[]) => {
+  const low = values.map((v) => v.trim().toLowerCase());
+  if (low.includes("both") || (low.includes("b2b") && low.includes("b2c")))
+    return "Both (sells to other businesses, B2B, and to individual consumers, B2C)";
+  if (low.includes("b2b")) return "B2B (sells to other businesses)";
+  if (low.includes("b2c")) return "B2C (sells to individual consumers)";
+  return values.join(", ");
+};
+
 interface Props {
   icp: IcpResponse;
   onScoring: () => void;
@@ -29,7 +39,7 @@ export default function IcpView({ icp, onScoring, approved, busy, readOnly, onAp
           missing. Use Needs improvement to add it.
         </p>
       )}
-      {doc.summary && <p>{doc.summary}</p>}
+      {doc.summary && <p className="whitespace-pre-line">{doc.summary}</p>}
 
       {Object.entries(doc.sections).map(([section, fields]) => (
         <section key={section}>
@@ -38,7 +48,7 @@ export default function IcpView({ icp, onScoring, approved, busy, readOnly, onAp
             <div className="flex justify-between gap-3 py-1 border-b border-line last-of-type:border-b-0 max-[520px]:flex-col max-[520px]:gap-0" key={key}>
               <span className="text-muted flex-[0_0_38%] capitalize">{label(key)}</span>
               <span className="flex-1 text-right [overflow-wrap:anywhere] max-[520px]:text-left">
-                {f.values.join(", ")}
+                {key === "business_model" ? businessModelText(f.values) : f.values.join(", ")}
                 {f.source === "inferred" && (
                   <span className="text-[11px] text-muted ml-1.5" title="Guessed from your website, not confirmed">
                     from website, unconfirmed
