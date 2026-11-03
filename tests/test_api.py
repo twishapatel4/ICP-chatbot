@@ -119,7 +119,7 @@ async def run_to_completion(w):
     assert best.json()["question"]["text"].startswith("Payroll for banks")
     w.llm.queue(
         "interviewer",
-        ask("Who signs off on buying this?",
+        ask("What makes a company ready to buy this?",
              up("industries", ["Fintech"]), up("company_size", ["50-500"]),
              up("lead_geographies", ["Europe"]), up("buying_triggers", ["manual payroll"]),
              up("buyer_roles", ["CFO"]), target_slot="buying_triggers", enough=True),
@@ -295,7 +295,7 @@ async def test_the_fallback_form_completes_a_session_without_the_model(world):
         "POST", f"/sessions/{sid}/fallback", json={"answers": {"industries": ["Fintech"]}}
     )
     assert (
-        partial.status_code == 422 and "buyer_seniority" in partial.json()["detail"]["missing_required"]
+        partial.status_code == 422 and "company_size" in partial.json()["detail"]["missing_required"]
     )
     answers = {key: [f"value for {key}"] for key in required}
     done = await w.call("POST", f"/sessions/{sid}/fallback", json={"answers": answers})
@@ -514,7 +514,7 @@ async def test_turns_and_the_session_view_carry_progress_that_rises_with_answers
     assert set(first) == {"percent", "known", "total"} and first["total"] > 0
     w.llm.queue(
         "interviewer",
-        ask("Who buys it?", up("product", ["Payroll software"]), up("customer_profile", ["Banks"])),
+        ask("What does it do for them?", up("product", ["Payroll software"]), up("customer_profile", ["Banks"])),
     )  # fmt: skip
     answered = await w.call("POST", f"/sessions/{sid}/answers", json={"text": "payroll for banks"})
     after = answered.json()["progress"]

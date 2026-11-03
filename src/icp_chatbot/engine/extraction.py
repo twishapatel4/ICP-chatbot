@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from icp_chatbot.domain.slots import CustomField, slot_map
 from icp_chatbot.domain.state import (
+    ANY,
     CONFIRMED_CONFIDENCE,
     NONE_IS_AN_ANSWER,
     DomainContext,
@@ -19,6 +20,7 @@ from icp_chatbot.domain.state import (
     real_values,
     resolve_slot_values,
 )
+from icp_chatbot.engine.profile_form import FORM_EVIDENCE
 
 EVIDENCE_LIMIT = 200
 SUMMARY_LIMIT = 600
@@ -88,6 +90,14 @@ def apply_extraction(state: SessionState, result: ExtractionResult, turn_no: int
             continue
         existing = state.slots.get(update.slot)
         evidence = update.evidence[:EVIDENCE_LIMIT]
+        if (
+            existing
+            and existing.evidence == FORM_EVIDENCE
+            and any(v != ANY for v in existing.values)
+            and update.slot not in result.flags.contradiction_slots
+            and not result.flags.corrects
+        ):
+            continue  # the step 2 form settled it: a chat reply never adds to or reshapes it
 
         if existing and existing.source == SlotSource.INFERRED:
             same = {v.lower() for v in existing.values} == {v.lower() for v in values}

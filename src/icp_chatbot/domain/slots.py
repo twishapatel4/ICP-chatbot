@@ -353,8 +353,9 @@ SLOT_LIST: tuple[SlotDef, ...] = _linked((
     _s(
         "customer_segments",
         "business_profile",
-        "Customer segments served",
-        "Who the target companies themselves sell to",
+        "Type of end customer",
+        "The kind of customers the target companies serve themselves (for example small shops, "
+        "large companies, schools or families)",
         "A",
         0.5,
         blocks_completion=False,

@@ -1181,9 +1181,7 @@ export default function StepTwo({
                   (!isOff(f, answers) &&
                     (answered(f, answers) || yes.includes(f.slot)))) && (
                   <FieldInput
-                    field={
-                      switchable(f, fields) ? { ...f, any_allowed: false } : f
-                    }
+                    field={f}
                     values={answers[f.slot] ?? []}
                     disabled={disabled}
                     countries={country}

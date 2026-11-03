@@ -1,5 +1,6 @@
 """The ICP as a stored, versioned JSON document (spec section 6)."""
 
+import zlib
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -198,7 +199,7 @@ GAP_QUESTIONS: dict[str, str] = {
     "services_offered": "What services do your buyers offer to their own clients?",
     "revenue_range": "What annual revenue do your best customers have?",
     "technologies_used": "Which software or tools do your best customers already use?",
-    "customer_segments": "Who do your customers themselves sell to?",
+    "customer_segments": "Who do your customers serve themselves: small shops, big companies or families?",
     "buyer_roles": "Who makes or influences the buying decision?",
     "buyer_departments": "Which departments are involved in buying?",
     "buyer_seniority": "How senior are the people who buy?",
@@ -258,54 +259,194 @@ def compute_completeness(
     return Completeness(tier_a=share(tier_a), tier_b=share(tier_b))
 
 
+def describe_business_model(values: list[str]) -> str:
+    """Who the company sells to, spelled out: a bare "B2B", "B2C" or "Both" is jargon to most readers."""
+    low = {v.strip().lower() for v in values}
+    if "both" in low or {"b2b", "b2c"} <= low:
+        return (
+            "both other businesses (B2B) and individual consumers (B2C), "
+            "so it has business customers as well as everyday buyers"
+        )
+    if "b2b" in low:
+        return "other businesses (B2B), not to individual consumers"
+    if "b2c" in low:
+        return "individual consumers (B2C), not to other businesses"
+    return ", ".join(values)
+
+
+_KIND_OF_COMPANY = {
+    "company", "firm", "agency", "startup", "business", "provider", "studio", "consultancy",
+    "vendor", "developer", "developers", "organisation", "organization", "outfit",
+}  # fmt: skip
+
+
+def _is_kind_of_company(value: str) -> bool:
+    words = value.strip().rstrip(".").lower().split()
+    return bool(words) and words[-1] in _KIND_OF_COMPANY
+
+
+def describe_product(entry: FieldEntry) -> str:
+    """The product sentence. A value that names a kind of company ("software development
+    company") is what the company is, not what it sells: "The company sells software development
+    company" would be wrong."""
+    mark = " (inferred)" if entry.source in (SlotSource.INFERRED, SlotSource.DEFAULT) else ""
+    kinds = [v for v in entry.values if _is_kind_of_company(v)]
+    things = [v for v in entry.values if not _is_kind_of_company(v)]
+
+    def article(v: str) -> str:
+        return f"{'an' if v.strip()[:1].lower() in 'aeiou' else 'a'} {v.strip()}"
+
+    parts = []
+    if kinds:
+        parts.append(f"The company is {' and '.join(article(v) for v in kinds)}{mark}.")
+    if things:
+        parts.append(f"The company sells {', '.join(things)}{mark}.")
+    return " ".join(parts)
+
+
+# "Any" and "none" are answers (no preference, nothing to avoid). They read as plain sentences,
+# worded a little differently from company to company: the wording is picked from a stable hash
+# of the answers, so a rebuilt description never changes by itself.
+_OPEN_ITEMS = {
+    "customer_profile": "any kind of customer",
+    "industries": "every industry",
+    "company_size": "companies of any size",
+    "lead_geographies": "people based anywhere",
+    "company_hq_geographies": "companies headquartered anywhere",
+}
+_OPEN_ALONE = (
+    "They are open to {items}.",
+    "They do not narrow the field: {items} all fit.",
+    "There is no filter on this side: {items} are all welcome.",
+)
+_OPEN_AFTER = (
+    "Beyond that, they are open to {items}.",
+    "On the rest they stay flexible: {items} all fit.",
+)
+_OPEN_BUYERS = {
+    "buyer_roles": ("Any role can make or influence the decision.",
+                    "The decision can sit with whoever fits the company."),
+    "buyer_seniority": ("Buyers can be at any seniority level.",
+                        "Seniority does not matter: buyers can be at any level."),
+    "buyer_departments": ("Any department can be involved in buying.",
+                          "Buying can start in any department."),
+    "buying_triggers": ("A company can be ready to buy at any time.",
+                        "No particular event is needed to start a conversation."),
+}  # fmt: skip
+_NOTHING_TO_AVOID = (
+    "There are no companies they want to avoid.",
+    "They have no exclusions: no company is off the table.",
+)
+
+
+CUSTOMER_TEMPLATES = [
+    ("customer_profile", "The ideal customer is described as {}."),
+    ("industries", "The target industries are {}."),
+    ("company_size", "The target company size is {}."),
+    ("lead_geographies", "The people to reach are based in {}."),
+    ("company_hq_geographies", "The target companies are headquartered in {}."),
+]
+
+
+def _is_open(entry: FieldEntry | None) -> bool:
+    return bool(entry and entry.values and all(v.strip().lower() == ANY.lower() for v in entry.values))
+
+
+def _is_none(entry: FieldEntry | None) -> bool:
+    return bool(
+        entry and entry.values and all(v.strip().lower() in ("none", "no exclusions") for v in entry.values)
+    )
+
+
+def _pick(options: tuple[str, ...], seed: str) -> str:
+    return options[zlib.crc32(seed.encode()) % len(options)]
+
+
+def _list_items(items: list[str]) -> str:
+    if len(items) <= 1:
+        return "".join(items)
+    return f"{', '.join(items[:-1])} and {items[-1]}"
+
+
 def render_summary(
     entries: dict[str, FieldEntry], defs: list[SlotDef] | None = None, track: Track = "sales"
 ) -> str:
-    """A readable summary generated only from the fields, so the two cannot disagree. Values that
-    were inferred rather than stated are marked."""
+    """A readable description written only from the fields, so the two cannot disagree: short
+    paragraphs of plain sentences, one per topic. Values that were inferred rather than stated
+    are marked."""
 
     def show(key: str) -> str | None:
         entry = entries.get(key)
         if not entry or not entry.values:
             return None
-        text = ", ".join(entry.values)
+        text = (
+            describe_business_model(entry.values)
+            if key == "business_model"
+            else ", ".join(entry.values)
+        )
         inferred = entry.source in (SlotSource.INFERRED, SlotSource.DEFAULT)
         return f"{text} (inferred)" if inferred else text
 
     if track == "hr":
         return _render_hr_summary(show, defs or list(registry("hr")), entries)
-    lines = []
-    about = [
-        ("What they do", "product"),
-        ("sells to", "business_model"),
-        ("how they work", "how_we_work"),
-        ("clients come from", "lead_sources"),
-        ("chosen for", "value_proposition"),
-    ]
-    mine = "; ".join(f"{label}: {v}" for label, key in about if (v := show(key)))
-    if mine:
-        lines.append(f"About the company: {mine}.")
-    parts = [
-        ("Who they are", "customer_profile"),
-        ("Target industries", "industries"),
-        ("company size", "company_size"),
-        ("based in", "lead_geographies"),
-        ("headquartered in", "company_hq_geographies"),
-    ]
-    own = [s for s in defs or [] if s.section == "industry_specifics" and show(s.key)]
-    parts += [(s.label.lower(), s.key) for s in own]
-    firm = "; ".join(f"{label}: {v}" for label, key in parts if (v := show(key)))
-    if firm:
-        lines.append(f"Ideal customer: {firm}.")
-    for label, keys in (
-        ("Buyers", ("buyer_roles", "buyer_seniority", "buyer_departments")),
-        ("Buying triggers", ("buying_triggers",)),
-        ("Exclusions", ("disqualifiers",)),
-    ):
-        found = [v for k in keys if (v := show(k))]
-        if found:
-            lines.append(f"{label}: {'; '.join(found)}.")
-    return "\n".join(lines)
+
+    seed = "|".join(f"{k}={','.join(e.values)}" for k, e in sorted(entries.items()))
+
+    def sentences(templates: list[tuple[str, str]]) -> str:
+        out = []
+        for key, t in templates:
+            entry = entries.get(key)
+            if _is_open(entry) and key in _OPEN_BUYERS:
+                out.append(_pick(_OPEN_BUYERS[key], seed + key))
+            elif _is_none(entry) and key == "disqualifiers":
+                out.append(_pick(_NOTHING_TO_AVOID, seed))
+            elif v := show(key):
+                out.append(t.format(v))
+        return " ".join(out)
+
+    def customer_sentences() -> str:
+        """Specific answers keep their own sentence; every "Any" is gathered into one."""
+        specific = sentences(
+            [(k, t) for k, t in CUSTOMER_TEMPLATES if not _is_open(entries.get(k))]
+        )
+        items = [phrase for k, phrase in _OPEN_ITEMS.items() if _is_open(entries.get(k))]
+        if not items:
+            return specific
+        pool = _OPEN_AFTER if specific else _OPEN_ALONE
+        return f"{specific} {_pick(pool, seed).format(items=_list_items(items))}".strip()
+
+    product = entries.get("product")
+    company = " ".join(
+        p
+        for p in (
+            describe_product(product) if product and product.values else "",
+            sentences(
+                [
+                    ("business_model", "It sells to {}."),
+                    ("how_we_work", "A customer goes from first contact to a deal like this: {}."),
+                    ("lead_sources", "New customers currently come from {}."),
+                    ("value_proposition", "Customers choose it because {}."),
+                ]
+            ),
+        )
+        if p
+    )
+    customer = customer_sentences()
+    own = " ".join(
+        f"For {s.label.lower()}, the target is {v}."
+        for s in defs or []
+        if s.section == "industry_specifics" and (v := show(s.key))
+    )
+    buyers = sentences(
+        [
+            ("buyer_roles", "Buying decisions are made or influenced by {}."),
+            ("buyer_seniority", "The buyers are usually at this level: {}."),
+            ("buyer_departments", "The departments involved in buying are {}."),
+            ("buying_triggers", "A company is most ready to buy when {}."),
+            ("disqualifiers", "Companies to avoid: {}."),
+        ]
+    )
+    return "\n\n".join(p for p in (company, f"{customer} {own}".strip(), buyers) if p)
 
 
 def _render_hr_summary(show, defs: list[SlotDef], entries: dict[str, FieldEntry]) -> str:

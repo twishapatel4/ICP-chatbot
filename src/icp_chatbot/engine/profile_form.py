@@ -345,6 +345,7 @@ def apply_profile(state: SessionState, answers: Any, turn_no: int = 0) -> list[s
         for slot in card.slots:
             if slot not in visible:
                 _drop_form_value(state, slot)
+    _derive_from_titles(state, turn_no)
     if model is None and state.track != "hr":
         state.slots["business_model"] = _default_business_model()
     return written
@@ -354,3 +355,36 @@ def _drop_form_value(state: SessionState, slot: str) -> None:
     current = state.slots.get(slot)
     if current is not None and current.evidence == FORM_EVIDENCE:
         del state.slots[slot]
+
+
+# What a job title already says: the form asks for titles, so the department and the level they
+# sit at are known from them and the chat must not ask for either again.
+_FROM_TITLES = {
+    "buyer_roles": (("buyer_seniority", "seniority"), ("buyer_departments", "functions")),
+    "target_roles": (("target_seniority", "seniority"),),
+}
+
+
+def _derive_from_titles(state: SessionState, turn_no: int) -> None:
+    """Fill the fields a job title implies (department, seniority) from the step 2 titles, marked
+    derived. Redone on every submit; a field the titles say nothing about stays unknown."""
+    from icp_chatbot.linkedin.profile_map import _derived_functions, _derived_seniority
+
+    for title_slot, implied in _FROM_TITLES.items():
+        titles = state.values(title_slot)
+        current = state.slots.get(title_slot)
+        from_form = current is not None and current.evidence == FORM_EVIDENCE
+        for slot, kind in implied:
+            _drop_form_value(state, slot)
+            if state.slots.get(slot) is not None:  # the user said it in the chat: theirs stays
+                continue
+            if slot in state.excluded or not from_form or slot not in slot_map(state.track):
+                continue
+            found = _derived_seniority(titles) if kind == "seniority" else _derived_functions(titles)
+            if not found:
+                continue
+            labels, refs, unmapped = resolve_slot_values(slot, found)
+            state.slots[slot] = SlotValue(
+                values=labels, refs=refs, unmapped=unmapped, confidence=FORM_CONFIDENCE,
+                source=SlotSource.DERIVED, source_turn=turn_no, evidence=FORM_EVIDENCE,
+            )  # fmt: skip

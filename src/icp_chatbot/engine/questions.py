@@ -156,7 +156,10 @@ def _step2_lines(state: SessionState) -> list[str]:
              "Known from the form:\n" + data_block(facts)]  # fmt: skip
     if unknown := missing_core_slots(state):
         first = unknown[0]
-        lines.append(f"First question to ask: about {first.label} ({first.description}).")
+        lines.append(
+            f"First question to ask: about {first.label} ({first.description}). Ask it in "
+            "plain everyday words that name the one thing you want, never the field name."
+        )
     return lines
 
 

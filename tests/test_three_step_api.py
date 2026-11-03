@@ -617,7 +617,7 @@ async def test_engine_uses_hr_prompts_for_hr_session(world):
     assert "ICP" not in system
 
     sales = await w.start()
-    w.llm.queue("interviewer", ask("Who buys?", up("product", ["Payroll"])))
+    w.llm.queue("interviewer", ask("What do they pay for?", up("product", ["Payroll"])))
     await w.call("POST", f"/sessions/{sales['session_id']}/answers", json={"text": "payroll"})
     assert w.llm.calls_for("interviewer")[-1].system == (
         prompts_for("sales")["interviewer"] + render_slot_catalog("sales")
